@@ -1,0 +1,23 @@
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\Facades\Gate;
+use Redberry\Synapse\SynapseApplicationServiceProvider;
+
+class SynapseServiceProvider extends SynapseApplicationServiceProvider
+{
+    /**
+     * Register the Synapse gate.
+     *
+     * This gate determines who can access Synapse in non-local environments.
+     */
+    protected function gate(): void
+    {
+        Gate::define('viewSynapse', function ($user) {
+            return in_array($user->email, [
+                //
+            ]);
+        });
+    }
+}

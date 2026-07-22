@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+| Design tokens. Dark ships first (per the Figma designs); the light values
+| are placeholders until the light palette lands (see DESIGN_FEEDBACK.md).
+*/
+:root {
+    --background: #ffffff;
+    --foreground: #0a0a0a;
+    --card: #ffffff;
+    --card-foreground: #0a0a0a;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    --ring: #f5451f;
+    --primary: #f5451f;
+    --primary-foreground: #ffffff;
+    --sidebar: #fafafa;
+    --sidebar-foreground: #0a0a0a;
+    --success: #22c55e;
+    --destructive: #ef4444;
+    --radius: 0.625rem;
+}
+
+.dark {
+    --background: #0a0a0b;
+    --foreground: #fafafa;
+    --card: #111113;
+    --card-foreground: #fafafa;
+    --muted: #1a1a1d;
+    --muted-foreground: #8a8a94;
+    --border: #232327;
+    --input: #232327;
+    --ring: #f5451f;
+    --primary: #f5451f;
+    --primary-foreground: #ffffff;
+    --sidebar: #0d0d0f;
+    --sidebar-foreground: #fafafa;
+    --success: #22c55e;
+    --destructive: #ef4444;
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-success: var(--success);
+    --color-destructive: var(--destructive);
+    --radius-lg: var(--radius);
+}
+
+body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+}

@@ -1,1 +1,10 @@
 references/*
+/vendor
+/node_modules
+/playground
+composer.lock
+package-lock.json
+.phpunit.result.cache
+.phpunit.cache
+/build
+.DS_Store

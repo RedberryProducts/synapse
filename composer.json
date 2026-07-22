@@ -1,0 +1,63 @@
+{
+    "name": "redberry/synapse",
+    "description": "A development dashboard for AI agents built with the Laravel AI SDK.",
+    "keywords": [
+        "laravel",
+        "ai",
+        "agents",
+        "dashboard",
+        "devtools"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Redberry",
+            "homepage": "https://redberry.international"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "laravel/framework": "^12.0|^13.0",
+        "laravel/ai": "^0.9"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.0|^4.0",
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Redberry\\Synapse\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Redberry\\Synapse\\Tests\\": "tests/",
+            "Workbench\\App\\": "workbench/app/",
+            "Workbench\\Database\\": "workbench/database/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Redberry\\Synapse\\SynapseServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": "@php ./vendor/bin/testbench package:discover --ansi",
+        "test": "@php ./vendor/bin/pest",
+        "lint": "@php ./vendor/bin/pint",
+        "analyse": "@php ./vendor/bin/phpstan analyse"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
+}
