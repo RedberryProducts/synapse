@@ -108,7 +108,7 @@ Notes / decisions (flag if you disagree):
 - **`phpstan.neon.dist`** — larastan, `level: 5`, paths `src`.
 - **`phpunit.xml.dist`** — Pest/PHPUnit config, testsuite `tests/`, sqlite `:memory:`.
 - **`testbench.yaml`** — registers `SynapseServiceProvider`, points workbench at `workbench/`, runs migrations.
-- **`.gitignore`** — `/vendor`, `/node_modules`, `composer.lock`, `/playground` (the manual test app), `.phpunit.result.cache`, build caches. **`dist/` is NOT ignored** (committed per PRD).
+- **`.gitignore`** — `/vendor`, `/node_modules`, `composer.lock`, `/testing-laravel-project` (the manual test app), `.phpunit.result.cache`, build caches. **`dist/` is NOT ignored** (committed per PRD).
 
 ### Frontend toolchain (React + Vite + Tailwind + shadcn)
 
@@ -250,23 +250,20 @@ Two complementary setups — one for automated CI, one for real-world install sm
 ### 1. `workbench/` (committed) — automated tests
 The standard Testbench pattern used by all three references. Pest tests boot the package against the workbench app + its sample agents. This is what `composer test` runs.
 
-### 2. `playground/` (gitignored) — manual install & run
+### 2. `testing-laravel-project/` (gitignored) — manual install & run
 A **real Laravel app** to exercise the actual `composer require` + `synapse:install` flow end-to-end, exactly as a user would. Created once, gitignored, linked to this repo via a **Composer path repository (symlinked)** so package edits reflect immediately.
 
-Planned helper: **`bin/setup-playground.sh`** (and/or a `composer playground` script) that:
-1. `composer create-project laravel/laravel playground` (if absent)
-2. Adds to `playground/composer.json`:
-   ```jsonc
-   "repositories": [{ "type": "path", "url": "../", "options": { "symlink": true } }],
-   "minimum-stability": "dev",
-   "prefer-stable": true
-   ```
-3. `cd playground && composer require redberry/synapse:@dev`
-4. `php artisan synapse:install`
-5. Copies the four sample agents into `playground/app/Agents/`
-6. Prints next steps (`php artisan serve`, visit `/synapse`)
+Helper: **`bin/setup-testing-app.sh`** (built) that:
+1. Builds the Synapse assets (`npm install && npm run build`)
+2. `composer create-project laravel/laravel testing-laravel-project` (if absent)
+3. Adds two path repositories to `testing-laravel-project/composer.json` — the package (`../`) and the local SDK copy (`../references/laravel/ai`) — plus `minimum-stability: dev`
+4. `composer require redberry/synapse:@dev`
+5. `php artisan synapse:install`
+6. Seeds the four sample agents into `testing-laravel-project/app/Agents/` (namespace rewritten `Workbench\App` → `App`)
 
-`.gitignore` excludes `/playground`. Frontend dev loop: `npm run watch` (rebuilds `dist/`) → `php artisan vendor:publish --tag=synapse-assets --force` inside `playground` to refresh published assets (symlinked vendor makes the `dist/` itself live).
+`.gitignore` excludes `/testing-laravel-project`. Frontend dev loop: `npm run watch` (rebuilds `dist/`) → `php artisan vendor:publish --tag=synapse-assets --force` inside the app to refresh published assets (symlinked vendor makes the `dist/` itself live).
+
+**SDK sourcing note:** `laravel/ai` is not yet on Packagist, so both the package's own `composer.json` and the test app pull it from the local `references/laravel/ai` copy via a path repository (version pinned to `0.9.1`). The package-level path repo is harmlessly ignored when the path is absent (external users), falling back to Packagist once the SDK is published.
 
 ---
 
@@ -277,19 +274,19 @@ composer install        # PHP deps + testbench discover
 npm install             # frontend deps
 npm run build           # compile dist/
 composer test           # Pest against workbench
-./bin/setup-playground.sh   # one-time: create the manual test app
-# iterate: npm run watch  +  publish assets to playground  +  browse /synapse
+./bin/setup-testing-app.sh  # one-time: create the manual test app
+# iterate: npm run watch  +  publish assets to the test app  +  browse /synapse
 ```
 
 ---
 
 ## Definition of done for this scaffold
 
-- [ ] `composer install` + `npm install` + `npm run build` succeed
-- [ ] `composer test` green (route 200, migrations, install publishes, config merges)
-- [ ] In `playground/`: `composer require redberry/synapse:@dev` → `php artisan synapse:install` → `php artisan migrate` → visiting `/synapse` renders the React sidebar shell with empty Discovery/Playground/History pages
-- [ ] `synapse:prune` / `synapse:clear` run without error
-- [ ] `viewSynapse` gate stub published to `app/Providers`; production route guard verified
+- [x] `composer install` + `npm install` + `npm run build` succeed
+- [x] `composer test` green — **8 passed (24 assertions)**: dashboard 200/403, commands registered, tables + uuid7 + casts, prune/clear + cascade
+- [x] In `testing-laravel-project/`: `composer require redberry/synapse:@dev` → `php artisan synapse:install` → visiting `/synapse` renders the React sidebar shell with the empty Discovery page (screenshot-verified)
+- [x] `synapse:prune` / `synapse:clear` covered by passing tests
+- [x] `viewSynapse` gate stub published to `app/Providers`; provider registered in `bootstrap/providers.php`; production route guard is config-cache safe
 
 ---
 
@@ -299,4 +296,4 @@ composer test           # Pest against workbench
 2. **Tailwind → v4** (CSS-first `@theme`, no `tailwind.config.js`; current shadcn default).
 3. **Migrations → Telescope-style publish-only.** Migrations are published via the `synapse-migrations` tag (not `loadMigrationsFrom`); they run when the app migrates after `synapse:install` publishes them. See Phase 1 / Phase 3.
 4. **Assets → Vite manifest hashing** (`manifest: true`; hashed filenames resolved in `Synapse::css()/js()`).
-5. **Sample agents → all four variants** seeded in workbench + playground: conversational-with-tool, stateless, provider-tool, and structured-output — so every card type is exercisable. (Baselines land in Phase 3; provider-tool and structured-output agents are wired now and become useful as those features are built.)
+5. **Sample agents → all four variants** seeded in workbench + testing-laravel-project (all `openai` / `gpt-5.6-luna`): conversational-with-tool, stateless, provider-tool, and structured-output — so every card type is exercisable. (Baselines land in Phase 3; provider-tool and structured-output agents are wired now and become useful as those features are built.)

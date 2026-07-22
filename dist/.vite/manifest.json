@@ -1,0 +1,11 @@
+{
+  "resources/js/app.tsx": {
+    "file": "app-huCmObnu.js",
+    "name": "app",
+    "src": "resources/js/app.tsx",
+    "isEntry": true,
+    "css": [
+      "app-BLtmpX5r.css"
+    ]
+  }
+}

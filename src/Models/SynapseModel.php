@@ -2,12 +2,12 @@
 
 namespace Redberry\Synapse\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasVersion7Uuids;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
 abstract class SynapseModel extends Model
 {
-    use HasVersion7Uuids;
+    use HasUuids;
 
     /**
      * uuid7 string primary keys.

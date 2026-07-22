@@ -1,0 +1,11 @@
+providers:
+  - Redberry\Synapse\SynapseServiceProvider
+
+migrations:
+  - database/migrations
+
+workbench:
+  start: '/synapse'
+  install: true
+  discovers:
+    web: true

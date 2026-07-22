@@ -109,11 +109,10 @@ class SynapseServiceProvider extends ServiceProvider
      */
     protected function registerCommands(): void
     {
-        // Registered in Phase 3 (see SCAFFOLDING.md):
-        // $this->commands([
-        //     Console\InstallCommand::class,
-        //     Console\PruneCommand::class,
-        //     Console\ClearCommand::class,
-        // ]);
+        $this->commands([
+            Console\InstallCommand::class,
+            Console\PruneCommand::class,
+            Console\ClearCommand::class,
+        ]);
     }
 }
