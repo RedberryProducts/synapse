@@ -43,7 +43,7 @@ class ConversationRepository
      * invocations, and stored attachment files.
      *
      * @param  array<int, string>  $ids
-     * @return int  Number of conversations deleted.
+     * @return int Number of conversations deleted.
      */
     public function deleteConversations(array $ids): int
     {

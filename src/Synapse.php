@@ -3,6 +3,7 @@
 namespace Redberry\Synapse;
 
 use Closure;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\HtmlString;
 
@@ -16,7 +17,7 @@ class Synapse
     /**
      * The callback that authorizes access to the dashboard in non-local environments.
      *
-     * @var (Closure(\Illuminate\Http\Request): bool)|null
+     * @var (Closure(Request): bool)|null
      */
     public static ?Closure $authUsing = null;
 
@@ -30,7 +31,7 @@ class Synapse
     /**
      * Register the callback used to authorize dashboard access.
      *
-     * @param  Closure(\Illuminate\Http\Request): bool  $callback
+     * @param  Closure(Request): bool  $callback
      */
     public static function auth(Closure $callback): void
     {

@@ -50,7 +50,8 @@
         "post-autoload-dump": "@php ./vendor/bin/testbench package:discover --ansi",
         "test": "@php ./vendor/bin/pest",
         "lint": "@php ./vendor/bin/pint",
-        "analyse": "@php ./vendor/bin/phpstan analyse"
+        "lint:test": "@php ./vendor/bin/pint --test",
+        "analyse": "@php ./vendor/bin/phpstan analyse --memory-limit=1G"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

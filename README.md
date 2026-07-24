@@ -28,7 +28,11 @@ composer install
 npm install
 npm run build      # compile assets into dist/
 composer test      # Pest test suite
+composer lint      # Pint (formatting)
+composer analyse   # PHPStan (larastan)
 ```
+
+See **[DEV.md](DEV.md)** for the full development cycle and **[AGENTS.md](AGENTS.md)** for architecture and coding standards. Agents can invoke the **`laravel-package`** skill for package-development best practices.
 
 ## License
 

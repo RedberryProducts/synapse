@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Artisan;
 use Redberry\Synapse\Synapse;
 
 it('serves the dashboard shell when authorized', function () {
@@ -18,7 +19,7 @@ it('forbids access when the gate denies', function () {
 });
 
 it('registers the synapse artisan commands', function () {
-    $commands = array_keys(Illuminate\Support\Facades\Artisan::all());
+    $commands = array_keys(Artisan::all());
 
     expect($commands)
         ->toContain('synapse:install')

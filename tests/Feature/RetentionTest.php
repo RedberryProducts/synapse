@@ -1,6 +1,8 @@
 <?php
 
 use Redberry\Synapse\Models\SynapseConversation;
+use Redberry\Synapse\Models\SynapseMessage;
+use Redberry\Synapse\Models\SynapseToolInvocation;
 
 it('prunes conversations older than the retention window', function () {
     $old = SynapseConversation::create(['agent_class' => 'A', 'title' => 'old']);
@@ -47,6 +49,6 @@ it('cascades deletion to messages and tool invocations', function () {
 
     $this->artisan('synapse:clear')->assertSuccessful();
 
-    expect(Redberry\Synapse\Models\SynapseMessage::count())->toBe(0);
-    expect(Redberry\Synapse\Models\SynapseToolInvocation::count())->toBe(0);
+    expect(SynapseMessage::count())->toBe(0);
+    expect(SynapseToolInvocation::count())->toBe(0);
 });

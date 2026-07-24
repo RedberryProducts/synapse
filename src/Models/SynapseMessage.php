@@ -9,6 +9,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $conversation_id
  * @property string $role
  * @property string|null $content
+ * @property array<int, mixed> $attachments
+ * @property array<int, mixed> $tool_calls
+ * @property array<int, mixed> $tool_results
+ * @property array<string, mixed> $usage
+ * @property array<string, mixed> $meta
+ * @property array<string, mixed> $metadata
+ * @property int|null $prompt_tokens
+ * @property int|null $completion_tokens
+ * @property int|null $duration_ms
  */
 class SynapseMessage extends SynapseModel
 {
