@@ -562,7 +562,7 @@ return [
 | SPA routing | React Router | Client-side pages: Agents, Chat, History |
 | JSON rendering | One collapsible JSON tree component (`@uiw/react-json-view` or equivalent), used everywhere JSON appears — tool arguments/results, schemas, usage breakdowns | Horizon/Telescope standardize on `vue-json-pretty`; one component, not per-feature choices. No heavyweight highlighter (shiki) — keep the bundle small |
 | Markdown rendering | `react-markdown` | System prompts (Feature 4b) and assistant responses render as markdown |
-| Theming | Light/dark via Tailwind's `dark:` variant + a Horizon-style scheme toggler (light / dark / system, persisted in `localStorage`) | Cheap to include in the layout now, annoying to retrofit |
+| Theming | Light/dark via Tailwind's `dark:` variant + a **theme switcher in the sidebar Workspace menu** (light / dark / system, persisted in `localStorage`; the stored-or-OS choice is applied inline before first paint to avoid a flash) | Both theme token sets exist in Figma, so components are theme-aware from the start. The switcher has no dedicated Figma component yet — it reuses the `Navigation` row and `Dropdown item` styles, and is swapped when the designer publishes one |
 | Testing | Orchestra Testbench + Pest | The standard for Laravel packages — used by all three reference packages |
 | Dev environment | `workbench/` app | Synapse development requires a host Laravel app with real agent classes to discover — Horizon, Telescope, and `laravel/ai` all use the Testbench workbench pattern for exactly this |
 

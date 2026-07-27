@@ -30,7 +30,8 @@ src/                          # PHP — the package
 config/synapse.php            # publishable config (enabled, ui, discovery, playground, storage, retention)
 database/migrations/          # the three synapse_* tables (publish-only)
 routes/web.php                # /api group (stubbed) + SPA catch-all
-resources/js/                 # React + TS SPA (app, router, pages, components, lib, styles)
+resources/js/                 # React + TS SPA — elements/ → components/ → composed/ → pages/
+                              #   (+ hooks, lib, types, styles)
 resources/views/layout.blade.php   # SPA shell + window.Synapse bootstrap
 stubs/                        # SynapseServiceProvider.stub (published viewSynapse gate)
 dist/                         # compiled assets — COMMITTED, published on install
@@ -78,7 +79,14 @@ Docs: [PRD.md](PRD.md), [GOAL.md](GOAL.md), [SCAFFOLDING.md](SCAFFOLDING.md), [D
 - Small, single-concern classes.
 
 **TypeScript / React**
-- React + TypeScript (strict), Tailwind v4 utilities, shadcn/ui (vendored under `resources/js/components/ui`, Radix imports confined there). Import via the `@/` alias.
+- **Four layers**, each importing only from the ones above it:
+  - `elements/` — generic UI primitives (button, input, dropdown, tooltip, badge…). Domain-agnostic: they know nothing about agents or conversations. The **only** place Radix is imported.
+  - `components/` — single-purpose domain components (an agent card, a tool chip, a status badge). Presentational: data in via props, events out via callbacks. No fetching.
+  - `composed/` — larger units assembled from several components (app shell, grids, panels, threads). Still props-in/events-out; no route-level data loading.
+  - `pages/` — one per route. Owns data fetching, hooks, page state, and wiring; composes the layers above.
+  - Details and the element inventory: [plans/FRONTEND.md](plans/FRONTEND.md).
+- React + TypeScript (strict), Tailwind v4 utilities, shadcn/ui vendored into `resources/js/elements` (`components.json` `ui` alias) and restyled to our design tokens. Import via the `@/` alias.
+- Logic belongs in pages and hooks, not components. A component that needs data takes it as props.
 - Theme via `--color-*` CSS tokens in `resources/js/styles/app.css` (dark-first). Never hard-code colors. 
 - use Icons from `lucide-react` — no inline SVG.
 - Named exports; keep the bundle lean.
@@ -191,7 +199,9 @@ PRD and GOAL move together — a behavior change usually touches both.
 | Add a command | `src/Console/` + register in `SynapseServiceProvider` |
 | Add config | `config/synapse.php` |
 | Add a React page | `resources/js/pages/` + `router.tsx` |
-| Add a UI component | `resources/js/components/` (shadcn under `components/ui`) |
+| Add a UI primitive | `resources/js/elements/` (shadcn `ui` alias points here) |
+| Add a domain component | `resources/js/components/` |
+| Assemble several components | `resources/js/composed/` |
 | Add a sample agent | `workbench/app/Agents/` |
 | Add a test | `tests/Feature/` (or `tests/Unit/`) |
 | Add a browser e2e test | `tests/Browser/` — run with `composer test:e2e` |

@@ -408,7 +408,7 @@ Pruning removes the conversations, their messages, their tool records, and their
 
 ## Theming
 
-Synapse follows your preference with a light / dark / system theme toggle in the dashboard, remembered across visits. Pick a fixed theme or let it follow your OS.
+Synapse ships light and dark themes. A **theme switcher** sits in the sidebar's Workspace menu, beside Discovery and History — choose **Light**, **Dark**, or **System**. Your choice is remembered across visits; **System** follows your operating system's appearance setting live.
 
 ---
 

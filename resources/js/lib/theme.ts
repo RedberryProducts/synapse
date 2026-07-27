@@ -1,18 +1,20 @@
 export type Theme = 'light' | 'dark' | 'system';
 
 const STORAGE_KEY = 'synapse-theme';
+const QUERY = '(prefers-color-scheme: dark)';
 
 export function getStoredTheme(): Theme {
-    return (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? 'system';
+    const stored = localStorage.getItem(STORAGE_KEY);
+
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
 }
 
-function systemPrefersDark(): boolean {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+export function resolveIsDark(theme: Theme): boolean {
+    return theme === 'dark' || (theme === 'system' && window.matchMedia(QUERY).matches);
 }
 
 export function applyTheme(theme: Theme): void {
-    const dark = theme === 'dark' || (theme === 'system' && systemPrefersDark());
-    document.documentElement.classList.toggle('dark', dark);
+    document.documentElement.classList.toggle('dark', resolveIsDark(theme));
 }
 
 export function setTheme(theme: Theme): void {
@@ -24,7 +26,7 @@ export function setTheme(theme: Theme): void {
 export function initTheme(): void {
     applyTheme(getStoredTheme());
 
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    window.matchMedia(QUERY).addEventListener('change', () => {
         if (getStoredTheme() === 'system') {
             applyTheme('system');
         }

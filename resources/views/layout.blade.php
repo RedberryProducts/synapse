@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,6 +9,15 @@
 
     <script>
         window.Synapse = @json(\Redberry\Synapse\Synapse::scriptVariables());
+
+        // Apply the saved (or OS) colour scheme before first paint to avoid a flash.
+        (function () {
+            var stored = localStorage.getItem('synapse-theme');
+            var dark = stored === 'dark' || (stored !== 'light' &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+            document.documentElement.classList.toggle('dark', dark);
+        })();
     </script>
 
     {!! \Redberry\Synapse\Synapse::css() !!}

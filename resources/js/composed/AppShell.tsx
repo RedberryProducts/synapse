@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { Compass, History, PanelLeft } from 'lucide-react';
+import { SidebarNavLink } from '@/elements/SidebarItem';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { config } from '@/lib/config';
 import { cn } from '@/lib/utils';
-import { ThemeToggle } from './ThemeToggle';
 
 const nav = [
     { to: '/', label: 'Discovery', icon: Compass, end: true },
@@ -54,24 +55,17 @@ export function AppShell() {
                             Workspace
                         </p>
                     )}
-                    {nav.map(({ to, label, icon: Icon, end }) => (
-                        <NavLink
+                    {nav.map(({ to, label, icon, end }) => (
+                        <SidebarNavLink
                             key={to}
                             to={to}
                             end={end}
-                            className={({ isActive }) =>
-                                cn(
-                                    'flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors',
-                                    isActive
-                                        ? 'bg-muted text-foreground'
-                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                                )
-                            }
-                        >
-                            <Icon className="h-4 w-4 shrink-0" />
-                            {!collapsed && <span>{label}</span>}
-                        </NavLink>
+                            icon={icon}
+                            label={label}
+                            collapsed={collapsed}
+                        />
                     ))}
+                    <ThemeSwitcher collapsed={collapsed} />
                 </nav>
 
                 {/* Footer */}
@@ -79,7 +73,6 @@ export function AppShell() {
                     {!collapsed && (
                         <span className="text-xs text-muted-foreground">v{config.version}</span>
                     )}
-                    <ThemeToggle />
                 </div>
             </aside>
 

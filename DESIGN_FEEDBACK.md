@@ -5,6 +5,20 @@ File: [Synapse on Figma](https://www.figma.com/design/3aOnDdOpoAvf9Kd7YP0C8P/Syn
 
 The designs are approved as the visual source of truth. The items below are the only gaps — missing states/screens the PRD requires, plus two small fixes.
 
+**Status (verified in Figma):** ✅ = accepted by designers · **DELIVERED** = shipped in the file and verified.
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Attachments UI | **DELIVERED** — `Chat Input` (File attached / Drop File), `Attach file` menu, `File chip` (Image/Audio/Document), `Plus` button |
+| 2 | Reasoning "Thinking…" pane | **DELIVERED (in progress)** — [`✦ Thinking…` state](https://www.figma.com/design/3aOnDdOpoAvf9Kd7YP0C8P/Synapse?node-id=531-5178&m=dev) exists but is not yet promoted to a component. Build against it; adjust if the designer refines it |
+| 3 | Provider-tool card variant | **DELIVERED** — `Inline Tool Call cards` Variant3/Variant4 (`anthropic / web_search`) |
+| 4 | Pending tool state | **DELIVERED** — `Status Badges` → `Pending` |
+| 5 | Light theme | **DELIVERED** — full parallel `Components_Light` section |
+| 6 | History subtitle copy | **DELIVERED** — "View your previous conversations and continue where you left off" |
+| 7 | Remove Settings nav item | **DELIVERED** — sidebar Workspace nav is Discovery + History only |
+
+**All items are addressed.** The reasoning pane exists as a work-in-progress `✦ Thinking…` state rather than a published component — treat it as done for planning, build to it, and update the component if the designer refines it later. The streaming indicator is designed; the expanded reasoning content (collapsible, with reasoning-token count per the PRD) extends it using the existing collapsible/card language.
+
 ---
 
 ## 1. Attachments UI (Chat Playground) ✅
