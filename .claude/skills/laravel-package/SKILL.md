@@ -99,8 +99,11 @@ abstract class TestCase extends \Orchestra\Testbench\TestCase
 
 ```php
 // tests/Pest.php
-uses(TestCase::class, RefreshDatabase::class)->in(__DIR__);
+uses(TestCase::class, RefreshDatabase::class)->in('Feature', 'Unit');
+uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser');
 ```
+
+**Browser e2e in a package.** Pest 4's browser plugin boots the Testbench app *in-process* (no `artisan serve`) and serves static files from `public_path()` — so a package's compiled assets must be copied there first. `BrowserTestCase` publishes `dist/` into the Testbench public dir, opens the auth gate, and skips (not fails) when assets aren't built. Suites are split in `phpunit.xml.dist` (`unit`, `feature`, `e2e`) so `composer test` stays fast and `composer test:e2e` is opt-in.
 
 - Migrations are publish-only in production but loaded explicitly in tests via `defineDatabaseMigrations()` (they never auto-register in the app).
 - Env in tests is `testing`, so `Synapse::check()` isn't "local" — set `Synapse::auth(fn () => true)` to test authorized access, omit it to test the 403 path.

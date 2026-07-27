@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# Synapse pre-commit hook — runs the fast quality gates.
+#
+# Enable once per clone:  composer hooks
+# Skip for one commit:    git commit --no-verify
+#
+# Browser e2e tests (`composer test:e2e`) are deliberately NOT run here: they
+# need Playwright and freshly built assets, and are meant to be run manually
+# before tagging a release.
+#
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "▶ pre-commit: Pint"
+composer lint:test --quiet || {
+    echo "✖ Formatting issues. Run: composer lint" >&2
+    exit 1
+}
+
+echo "▶ pre-commit: PHPStan"
+composer analyse --quiet || {
+    echo "✖ Static analysis failed. Fix the root cause (no baselines/ignores)." >&2
+    exit 1
+}
+
+echo "▶ pre-commit: Pest (unit + feature)"
+composer test --quiet || {
+    echo "✖ Tests failed." >&2
+    exit 1
+}
+
+# Remind about committed build output when frontend source changed.
+staged="$(git diff --cached --name-only)"
+if echo "$staged" | grep -q '^resources/js/' && ! echo "$staged" | grep -q '^dist/'; then
+    echo "✖ resources/js changed but dist/ is not staged." >&2
+    echo "  Run: npm run build && git add dist" >&2
+    exit 1
+fi
+
+echo "✔ pre-commit checks passed"

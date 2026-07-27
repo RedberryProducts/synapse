@@ -7,4 +7,5 @@ package-lock.json
 .phpunit.result.cache
 .phpunit.cache
 /build
+/tests/Browser/Screenshots
 .DS_Store

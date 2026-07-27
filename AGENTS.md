@@ -5,8 +5,9 @@ Guidance for any agent or contributor writing code in this repository. Read this
 ## Important notes
 
 - **Plan before coding.** For a non-trivial task, state a short plan (steps → how you'll verify each) and work through it.
-- **Run the three gates before reporting done:** `composer test`, `composer lint`, `composer analyse`. All green, every time.
-- **Rebuild `dist/`** (`npm run build`) whenever `resources/js` changes — it's committed.
+- **Run the gates before reporting done:** `composer check` (lint + analyse + test). All green, every time. A pre-commit hook enforces this — enable it once with `composer hooks`.
+- **Run `composer test:e2e`** when you touch the frontend or the chat/stream surface. It's excluded from `composer check` and from CI (needs Playwright + built assets); it is a required gate before a release.
+- **Rebuild `dist/`** (`npm run build`) whenever `resources/js` changes — it's committed, and the hook checks it.
 - **Never `git commit` without being asked.**
 - **PRD.md / GOAL.md are the spec.** If code and spec disagree, stop and reconcile — don't invent behavior.
 
@@ -34,7 +35,8 @@ resources/views/layout.blade.php   # SPA shell + window.Synapse bootstrap
 stubs/                        # SynapseServiceProvider.stub (published viewSynapse gate)
 dist/                         # compiled assets — COMMITTED, published on install
 workbench/                    # Testbench dev app + 4 sample agents
-tests/                        # Pest + Testbench
+tests/                        # Pest + Testbench (Unit/, Feature/, Browser/ e2e)
+.githooks/                    # pre-commit hook (enable with `composer hooks`)
 testing-laravel-project/      # gitignored real app for manual install testing (bin/setup-testing-app.sh)
 references/                   # gitignored: laravel/ai, telescope, horizon (read-only reference)
 ```
@@ -105,6 +107,18 @@ Testbench + Pest. Run details in [DEV.md](DEV.md); philosophy here.
 - **Test the real implementation.** Use the real DB (`RefreshDatabase`, in-memory sqlite). Avoid mocks; when you must fake I/O, use Laravel's fakes (`Storage::fake`, `Event::fake`, `Http::fake`, `Bus::fake`) over mocking libraries.
 - **Feature-first.** Exercise real routes/commands/models over isolated units. Each test is independent.
 - Every feature ships with tests; `composer test` green before done.
+
+### Test tiers
+
+| Tier | Location | Runs in | Purpose |
+|------|----------|---------|---------|
+| Unit | `tests/Unit/` | `composer test`, CI | Pure logic in isolation |
+| Feature | `tests/Feature/` | `composer test`, CI | Routes, commands, models, repositories via the real app |
+| Browser (e2e) | `tests/Browser/` | `composer test:e2e` only | Real browser (Pest 4 + Playwright): the compiled React app mounts, renders, streams, routes |
+
+Browser tests are the **only** way to verify the PHP → SSE → React boundary, which is where Synapse's hardest bugs live. They are deliberately out of `composer test` and out of CI — they need Playwright and current `dist/` assets, so they're a manual gate before releases (and worth running whenever you change the frontend).
+
+**Always drive browser tests with `Agent::fake()`** — never call a real provider: no API spend, no flakiness, deterministic streams.
 
 ### What to test
 
@@ -180,13 +194,14 @@ PRD and GOAL move together — a behavior change usually touches both.
 | Add a UI component | `resources/js/components/` (shadcn under `components/ui`) |
 | Add a sample agent | `workbench/app/Agents/` |
 | Add a test | `tests/Feature/` (or `tests/Unit/`) |
+| Add a browser e2e test | `tests/Browser/` — run with `composer test:e2e` |
 | Check product spec | `PRD.md` / `GOAL.md` |
 | Check dev commands | `DEV.md` |
 
 ## Definition of done
 
 - Matches the PRD/GOAL intent for the feature.
-- Covered by Pest tests; `composer test` green.
-- `composer lint:test` and `composer analyse` green.
+- Covered by Pest tests; `composer check` green (lint + analyse + test).
+- `composer test:e2e` green if the frontend or chat/stream surface changed.
 - `dist/` rebuilt if `resources/js` changed.
 - PRD/GOAL updated if behavior or a technical decision changed.

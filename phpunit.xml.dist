@@ -5,8 +5,19 @@
          colors="true"
          cacheDirectory=".phpunit.cache">
     <testsuites>
-        <testsuite name="Synapse Test Suite">
-            <directory>tests</directory>
+        <!-- Fast suites: run by `composer test` and in CI. -->
+        <testsuite name="unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+
+        <!-- Browser end-to-end: run by `composer test:e2e` only.
+             Requires built assets (npm run build) and Playwright.
+             Deliberately excluded from CI — run manually before releases. -->
+        <testsuite name="e2e">
+            <directory>tests/Browser</directory>
         </testsuite>
     </testsuites>
     <source>

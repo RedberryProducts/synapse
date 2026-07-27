@@ -27,9 +27,10 @@ Then visit `/synapse`.
 composer install
 npm install
 npm run build      # compile assets into dist/
-composer test      # Pest test suite
-composer lint      # Pint (formatting)
-composer analyse   # PHPStan (larastan)
+composer hooks     # enable the pre-commit hook (once)
+
+composer check     # lint + static analysis + tests
+composer test:e2e  # browser end-to-end tests (needs Playwright; not run in CI)
 ```
 
 See **[DEV.md](DEV.md)** for the full development cycle and **[AGENTS.md](AGENTS.md)** for architecture and coding standards. Agents can invoke the **`laravel-package`** skill for package-development best practices.
