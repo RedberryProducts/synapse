@@ -112,13 +112,13 @@ Notes / decisions (flag if you disagree):
 
 ### Frontend toolchain (React + Vite + Tailwind + shadcn)
 
-Copies the reference plumbing (Vite, committed `dist/`, blade shell, `window.Synapse` bootstrap, published assets) but the app is React, not Vue. Kept intentionally lean — dependencies grow as features land.
+Copies the reference plumbing (Vite, committed `dist/`, blade shell, `window.Synapse` bootstrap, inlined assets) but the app is React, not Vue. Kept intentionally lean — dependencies grow as features land.
 
 - **`package.json`** (`"private": true`, `"type": "module"`), scripts:
   - `build` → `vite build`
   - `watch` → `vite build --watch`
   - Initial deps: `react`, `react-dom`, `react-router-dom`, `vite`, `@vitejs/plugin-react`, `typescript`, `tailwindcss` + `@tailwindcss/vite`, and the shadcn base (`class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`, `tailwindcss-animate`). Vercel `ai`, `@uiw/react-json-view`, `react-markdown`, and per-component Radix packages are added when their features arrive.
-- **`vite.config.ts`** — `@vitejs/plugin-react` + `@tailwindcss/vite`; `build.outDir = 'dist'`, `assetsDir = ''`, **`manifest: true`** (hashed filenames for cache-busting), input `resources/js/app.tsx`.
+- **`vite.config.ts`** — `@vitejs/plugin-react` + `@tailwindcss/vite`; `build.outDir = 'dist'`, `assetsDir = ''`, stable output filenames (`app.js` / `app.css`, read directly by `Synapse::css()/js()`), input `resources/js/app.tsx`.
 - **`tsconfig.json`** — bundler resolution, `jsx: react-jsx`, path alias `@/* → resources/js/*`.
 - **Tailwind v4** — CSS-first config (`@theme` in `resources/js/styles/app.css`); no `tailwind.config.js` needed. Light/dark tokens defined here (dark ships first per the designs; light tokens are the pending-feedback token swap).
 - **`components.json`** — shadcn config (style `new-york`, `rsc: false`, aliases `@/components`, `@/lib/utils`).
@@ -137,14 +137,14 @@ The exact config block from the PRD (`enabled`, `ui`, `discovery`, `playground.m
 - **`boot()`**:
   - `registerRoutes()` — guarded by the [Authorization](PRD.md#authorization--safety) rule: skip entirely in `production` unless `SYNAPSE_ENABLED=true`; wrap in `Route::group` with prefix `config('synapse.ui.path')` + configured middleware + the `Authorize` middleware.
   - `loadViewsFrom(resources/views, 'synapse')`.
-  - `registerPublishing()` — tags: `synapse-config`, `synapse-migrations` (`database/migrations` → app `database/migrations`, Telescope-style — **publish-only, not `loadMigrationsFrom`**), `synapse-assets` (`dist/` → `public/vendor/synapse`), `synapse-provider` (stub → `app/Providers`). Migrations run when the app migrates after `synapse:install` publishes them.
+  - `registerPublishing()` — tags: `synapse-config`, `synapse-migrations` (`database/migrations` → app `database/migrations`, Telescope-style — **publish-only, not `loadMigrationsFrom`**), `synapse-provider` (stub → `app/Providers`). Migrations run when the app migrates after `synapse:install` publishes them.
   - `registerCommands()`.
   - `registerAutoPrune()` — when `config('synapse.retention.auto_prune')`, `Schedule::command('synapse:prune --days=…')->daily()` (via `$this->callAfterResolving(Schedule::class, …)`).
   - `registerRecorder()` — subscribe `SynapseRecorder` to SDK events (wired now, no-op body until the recording phase).
 
 ### `src/Synapse.php`
 Static helpers, mirroring `Horizon::css()/js()`:
-- `css()` / `js()` — resolve hashed asset paths from `public/vendor/synapse/manifest.json`, emit `<link>` / `<script>` tags.
+- `css()` / `js()` — read `dist/app.css` / `dist/app.js` and inline them as `<style>` / `<script type="module">` (Horizon/Telescope approach; no publishing, no manifest).
 - `scriptVariables()` — `{ path, csrfToken, version }` injected as `window.Synapse`.
 - `auth()` + `check()` — stores/evaluates the auth callback (local → open; else `Gate::check('viewSynapse')`), exactly like `Telescope::auth`.
 
@@ -220,7 +220,7 @@ The three tables exactly as specified in [PRD → Database Schema](PRD.md#databa
 ## Phase 3 — Install command, workbench & first green test
 
 ### `src/Console/InstallCommand.php` (`synapse:install`)
-`vendor:publish` for `synapse-config`, `synapse-migrations`, `synapse-assets`, `synapse-provider`; register the app provider in `bootstrap/providers.php` (`ServiceProvider::addProviderToBootstrapFile`); run `migrate`. (Telescope's `InstallCommand` is the template.)
+`vendor:publish` for `synapse-config`, `synapse-migrations`, `synapse-provider`; register the app provider in `bootstrap/providers.php` (`ServiceProvider::addProviderToBootstrapFile`); run `migrate`. (Telescope's `InstallCommand` is the template.)
 
 ### `src/Console/PruneCommand.php` (`synapse:prune`)
 `--days=` option (default `config('synapse.retention.days')`); deletes conversations older than the threshold on `updated_at`, cascading messages + tool rows + attachment files through the repository.
@@ -261,7 +261,7 @@ Helper: **`bin/setup-testing-app.sh`** (built) that:
 5. `php artisan synapse:install`
 6. Seeds the four sample agents into `testing-laravel-project/app/Agents/` (namespace rewritten `Workbench\App` → `App`)
 
-`.gitignore` excludes `/testing-laravel-project`. Frontend dev loop: `npm run watch` (rebuilds `dist/`) → `php artisan vendor:publish --tag=synapse-assets --force` inside the app to refresh published assets (symlinked vendor makes the `dist/` itself live).
+`.gitignore` excludes `/testing-laravel-project`. Frontend dev loop: `npm run watch` (rebuilds `dist/`) and refresh the browser — assets are inlined from the symlinked package, so there is no publish step.
 
 **SDK sourcing note:** `laravel/ai` is not yet on Packagist, so both the package's own `composer.json` and the test app pull it from the local `references/laravel/ai` copy via a path repository (version pinned to `0.9.1`). The package-level path repo is harmlessly ignored when the path is absent (external users), falling back to Packagist once the SDK is published.
 
@@ -295,5 +295,5 @@ composer test           # Pest against workbench
 1. **PHP dependency → `laravel/framework`** (`^12.0|^13.0`), matching Telescope/Horizon. Not individual `illuminate/*`.
 2. **Tailwind → v4** (CSS-first `@theme`, no `tailwind.config.js`; current shadcn default).
 3. **Migrations → Telescope-style publish-only.** Migrations are published via the `synapse-migrations` tag (not `loadMigrationsFrom`); they run when the app migrates after `synapse:install` publishes them. See Phase 1 / Phase 3.
-4. **Assets → Vite manifest hashing** (`manifest: true`; hashed filenames resolved in `Synapse::css()/js()`).
+4. **Assets → inlined from `dist/`** with stable filenames, following current Horizon/Telescope (they no longer publish assets). No manifest, no publishing, no re-publish on upgrade.
 5. **Sample agents → all four variants** seeded in workbench + testing-laravel-project (all `openai` / `gpt-5.6-luna`): conversational-with-tool, stateless, provider-tool, and structured-output — so every card type is exercisable. (Baselines land in Phase 3; provider-tool and structured-output agents are wired now and become useful as those features are built.)

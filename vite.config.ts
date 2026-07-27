@@ -11,14 +11,21 @@ export default defineConfig({
         },
     },
     build: {
-        // Compiled assets are committed to dist/ and published to
-        // public/vendor/synapse on install (see SCAFFOLDING.md → Asset Delivery).
+        // Compiled assets are committed to dist/ and inlined into the dashboard
+        // by Synapse::css()/js() — never published to the host app's public
+        // directory, so there is nothing to re-publish on upgrade. Filenames are
+        // stable (no hashes) because they're read directly off disk.
         outDir: 'dist',
         assetsDir: '',
         emptyOutDir: true,
-        manifest: true,
+        cssCodeSplit: false,
         rollupOptions: {
             input: 'resources/js/app.tsx',
+            output: {
+                entryFileNames: 'app.js',
+                chunkFileNames: 'app-[name].js',
+                assetFileNames: 'app.[ext]',
+            },
         },
     },
 });

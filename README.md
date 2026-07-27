@@ -26,7 +26,7 @@ Then visit `/synapse`.
 ```bash
 composer install
 npm install
-npm run build      # compile assets into dist/
+npm run build      # compile assets into dist/ (committed; inlined at runtime)
 composer hooks     # enable the pre-commit hook (once)
 
 composer check     # lint + static analysis + tests

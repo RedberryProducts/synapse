@@ -16,7 +16,7 @@ How to build, test, and verify Synapse locally. For architecture and standards s
 ```bash
 composer install     # PHP deps (+ testbench, pest, larastan, pint); auto-discovers the package
 npm install          # frontend deps
-npm run build        # compile resources/js → dist/ (with .vite/manifest.json)
+npm run build        # compile resources/js → dist/app.js + dist/app.css
 composer hooks       # enable the pre-commit hook (once per clone)
 ```
 
@@ -50,7 +50,7 @@ npx playwright install chromium          # one-time
 composer test:e2e                        # runs tests/Browser (suite "e2e")
 ```
 
-How it works: the Pest browser plugin boots the Testbench app **in-process** (no `artisan serve` needed) and serves static files from `public_path()`. `tests/BrowserTestCase.php` copies `dist/` into that public dir and opens the `viewSynapse` gate before each test. If assets aren't built, the tests **skip** with a clear message rather than fail.
+How it works: the Pest browser plugin boots the Testbench app **in-process** (no `artisan serve` needed). Assets are inlined from `dist/`, so `tests/BrowserTestCase.php` only opens the `viewSynapse` gate; if `dist/` isn't built, the tests **skip** with a clear message rather than fail.
 
 Suites are defined in `phpunit.xml.dist` (`unit`, `feature`, `e2e`); `composer test` runs `--testsuite=unit,feature`, `composer test:e2e` runs `--testsuite=e2e`. Browser tests are also tagged with the Pest group `e2e`.
 
@@ -70,7 +70,7 @@ npm run build        # one-off production build → dist/
 npm run watch        # rebuild dist/ on change while iterating
 ```
 
-`dist/` is **committed** — rebuild and commit it whenever `resources/js` changes. `Synapse::css()/js()` read the published `.vite/manifest.json`; if `dist/` is missing they emit a harmless comment (never fatal), so the PHP side won't break before a build.
+`dist/` is **committed** — rebuild and commit it whenever `resources/js` changes. `Synapse::css()/js()` read `dist/app.css` and `dist/app.js` directly and inline them into the layout, so there is nothing to publish: a running app picks up a rebuild on the next page load. If `dist/` is missing they emit a harmless comment (never fatal).
 
 ## Manual install test (real Laravel app)
 
@@ -84,12 +84,7 @@ php artisan serve                   # then open http://127.0.0.1:8000/synapse
 
 The script builds assets, creates a fresh Laravel app, wires path repositories for the package and the SDK, requires `redberry/synapse:@dev`, runs `synapse:install`, and seeds the four sample agents into `app/Agents`.
 
-Iterating on the package while the test app is running: because the package is **symlinked** into the app's `vendor/`, PHP changes are live. For frontend changes, `npm run watch` in the package, then refresh published assets in the app:
-
-```bash
-# inside testing-laravel-project/
-php artisan vendor:publish --tag=synapse-assets --force
-```
+Iterating on the package while the test app is running: because the package is **symlinked** into the app's `vendor/`, both PHP *and* frontend changes are live — run `npm run watch` in the package and just refresh the browser. Assets are inlined from `dist/`, so there is no publish step.
 
 `testing-laravel-project/` is gitignored; recreate it anytime with the setup script.
 

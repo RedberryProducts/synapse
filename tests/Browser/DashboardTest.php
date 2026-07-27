@@ -19,7 +19,7 @@ it('mounts the react app and renders the sidebar shell', function () {
 it('renders the discovery page as the index route', function () {
     visit('/synapse')
         ->assertSee('Agents')
-        ->assertSee('Agent cards will appear here.');
+        ->assertSee('Click a card to open the chat playground.');
 });
 
 it('navigates to history via the sidebar without a full page load', function () {

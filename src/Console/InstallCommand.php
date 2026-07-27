@@ -18,7 +18,6 @@ class InstallCommand extends Command
         $this->components->info('Publishing Synapse resources...');
 
         $this->callSilent('vendor:publish', ['--tag' => 'synapse-config']);
-        $this->callSilent('vendor:publish', ['--tag' => 'synapse-assets']);
         $this->callSilent('vendor:publish', ['--tag' => 'synapse-migrations']);
         $this->callSilent('vendor:publish', ['--tag' => 'synapse-provider']);
 

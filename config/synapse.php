@@ -42,7 +42,14 @@ return [
     */
 
     'discovery' => [
-        'paths' => [app_path('Agents')],
+        // Directories scanned for agent classes. The first is where the SDK's
+        // `php artisan make:agent` generates agents; the second is a common
+        // alternative. Missing directories are skipped, so listing both is free.
+        'paths' => [
+            app_path('Ai/Agents'),
+            app_path('Agents'),
+        ],
+
         'ignore' => [],
     ],
 

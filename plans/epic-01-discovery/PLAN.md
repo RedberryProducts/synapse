@@ -94,7 +94,7 @@ Config entries this epic reads (from [PRD](../../PRD.md#configuration) / [GOAL](
 
 | Key | Default | Use here |
 |-----|---------|----------|
-| `synapse.discovery.paths` | `[app_path('Agents')]` | Directories scanned for agent classes |
+| `synapse.discovery.paths` | `[app_path('Ai/Agents'), app_path('Agents')]` | Directories scanned for agent classes — the first is where the SDK's `make:agent` generates them |
 | `synapse.discovery.ignore` | `[]` | FQCNs to hide from the dashboard |
 | `synapse.ui.path` | `synapse` | Route prefix; the SPA reads it from `window.Synapse.path` |
 | `synapse.ui.middleware` | `['web']` | Applied to the API route |

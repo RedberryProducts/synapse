@@ -59,7 +59,6 @@ php artisan synapse:install
 
 - Publishes `config/synapse.php`
 - Runs Synapse's migrations
-- Publishes the compiled dashboard assets to `public/vendor/synapse`
 - Publishes a `SynapseServiceProvider` into your app (where the access gate lives — see [Access control](#access-control--environments))
 
 You never run `npm` — Synapse ships pre-built assets.
@@ -82,7 +81,7 @@ In your local environment, that's all there is to it. The dashboard is open, you
    php artisan make:agent SupportAgent
    ```
 
-   Any class under `app/Agents/` that implements the SDK's `Agent` contract is picked up automatically — no registration, no annotations.
+   `make:agent` creates it in `app/Ai/Agents/`. Any class there (or in `app/Agents/`) implementing the SDK's `Agent` contract is picked up automatically — no registration, no annotations.
 
 2. **Open `/synapse`.** Your agent appears as a card on the Discovery page, showing its provider, model, and tools.
 
@@ -123,7 +122,7 @@ Each **agent card** shows:
 
 Click a card to open its playground, or click **Info** to open the [agent info panel](#agent-info-panel).
 
-**How discovery works:** Synapse looks in the directories you configure (default: `app/Agents/`) for classes implementing `Laravel\Ai\Contracts\Agent`. There's no manual registration — creating the class is enough. Because discovery runs fresh each request, it always matches your current code (ideal during active development).
+**How discovery works:** Synapse looks in the directories you configure — by default `app/Ai/Agents/` (where `make:agent` generates agents) and `app/Agents/` — for classes implementing `Laravel\Ai\Contracts\Agent`. There's no manual registration — creating the class is enough. Because discovery runs fresh each request, it always matches your current code (ideal during active development).
 
 ### Chat playground
 
@@ -263,8 +262,12 @@ return [
     ],
 
     'discovery' => [
-        // Directories scanned for agent classes.
-        'paths' => [app_path('Agents')],
+        // Directories scanned for agent classes. The first is where
+        // `php artisan make:agent` puts them; the second is a common alternative.
+        'paths' => [
+            app_path('Ai/Agents'),
+            app_path('Agents'),
+        ],
 
         // Agent classes to hide from the dashboard.
         'ignore' => [],
@@ -400,7 +403,7 @@ Pruning removes the conversations, their messages, their tool records, and their
 
 | Command | What it does |
 |---------|--------------|
-| `synapse:install` | Publishes config, runs migrations, publishes dashboard assets, and publishes the `SynapseServiceProvider` (with the `viewSynapse` gate) |
+| `synapse:install` | Publishes config, runs migrations, and publishes the `SynapseServiceProvider` (with the `viewSynapse` gate) |
 | `synapse:prune` | Deletes conversations older than `--days` (defaults to the configured retention window), plus their attachments |
 | `synapse:clear` | Deletes **all** Synapse conversations and attachments |
 
@@ -441,7 +444,7 @@ These may be revisited once the core loop is solid.
 ## Troubleshooting & FAQ
 
 **My agent doesn't appear on the dashboard.**
-Check that it (1) implements `Laravel\Ai\Contracts\Agent`, (2) lives in one of the `discovery.paths` directories (default `app/Agents/`), (3) isn't listed in `discovery.ignore`, and (4) can be constructed by Laravel's container (an agent with unresolvable constructor dependencies can't be instantiated for discovery). Refresh — discovery runs on every request.
+Check that it (1) implements `Laravel\Ai\Contracts\Agent`, (2) lives in one of the `discovery.paths` directories (default `app/Ai/Agents/` and `app/Agents/`), (3) isn't listed in `discovery.ignore`, and (4) can be constructed by Laravel's container (an agent with unresolvable constructor dependencies can't be instantiated for discovery). Refresh — discovery runs on every request.
 
 **Do I need to configure providers or API keys in Synapse?**
 No. Synapse uses your existing `config/ai.php`. If your agents run from the terminal or in your app, they'll run in Synapse.
@@ -464,5 +467,5 @@ No. It uses its own tables and never reads or writes the SDK's `agent_conversati
 **How do I keep Synapse's data separate from my app database?**
 Point `SYNAPSE_DB_CONNECTION` at a dedicated connection — see [Where your data lives](#where-your-data-lives).
 
-**Do I need to build frontend assets?**
-No. Synapse ships compiled assets. After upgrading the package, re-publish them with `php artisan vendor:publish --tag=synapse-assets --force` (or let your `composer update` hook do it).
+**Do I need to build or publish frontend assets?**
+No, and there is nothing to re-publish after an upgrade. Synapse ships compiled assets inside the package and serves them directly, so `composer update` is all you ever need — the dashboard can never be left running stale assets.

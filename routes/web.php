@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Redberry\Synapse\Http\Controllers\AgentsController;
 use Redberry\Synapse\Http\Controllers\HomeController;
 
 /*
@@ -21,7 +22,7 @@ use Redberry\Synapse\Http\Controllers\HomeController;
 */
 Route::prefix('api')->group(function (): void {
     // Feature 1 — Agent discovery
-    Route::get('/agents', fn () => response()->json([]));
+    Route::get('/agents', [AgentsController::class, 'index']);
     Route::get('/agents/{agent}', fn (string $agent) => response()->json(null));
 
     // Feature 2 — Chat playground (SSE)

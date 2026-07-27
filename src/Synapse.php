@@ -4,7 +4,6 @@ namespace Redberry\Synapse;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\HtmlString;
 
 class Synapse
@@ -22,11 +21,12 @@ class Synapse
     public static ?Closure $authUsing = null;
 
     /**
-     * Cached Vite manifest.
-     *
-     * @var array<string, array<string, mixed>>|null
+     * The directory holding the compiled dashboard assets.
      */
-    protected static ?array $manifest = null;
+    protected static function distPath(string $file): string
+    {
+        return __DIR__.'/../dist/'.$file;
+    }
 
     /**
      * Register the callback used to authorize dashboard access.
@@ -64,61 +64,34 @@ class Synapse
     }
 
     /**
-     * The <script> tag(s) for the compiled application.
+     * Inline the compiled application JavaScript.
+     *
+     * Assets are read straight from the package's dist/ directory rather than
+     * published into the host application, so they can never go stale after a
+     * `composer update` (the same approach Horizon and Telescope use).
      */
     public static function js(): HtmlString
     {
-        $entry = static::manifest()['resources/js/app.tsx'] ?? null;
+        $js = @file_get_contents(static::distPath('app.js'));
 
-        if ($entry === null) {
-            return new HtmlString('<!-- Synapse assets not built. Run `npm run build`. -->');
+        if ($js === false) {
+            return new HtmlString('<!-- Synapse assets are not built. Run `npm run build`. -->');
         }
 
-        return new HtmlString(sprintf(
-            '<script type="module" src="%s"></script>',
-            static::asset($entry['file'])
-        ));
+        return new HtmlString('<script type="module">'.$js.'</script>');
     }
 
     /**
-     * The <link> tag(s) for the compiled stylesheet(s).
+     * Inline the compiled dashboard stylesheet.
      */
     public static function css(): HtmlString
     {
-        $entry = static::manifest()['resources/js/app.tsx'] ?? null;
+        $css = @file_get_contents(static::distPath('app.css'));
 
-        $tags = collect($entry['css'] ?? [])
-            ->map(fn (string $file): string => sprintf('<link rel="stylesheet" href="%s">', static::asset($file)))
-            ->implode(PHP_EOL);
-
-        return new HtmlString($tags);
-    }
-
-    /**
-     * Resolve the public URL for a published asset.
-     */
-    protected static function asset(string $file): string
-    {
-        return asset('vendor/synapse/'.ltrim($file, '/'));
-    }
-
-    /**
-     * Load (and cache) the published Vite manifest.
-     *
-     * @return array<string, array<string, mixed>>
-     */
-    protected static function manifest(): array
-    {
-        if (static::$manifest !== null) {
-            return static::$manifest;
+        if ($css === false) {
+            return new HtmlString('');
         }
 
-        $path = public_path('vendor/synapse/.vite/manifest.json');
-
-        if (! File::exists($path)) {
-            return static::$manifest = [];
-        }
-
-        return static::$manifest = json_decode(File::get($path), true) ?: [];
+        return new HtmlString('<style>'.$css.'</style>');
     }
 }

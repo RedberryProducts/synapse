@@ -16,7 +16,7 @@ APP_DIR="$PACKAGE_DIR/testing-laravel-project"
 cd "$PACKAGE_DIR"
 
 # Build the frontend assets so `synapse:install` has something to publish.
-echo "==> Building Synapse assets"
+echo "==> Building Synapse assets (inlined at runtime, never published)"
 npm install
 npm run build
 

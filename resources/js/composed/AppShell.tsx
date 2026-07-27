@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Compass, History, PanelLeft } from 'lucide-react';
+import { Button } from '@/elements/Button';
 import { SidebarNavLink } from '@/elements/SidebarItem';
+import { SidebarAgentList } from '@/components/SidebarAgentList';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
+import { useAgents } from '@/hooks/useAgents';
 import { config } from '@/lib/config';
 import { cn } from '@/lib/utils';
+
+const COLLAPSED_KEY = 'synapse-sidebar-collapsed';
 
 const nav = [
     { to: '/', label: 'Discovery', icon: Compass, end: true },
@@ -12,7 +17,14 @@ const nav = [
 ];
 
 export function AppShell() {
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState(
+        () => localStorage.getItem(COLLAPSED_KEY) === '1',
+    );
+    const { agents, loading } = useAgents();
+
+    useEffect(() => {
+        localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
+    }, [collapsed]);
 
     return (
         <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
@@ -22,36 +34,37 @@ export function AppShell() {
                     collapsed ? 'w-16' : 'w-72',
                 )}
             >
-                {/* Header */}
                 <div className="flex h-14 items-center justify-between px-4">
                     {!collapsed && <span className="text-lg font-semibold">Synapse</span>}
-                    <button
-                        type="button"
-                        onClick={() => setCollapsed((c) => !c)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setCollapsed((value) => !value)}
                         title={collapsed ? 'Expand' : 'Collapse'}
+                        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     >
                         <PanelLeft className="h-4 w-4" />
-                    </button>
+                    </Button>
                 </div>
 
-                {/* Recent conversations + agents (populated once the API lands) */}
-                {!collapsed && (
+                {!collapsed ? (
                     <div className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
                         <Section title="Recent Conversations">
-                            <Empty>No conversations yet.</Empty>
+                            <p className="px-2 text-sm text-subtle-foreground">
+                                No conversations yet.
+                            </p>
                         </Section>
                         <Section title="Agents">
-                            <Empty>No agents discovered.</Empty>
+                            <SidebarAgentList agents={agents} loading={loading} />
                         </Section>
                     </div>
+                ) : (
+                    <div className="flex-1" />
                 )}
-                {collapsed && <div className="flex-1" />}
 
-                {/* Workspace nav */}
                 <nav className="space-y-1 border-t border-border px-3 py-3">
                     {!collapsed && (
-                        <p className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <p className="px-2 pb-1 text-xs font-medium tracking-wide text-subtle-foreground uppercase">
                             Workspace
                         </p>
                     )}
@@ -68,10 +81,12 @@ export function AppShell() {
                     <ThemeSwitcher collapsed={collapsed} />
                 </nav>
 
-                {/* Footer */}
                 <div className="flex items-center justify-between border-t border-border px-4 py-3">
                     {!collapsed && (
-                        <span className="text-xs text-muted-foreground">v{config.version}</span>
+                        <span className="text-xs text-subtle-foreground">
+                            v{config.version}
+                            {!loading && ` · ${agents.length} agent${agents.length === 1 ? '' : 's'}`}
+                        </span>
                     )}
                 </div>
             </aside>
@@ -86,14 +101,10 @@ export function AppShell() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <div>
-            <p className="px-2 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="px-2 pb-2 text-xs font-medium tracking-wide text-subtle-foreground uppercase">
                 {title}
             </p>
             {children}
         </div>
     );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-    return <p className="px-2 text-sm text-muted-foreground/70">{children}</p>;
 }

@@ -53,12 +53,11 @@ Resource-loading methods (all called from `boot`):
 ```php
 $this->publishes([__DIR__.'/../config/synapse.php' => config_path('synapse.php')], 'synapse-config');
 $this->publishes([__DIR__.'/../database/migrations' => database_path('migrations')], 'synapse-migrations');
-$this->publishes([__DIR__.'/../dist' => public_path('vendor/synapse')], 'synapse-assets');
 $this->publishes([__DIR__.'/../stubs/SynapseServiceProvider.stub' => app_path('Providers/SynapseServiceProvider.php')], 'synapse-provider');
 ```
 
 - Users publish a group with `php artisan vendor:publish --tag=synapse-config`, or everything with `--provider="Redberry\Synapse\SynapseServiceProvider"`.
-- **Assets** need `--force` on package updates (Synapse documents re-publishing in README / a `post-update-cmd`).
+- **Assets are not published at all.** Current Horizon and Telescope both stopped publishing them (`horizon:publish` only warns now); they `file_get_contents` their compiled `dist/` files and inline them into the dashboard. Synapse does the same — nothing lands in the host app's `public/`, so an upgrade can never leave stale assets behind and there is no re-publish step.
 - **Migrations: Synapse publishes them (Telescope-style), it does not `loadMigrationsFrom`.** They run when the app migrates after `synapse:install`. (`publishesMigrations` auto-updates the timestamp; Synapse uses fixed timestamps + `publishes` so the three tables keep a stable order.)
 
 ## Migrations & models (Synapse conventions)
@@ -103,7 +102,7 @@ uses(TestCase::class, RefreshDatabase::class)->in('Feature', 'Unit');
 uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser');
 ```
 
-**Browser e2e in a package.** Pest 4's browser plugin boots the Testbench app *in-process* (no `artisan serve`) and serves static files from `public_path()` — so a package's compiled assets must be copied there first. `BrowserTestCase` publishes `dist/` into the Testbench public dir, opens the auth gate, and skips (not fails) when assets aren't built. Suites are split in `phpunit.xml.dist` (`unit`, `feature`, `e2e`) so `composer test` stays fast and `composer test:e2e` is opt-in.
+**Browser e2e in a package.** Pest 4's browser plugin boots the Testbench app *in-process* (no `artisan serve`). Because Synapse inlines its assets from `dist/`, nothing needs copying into the Testbench public dir — `BrowserTestCase` just opens the auth gate and skips (not fails) when `dist/` isn't built. Suites are split in `phpunit.xml.dist` (`unit`, `feature`, `e2e`) so `composer test` stays fast and `composer test:e2e` is opt-in.
 
 - Migrations are publish-only in production but loaded explicitly in tests via `defineDatabaseMigrations()` (they never auto-register in the app).
 - Env in tests is `testing`, so `Synapse::check()` isn't "local" — set `Synapse::auth(fn () => true)` to test authorized access, omit it to test the 403 path.
@@ -111,8 +110,8 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
 
 ## Frontend (React SPA in a package)
 
-- Vite builds `resources/js` → committed `dist/` (published to `public/vendor/synapse`). Users never run npm.
-- `manifest: true`; `Synapse::css()/js()` resolve hashed filenames from the published `.vite/manifest.json` (returns an HTML comment when unbuilt — never fatal).
+- Vite builds `resources/js` → committed `dist/` with **stable filenames** (`app.js`, `app.css`). Users never run npm.
+- `Synapse::css()/js()` read those files off disk and inline them as `<style>` / `<script type="module">` (returns an HTML comment when unbuilt — never fatal). No manifest, no hashing, no publishing.
 - One blade shell + a catch-all route (`/{view?}` where `(.*)`); the JSON API lives under a `/api` prefix; config is injected via `window.Synapse = @json(Synapse::scriptVariables())`.
 - Stack: React + TypeScript, Tailwind v4 (CSS-first `@theme`, no config file), shadcn/ui (vendored), path alias `@/ → resources/js`.
 

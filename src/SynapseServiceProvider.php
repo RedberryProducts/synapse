@@ -5,6 +5,7 @@ namespace Redberry\Synapse;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Redberry\Synapse\Discovery\AgentDiscovery;
 use Redberry\Synapse\Http\Middleware\Authorize;
 
 class SynapseServiceProvider extends ServiceProvider
@@ -15,6 +16,9 @@ class SynapseServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/synapse.php', 'synapse');
+
+        // Singleton = discovery runs once per request, never persistently cached.
+        $this->app->singleton(AgentDiscovery::class);
     }
 
     /**
@@ -95,9 +99,9 @@ class SynapseServiceProvider extends ServiceProvider
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'synapse-migrations');
 
-        $this->publishes([
-            __DIR__.'/../dist' => public_path('vendor/synapse'),
-        ], 'synapse-assets');
+        // Note: dashboard assets are NOT publishable — they are inlined from the
+        // package's dist/ directory (see Synapse::css()/js()), so an upgrade can
+        // never leave stale assets behind in the host application.
 
         $this->publishes([
             __DIR__.'/../stubs/SynapseServiceProvider.stub' => app_path('Providers/SynapseServiceProvider.php'),

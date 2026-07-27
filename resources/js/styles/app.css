@@ -3,68 +3,92 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
-| Design tokens. Dark ships first (per the Figma designs); the light values
-| are placeholders until the light palette lands (see DESIGN_FEEDBACK.md).
+| Design tokens, ported from the Figma variable set.
+|
+| Greyscale Light 50–900 / Grayscale Dark 50–950, Accent/Red, Helper/Success,
+| Helper/Error, Blue/Light. Components reference the semantic --color-* names
+| below and never raw values, so a theme is purely a token swap.
+|
+| Montserrat is the design font; we use it when present rather than fetching a
+| webfont (the package ships self-contained assets, no external requests).
 */
+
 :root {
-    --background: #ffffff;
-    --foreground: #0a0a0a;
-    --card: #ffffff;
-    --card-foreground: #0a0a0a;
-    --muted: #f4f4f5;
-    --muted-foreground: #71717a;
-    --border: #e4e4e7;
-    --input: #e4e4e7;
-    --ring: #f5451f;
-    --primary: #f5451f;
+    --background: #ffffff;      /* Greyscale Light/50  */
+    --surface: #fcfcfc;         /* Greyscale Light/100 */
+    --card: #fcfcfc;            /* Greyscale Light/100 */
+    --muted: #f4f4f5;           /* Greyscale Light/200 */
+    --sidebar: #f4f4f5;         /* Greyscale Light/200 */
+    --border: #e4e4e4;          /* Greyscale Light/400 */
+    --input: #e4e4e4;           /* Greyscale Light/400 */
+    --foreground: #121212;      /* Greyscale Light/900 */
+    --muted-foreground: #636363;/* Greyscale Light/700 */
+    --subtle-foreground: #9a9a9a;/* Greyscale Light/600 */
+    --primary: #fe3b1f;         /* Accent/Red */
     --primary-foreground: #ffffff;
-    --sidebar: #fafafa;
-    --sidebar-foreground: #0a0a0a;
-    --success: #22c55e;
-    --destructive: #ef4444;
-    --radius: 0.625rem;
+    --accent: #1b1c1f;          /* Blue/Dark — model text on light */
+    --success: #4fcf38;         /* Helper/Success */
+    --destructive: #ce0000;     /* Helper/Error */
+    --ring: #fe3b1f;
+    --radius: 8px;              /* border radius/lg */
 }
 
 .dark {
-    --background: #0a0a0b;
-    --foreground: #fafafa;
-    --card: #111113;
-    --card-foreground: #fafafa;
-    --muted: #1a1a1d;
-    --muted-foreground: #8a8a94;
-    --border: #232327;
-    --input: #232327;
-    --ring: #f5451f;
-    --primary: #f5451f;
+    --background: #09090b;      /* Grayscale Dark/950 */
+    --surface: #0c0c0d;         /* Grayscale Dark/900 */
+    --card: #0c0c0d;            /* Grayscale Dark/900 */
+    --muted: #121212;           /* Grayscale Dark/800 */
+    --sidebar: #0c0c0d;         /* Grayscale Dark/900 */
+    --border: #303030;          /* Grayscale Dark/700 */
+    --input: #303030;           /* Grayscale Dark/700 */
+    --foreground: #ededed;      /* Grayscale Dark/50  */
+    --muted-foreground: #9a9a9a;/* Grayscale Dark/200 */
+    --subtle-foreground: #636363;/* Grayscale Dark/400 */
+    --primary: #fe3b1f;         /* Accent/Red */
     --primary-foreground: #ffffff;
-    --sidebar: #0d0d0f;
-    --sidebar-foreground: #fafafa;
-    --success: #22c55e;
-    --destructive: #ef4444;
+    --accent: #7cb1fe;          /* Blue/Light — model text on dark */
+    --success: #4fcf38;         /* Helper/Success */
+    --destructive: #ce0000;     /* Helper/Error */
+    --ring: #fe3b1f;
 }
 
 @theme inline {
     --color-background: var(--background);
-    --color-foreground: var(--foreground);
+    --color-surface: var(--surface);
     --color-card: var(--card);
-    --color-card-foreground: var(--card-foreground);
     --color-muted: var(--muted);
-    --color-muted-foreground: var(--muted-foreground);
+    --color-sidebar: var(--sidebar);
     --color-border: var(--border);
     --color-input: var(--input);
-    --color-ring: var(--ring);
+    --color-foreground: var(--foreground);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-subtle-foreground: var(--subtle-foreground);
     --color-primary: var(--primary);
     --color-primary-foreground: var(--primary-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-accent: var(--accent);
     --color-success: var(--success);
     --color-destructive: var(--destructive);
-    --radius-lg: var(--radius);
+    --color-ring: var(--ring);
+
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+
+    --font-sans: Montserrat, ui-sans-serif, system-ui, -apple-system,
+        "Segoe UI", sans-serif;
+}
+
+html {
+    color-scheme: light;
+}
+
+html.dark {
+    color-scheme: dark;
 }
 
 body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
 }

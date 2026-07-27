@@ -76,7 +76,7 @@ The FQCN and full configuration live in the Info panel (Feature 4), not on the c
 
 #### Technical Implementation
 
-**Discovery mechanism** — `AgentDiscovery` service scans configured directories (default: `app/Agents/`) using Symfony Finder, filtering classes that implement `Laravel\Ai\Contracts\Agent`:
+**Discovery mechanism** — `AgentDiscovery` service scans configured directories (default: `app/Ai/Agents/` — where the SDK's `make:agent` generates agents — plus `app/Agents/`) using Symfony Finder, filtering classes that implement `Laravel\Ai\Contracts\Agent`:
 
 
 **Metadata extraction** — For each discovered agent class, instantiate via the Laravel container (`app($class)`) and read. Note: `make()` lives on the `Promptable` trait, not the `Agent` contract — a framework-authored agent implementing only the contract won't have it, so Synapse must not rely on it:
@@ -514,8 +514,9 @@ return [
     ],
 
     'discovery' => [
-        // Directories to scan for agent classes
-        'paths' => [app_path('Agents')],
+        // Directories to scan for agent classes. The first is where the SDK's
+        // `make:agent` generates them; the second is a common alternative.
+        'paths' => [app_path('Ai/Agents'), app_path('Agents')],
 
         // Ignore these agent classes
         'ignore' => [],
@@ -620,12 +621,12 @@ The `{agent}` route parameter is a URL-safe slug derived from the FQCN (e.g. `ap
 
 ### Asset Delivery
 
-Users never run npm. Following Horizon/Telescope:
+Users never run npm, **and never publish assets**. Following current Horizon/Telescope (both stopped publishing assets — `horizon:publish` now only warns, `telescope:publish` publishes config only):
 
-- Compiled JS/CSS is **committed to `dist/`** in the package repo (built via `vite build` before each release)
-- `synapse:install` publishes `dist/` → `public/vendor/synapse`, alongside config and migrations
-- The blade layout references the published assets (with a cache-busting query string from the asset manifest)
-- README documents re-publishing on package update via `vendor:publish --tag=synapse-assets --force` in `composer.json`'s `post-update-cmd` (the same pattern Horizon recommends)
+- Compiled JS/CSS is **committed to `dist/`** in the package repo (built via `vite build` before each release) with stable filenames (`app.js`, `app.css`)
+- `Synapse::css()` / `Synapse::js()` read those files with `file_get_contents` and **inline them** into the dashboard layout as `<style>` / `<script type="module">`
+- Nothing is copied into the host application's `public/` directory, so a `composer update` can never leave stale assets behind and there is no re-publish step, no cache-busting query string, and no manifest to keep in sync
+- If `dist/` is missing (a source checkout without a build), `js()` emits an HTML comment telling the developer to run `npm run build` rather than failing
 
 ---
 
@@ -761,7 +762,7 @@ Inline tool cards are interleaved into the chat thread by `started_at` against m
 
 | Command | Purpose |
 |---------|---------|
-| `synapse:install` | Publish config, run migrations, publish assets, publish the `SynapseServiceProvider` stub with the `viewSynapse` gate |
+| `synapse:install` | Publish config, run migrations, publish the `SynapseServiceProvider` stub with the `viewSynapse` gate (assets need no publishing — see Asset Delivery) |
 | `synapse:prune` | Delete conversations older than `--days` (defaults to `synapse.retention.days`), including their messages, tool rows, and stored attachment files |
 | `synapse:clear` | Clear **all** conversation history, including stored attachment files |
 
