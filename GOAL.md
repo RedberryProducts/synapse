@@ -139,20 +139,23 @@ The playground is a real conversation with a real agent. Messages stream token-b
 - **Streaming text** — the answer as it arrives.
 - **Reasoning** — for models with extended thinking (Anthropic, OpenAI o-series, DeepSeek), the thinking appears in a collapsible "Thinking…" pane above the answer, with its own reasoning-token count. Collapsed by default so it never gets in the way.
 - **Tool calls** — inline cards, in the order they happened (see [Tool inspection](#tool-inspection)).
-- **Structured output** — if your agent returns structured data, the response renders as a formatted, collapsible JSON card instead of plain text.
+- **Structured output** — if your agent returns structured data, the response renders as a formatted, collapsible JSON card instead of plain text. Structured-output agents can't stream (the SDK doesn't support it), so Synapse runs them in one shot and shows the finished answer — the only visible difference is that the text arrives all at once.
 - **Metadata** — prompt/completion token counts and response time on each answer.
 
 **Conversation controls:**
 
+The **⋮ menu** in the playground header holds:
+
 - **New conversation** — start a fresh thread with the same agent.
 - **Clear conversation** — delete the current thread and return to an empty playground.
-- **Switch agent** — pick another agent (from the sidebar or Discovery); a new conversation starts automatically.
 
-Conversations **persist across refreshes** — close the tab, come back later, and your thread is intact, tool cards and all.
+**Switch agent** — pick another agent (from the sidebar or Discovery); a new conversation starts automatically.
+
+Opening a playground always starts an **empty** thread. As soon as you send the first message the conversation's id appears in the address bar (`?c=…`), so **refreshing keeps you in the same thread** — close the tab, come back later, and it's intact, tool cards and all. Nothing older reappears on its own; to reopen an earlier conversation, pick it from [History](#history) or the sidebar.
 
 **Conversation memory mirrors your agent — Synapse never fakes it.** The playground always shows your messages as a thread, but whether the agent actually *remembers* earlier messages depends entirely on your agent:
 
-- **If your agent supports conversation memory** (it implements the SDK's `Conversational` contract — most commonly via the `RemembersConversations` trait), the playground is a true multi-turn conversation. Each message is sent with the full thread, so the agent has the earlier context.
+- **If your agent supports conversation memory** (it implements the SDK's `Conversational` contract — most commonly via the `RemembersConversations` trait), the playground is a true multi-turn conversation. Each message is sent with the full thread, so the agent has the earlier context. Synapse supplies that history from **its own** stored messages rather than your app's conversation tables, so you don't have to call `forUser()` or `continue()` to try an agent out, and nothing you do in the playground touches your production conversation data.
 - **If your agent is stateless** (it doesn't implement `Conversational`), each message is sent to the agent on its own, with **no earlier messages attached** — exactly how it behaves in production. Synapse still keeps the messages together in one session so you can read them as a thread, and marks the agent **Stateless** so you know why it won't recall previous turns.
 
 The point: what you see in Synapse is what you'd get in production. Synapse won't give your agent memory it doesn't actually have — if you need multi-turn behavior, that's a signal to make your agent conversational in code.
@@ -452,6 +455,12 @@ No. Synapse uses your existing `config/ai.php`. If your agents run from the term
 
 **Why doesn't my agent remember previous messages in the playground?**
 Because your agent is stateless — it doesn't implement the SDK's `Conversational` contract, so it has no conversation memory. Synapse deliberately mirrors that: each message is sent independently, exactly as in production, and the agent is marked **Stateless**. To get multi-turn behavior, make your agent conversational (e.g. use the `RemembersConversations` trait). Synapse won't fake memory your agent doesn't have. See [Chat playground](#chat-playground).
+
+**The answer appears all at once instead of streaming.**
+Something between PHP and your browser is buffering the response. Synapse sends the correct headers (`Cache-Control: no-transform`, `X-Accel-Buffering: no`), but a proxy in front of your app may need `proxy_buffering off;` for the Synapse path, and PHP's `output_buffering` should be off or small. Everything still works — the answer, tokens, and tool cards are all correct — you just lose the token-by-token effect. Structured-output agents never stream by design (see [Chat playground](#chat-playground)).
+
+**What happens if I close the tab while an agent is still answering?**
+The run finishes on the server and the answer is saved. Reopen the conversation from History and the full turn is there, with its token counts and tool cards. Synapse deliberately doesn't abandon a request that's already been sent to your provider — you've paid for those tokens either way, and a half-recorded turn is worse than a complete one.
 
 **Can I use a different model than my agent is configured with?**
 Yes — use the model selector in the composer. It's per-send and never changes your code. Add extra models to the dropdown via `playground.models` in config.

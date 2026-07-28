@@ -1,17 +1,27 @@
 import { Info } from 'lucide-react';
+import { ChatComposer } from '@/components/ChatComposer';
+import { ConversationMenu } from '@/components/ConversationMenu';
+import { ConversationTokens } from '@/components/ConversationTokens';
+import { StatelessNotice } from '@/components/StatelessNotice';
 import { Button } from '@/elements/Button';
+import { ChatThread } from './ChatThread';
 import { InfoPanel, type InfoTab } from './InfoPanel';
 import type { AgentDetail } from '@/types/agent';
+import type { ChatEntry } from '@/types/chat';
 
 /**
- * The playground page frame: agent header, chat area, and the Info panel.
- *
- * The chat area is a placeholder until Epic 3 — this epic delivers the panel.
+ * The playground page frame: agent header, chat thread, composer, Info panel.
  */
 export function PlaygroundShell({
     agent,
     loading,
     error,
+    entries,
+    sending,
+    totals,
+    onSend,
+    onNewConversation,
+    onClearConversation,
     panelOpen,
     tab,
     onTabChange,
@@ -21,45 +31,78 @@ export function PlaygroundShell({
     agent: AgentDetail | null;
     loading: boolean;
     error: string | null;
+    entries: ChatEntry[];
+    sending: boolean;
+    totals: { prompt: number; completion: number };
+    onSend: (message: string) => void;
+    onNewConversation: () => void;
+    onClearConversation: () => void;
     panelOpen: boolean;
     tab: InfoTab;
     onTabChange: (tab: InfoTab) => void;
     onOpenPanel: () => void;
     onClosePanel: () => void;
 }) {
+    const started = entries.length > 0;
+
     return (
         <div className="flex h-full">
             <div className="flex min-w-0 flex-1 flex-col">
-                <header className="flex h-14 items-center justify-between gap-4 border-b border-border px-8">
-                    <div className="flex min-w-0 items-baseline gap-2">
-                        <h1 className="truncate text-lg font-semibold">
-                            {agent?.name ?? (loading ? 'Loading…' : 'Agent')}
-                        </h1>
-                        {agent?.provider && (
-                            <span className="truncate text-xs text-muted-foreground">
-                                {agent.provider}
-                                {agent.model && ` / ${agent.model}`}
-                            </span>
+                <header className="flex items-start justify-between gap-4 border-b border-border px-8 py-4">
+                    <div className="flex min-w-0 flex-col gap-2">
+                        <div className="flex min-w-0 items-baseline gap-2">
+                            <h1 className="truncate text-lg font-semibold">
+                                {agent?.name ?? (loading ? 'Loading…' : 'Agent')}
+                            </h1>
+                            {agent?.provider && (
+                                <span className="truncate text-xs text-muted-foreground">
+                                    {agent.provider}
+                                    {agent.model && ` / ${agent.model}`}
+                                </span>
+                            )}
+                        </div>
+
+                        {started && (
+                            <ConversationTokens
+                                prompt={totals.prompt}
+                                completion={totals.completion}
+                            />
                         )}
+
+                        {agent && !agent.capabilities.conversational && <StatelessNotice />}
                     </div>
 
-                    {!panelOpen && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={onOpenPanel}
-                            title="Agent info"
-                            aria-label="Open info panel"
-                        >
-                            <Info className="h-4 w-4" />
-                        </Button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                        <ConversationMenu
+                            onNew={onNewConversation}
+                            onClear={onClearConversation}
+                            canClear={started}
+                        />
+
+                        {!panelOpen && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onOpenPanel}
+                                title="Agent info"
+                                aria-label="Open info panel"
+                            >
+                                <Info className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
                 </header>
 
-                <div className="flex flex-1 items-center justify-center p-8">
-                    <p className="text-sm text-subtle-foreground">
-                        The chat playground arrives in the next release.
-                    </p>
+                <ChatThread entries={entries} />
+
+                <div className="px-8 pt-2 pb-6">
+                    <div className="mx-auto max-w-3xl">
+                        <ChatComposer
+                            onSend={onSend}
+                            disabled={sending || agent?.available === false}
+                            autoFocus={!started}
+                        />
+                    </div>
                 </div>
             </div>
 

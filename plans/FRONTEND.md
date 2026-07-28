@@ -59,7 +59,7 @@ Which primitive each epic introduces. Built on demand — an element appears whe
 | `JsonView` | tool card bodies | 2, 4 | Collapsible JSON tree (`@uiw/react-json-view`) |
 | `Markdown` | Info panel Prompt tab | 2 | `react-markdown` wrapper |
 | `Copy` | `Copy` `408:5907` | 4 | Default / hover / copied |
-| `Collapsible` | `Inline Tool Call cards` `271:2353` | 4 | Expand/collapse |
+| `Collapsible` | `Inline Tool Call cards` `271:2353` | 3 | Expand/collapse — first needed by the error card's stack trace |
 | `Textarea` | `Chat Input` `400:6362` | 3 | Auto-growing composer field |
 | `Select` | `Models` `355:18178` | 5 | Model selector |
 | `FileChip` | `File chip` `623:27074`, `630:5906` | 5 | Image / audio / document |

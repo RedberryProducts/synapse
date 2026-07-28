@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Redberry\Synapse\Http\Controllers\AgentsController;
+use Redberry\Synapse\Http\Controllers\ChatController;
+use Redberry\Synapse\Http\Controllers\ConversationsController;
 use Redberry\Synapse\Http\Controllers\HomeController;
 
 /*
@@ -26,16 +28,16 @@ Route::prefix('api')->group(function (): void {
     Route::get('/agents/{agent}', [AgentsController::class, 'show']);
 
     // Feature 2 — Chat playground (SSE)
-    Route::post('/chat/{agent}/send', fn (string $agent) => response()->noContent());
+    Route::post('/chat/{agent}/send', [ChatController::class, 'send']);
 
     // Attachments
     Route::get('/attachments/{message}/{index}', fn (string $message, int $index) => response()->noContent());
 
     // Feature 5 — History
     Route::get('/conversations', fn () => response()->json(['data' => []]));
-    Route::get('/conversations/{id}', fn (string $id) => response()->json(null));
+    Route::get('/conversations/{id}', [ConversationsController::class, 'show']);
     Route::patch('/conversations/{id}', fn (string $id) => response()->noContent());
-    Route::delete('/conversations/{id}', fn (string $id) => response()->noContent());
+    Route::delete('/conversations/{id}', [ConversationsController::class, 'destroy']);
     Route::post('/conversations/clear', fn () => response()->noContent());
 });
 

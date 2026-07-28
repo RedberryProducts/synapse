@@ -1,5 +1,6 @@
 import { basePath } from './config';
 import type { Agent, AgentDetail } from '@/types/agent';
+import type { Conversation } from '@/types/chat';
 
 const csrfToken =
     document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
@@ -34,4 +35,19 @@ export function getAgents(signal?: AbortSignal): Promise<Agent[]> {
 /** Feature 4 — full detail for one agent (Info panel). */
 export function getAgent(slug: string, signal?: AbortSignal): Promise<AgentDetail> {
     return api<AgentDetail>(`/agents/${encodeURIComponent(slug)}`, { signal });
+}
+
+/**
+ * Feature 2 — replay a conversation.
+ *
+ * Sending a message does not go through here: it streams, and lives in
+ * `lib/stream.ts`.
+ */
+export function getConversation(id: string, signal?: AbortSignal): Promise<Conversation> {
+    return api<Conversation>(`/conversations/${encodeURIComponent(id)}`, { signal });
+}
+
+/** Feature 2 — clear conversation: deletes the thread and its tool rows. */
+export function deleteConversation(id: string): Promise<void> {
+    return api<void>(`/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

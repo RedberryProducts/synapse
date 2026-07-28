@@ -1,0 +1,134 @@
+<?php
+
+use Illuminate\Support\Facades\Event;
+use Laravel\Ai\Events\InvokingTool;
+use Laravel\Ai\Responses\Data\ToolCall;
+use Redberry\Synapse\Models\SynapseMessage;
+use Redberry\Synapse\Models\SynapseToolInvocation;
+use Redberry\Synapse\Synapse;
+use Workbench\App\Agents\FlakyToolAgent;
+use Workbench\App\Agents\SupportAgent;
+
+/*
+| The SDK does not catch exceptions thrown inside a tool: InvokesTools::
+| executeTool() wraps the handler in try/finally with no catch, and the loop
+| hard-codes `successful: true` on every tool result event. A throwing tool
+| therefore exits stream() entirely — which is why Synapse's whole error story
+| rests on one catch-all around the invocation, not on inspecting tool results.
+*/
+
+beforeEach(function () {
+    Synapse::auth(fn (): bool => true);
+
+    config(['synapse.discovery.paths' => [dirname(__DIR__, 3).'/workbench/app/Agents']]);
+});
+
+it('turns a provider failure into an inline error card', function () {
+    fakeAgent(SupportAgent::class, [
+        fn () => throw new RuntimeException('Rate limit exceeded for openai.'),
+    ]);
+
+    $response = sendMessage('workbench.app.agents.support-agent', 'Anything');
+
+    $error = chatPart($response, 'error');
+
+    expect($error['errorText'])->toBe('Rate limit exceeded for openai.')
+        ->and($error['data']['exceptionClass'])->toBe(RuntimeException::class)
+        ->and($error['data']['stackTrace'])->not->toBeEmpty()
+        ->and($error['data']['messageId'])->not->toBeEmpty();
+});
+
+it('stores the failure so the thread still explains itself after a refresh', function () {
+    fakeAgent(SupportAgent::class, [
+        fn () => throw new RuntimeException('Provider exploded'),
+    ]);
+
+    sendMessage('workbench.app.agents.support-agent', 'Anything');
+
+    $error = SynapseMessage::query()->where('role', 'error')->sole();
+
+    expect($error->content)->toBe('Provider exploded')
+        ->and($error->metadata['exception_class'])->toBe(RuntimeException::class)
+        ->and($error->metadata['stack_trace'])->toBeString();
+});
+
+it('still closes the stream cleanly when the agent fails', function () {
+    fakeAgent(SupportAgent::class, [
+        fn () => throw new RuntimeException('Boom'),
+    ]);
+
+    $response = sendMessage('workbench.app.agents.support-agent', 'Anything');
+
+    // The client must always reach a terminator, or it would spin forever.
+    expect(array_slice(chatPartTypes($response), -2))->toBe(['error', 'data-synapse-end'])
+        ->and($response->streamedContent())->toEndWith("data: [DONE]\n\n");
+});
+
+it('never lets a failure escape as an http error', function () {
+    fakeAgent(SupportAgent::class, [
+        fn () => throw new RuntimeException('Boom'),
+    ]);
+
+    // Headers are already on the wire by the time the stream closure runs, so a
+    // failure has to arrive as a part. 200 with an error card is correct here.
+    sendMessage('workbench.app.agents.support-agent', 'Anything')->assertOk();
+});
+
+it('surfaces an exception thrown inside a developer tool', function () {
+    fakeAgent(FlakyToolAgent::class, [
+        new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
+    ]);
+
+    $response = sendMessage('workbench.app.agents.flaky-tool-agent', 'Look up entry 42');
+
+    expect(chatPart($response, 'error')['errorText'])->toBe('Ledger service unavailable')
+        ->and(SynapseMessage::query()->where('role', 'error')->sole()->metadata['exception_class'])
+        ->toBe(RuntimeException::class);
+});
+
+it('closes out a tool invocation the exception left hanging', function () {
+    fakeAgent(FlakyToolAgent::class, [
+        new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
+    ]);
+
+    // A throwing tool fires InvokingTool but never ToolInvoked, so its row would
+    // stay `pending` forever. Stand in for Epic 4's recorder to prove the sweep.
+    Event::listen(InvokingTool::class, function (InvokingTool $event): void {
+        SynapseToolInvocation::query()->create([
+            'conversation_id' => 'unused',
+            'invocation_id' => $event->invocationId,
+            'tool_invocation_id' => $event->toolInvocationId,
+            'type' => 'tool',
+            'name' => 'BrokenLedgerTool',
+            'arguments' => $event->arguments,
+            'status' => 'pending',
+            'started_at' => now(),
+        ]);
+    });
+
+    sendMessage('workbench.app.agents.flaky-tool-agent', 'Look up entry 42');
+
+    $invocation = SynapseToolInvocation::query()->sole();
+
+    expect($invocation->status)->toBe('error')
+        ->and($invocation->error)->toBe('Ledger service unavailable')
+        ->and($invocation->finished_at)->not->toBeNull();
+});
+
+it('leaves the conversation usable after a failure', function () {
+    // Keyed on the prompt rather than a response list: the fake advances its
+    // index with `tap()` *after* marshalling, so a throwing entry never moves
+    // the cursor and would fail every subsequent turn too.
+    fakeAgent(SupportAgent::class, fn (string $prompt) => str_contains($prompt, 'fails')
+        ? throw new RuntimeException('Transient blip')
+        : 'Recovered fine.');
+
+    $conversationId = chatConversationId(
+        sendMessage('workbench.app.agents.support-agent', 'This one fails')
+    );
+
+    sendMessage('workbench.app.agents.support-agent', 'This one works', $conversationId);
+
+    expect(SynapseMessage::query()->where('role', 'assistant')->sole()->content)
+        ->toBe('Recovered fine.');
+});

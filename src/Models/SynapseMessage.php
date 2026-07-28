@@ -3,6 +3,7 @@
 namespace Redberry\Synapse\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property string $id
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $prompt_tokens
  * @property int|null $completion_tokens
  * @property int|null $duration_ms
+ * @property Carbon|null $created_at
  */
 class SynapseMessage extends SynapseModel
 {
