@@ -1,18 +1,38 @@
 import { useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { Bot } from 'lucide-react';
+import { EmptyState } from '@/components/EmptyState';
+import { PlaygroundShell } from '@/composed/PlaygroundShell';
+import { useAgent } from '@/hooks/useAgent';
+import { usePanelState } from '@/hooks/usePanelState';
 
 export default function Playground() {
-    const { agent } = useParams();
+    const { agent: slug } = useParams();
+    const { agent, loading, notFound, error } = useAgent(slug);
+    const { open, tab, openPanel, closePanel, setTab } = usePanelState();
+
+    if (notFound) {
+        return (
+            <div className="p-8">
+                <EmptyState icon={Bot} title="Agent not found">
+                    <p>
+                        No discovered agent matches <code>{slug}</code>. It may have been
+                        renamed or removed — head back to Discovery.
+                    </p>
+                </EmptyState>
+            </div>
+        );
+    }
 
     return (
-        <div className="p-8">
-            <PageHeader
-                title={agent ?? 'Playground'}
-                subtitle="Chat with your agent and inspect tool calls, tokens, and reasoning."
-            />
-            <div className="mt-8 rounded-lg border border-dashed border-border p-12 text-center text-muted-foreground">
-                The chat playground will appear here.
-            </div>
-        </div>
+        <PlaygroundShell
+            agent={agent}
+            loading={loading}
+            error={error}
+            panelOpen={open}
+            tab={tab}
+            onTabChange={setTab}
+            onOpenPanel={openPanel}
+            onClosePanel={closePanel}
+        />
     );
 }

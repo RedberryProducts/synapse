@@ -23,7 +23,7 @@ use Redberry\Synapse\Http\Controllers\HomeController;
 Route::prefix('api')->group(function (): void {
     // Feature 1 — Agent discovery
     Route::get('/agents', [AgentsController::class, 'index']);
-    Route::get('/agents/{agent}', fn (string $agent) => response()->json(null));
+    Route::get('/agents/{agent}', [AgentsController::class, 'show']);
 
     // Feature 2 — Chat playground (SSE)
     Route::post('/chat/{agent}/send', fn (string $agent) => response()->noContent());

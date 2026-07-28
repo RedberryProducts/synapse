@@ -307,6 +307,8 @@ A side panel (or dedicated tab) showing the selected agent's full configuration.
 #### 4d. Middleware
 - List of middleware classes applied to this agent
 
+**Where the panel lives** — a right-hand panel inside the Chat Playground (`/playground/{agent}`), opened from an agent card's `Info` link or the playground header. Its state is a query parameter (`?info=config|prompt|tools`) so it survives a reload and can be shared; `?info=1` opens the default tab. Sub-agent tools link to that sub-agent's own Info panel.
+
 #### Technical Implementation
 
 **All data comes from the agent instance** — resolved via the Laravel container (`app($class)`; `make()` is on the `Promptable` trait, not the `Agent` contract, so it can't be assumed):
@@ -321,18 +323,27 @@ A side panel (or dedicated tab) showing the selected agent's full configuration.
 | Tools | `$agent instanceof HasTools ? $agent->tools() : []` → classify each entry per the gateway's `resolveTool()` logic: `Tool` as-is, `Agent` → `AgentTool`, MCP references → `McpTool` / `McpServerTool`, `ProviderTool` as-is (see 4c) |
 | Middleware | `$agent instanceof HasMiddleware ? $agent->middleware() : []` |
 | Provider Options | `$agent instanceof HasProviderOptions ? $agent->providerOptions($provider) : []` |
-| Structured Output | `$agent instanceof HasStructuredOutput ? $agent->schema(new JsonSchemaTypeFactory) : null` |
+| Structured Output | `$agent instanceof HasStructuredOutput ? $agent->schema(new JsonSchemaTypeFactory) : null` — rendered as an **Output schema** section inside the Tools tab (no fourth tab), reusing the parameter rows |
 
-**Tool schema rendering** — Each tool's `schema(JsonSchema $schema)` returns `array<string, Type>` (using `illuminate/json-schema`). Synapse renders this as a parameter table:
+**Tool schema rendering** — Each tool's `schema(JsonSchema $schema)` returns `array<string, Type>` (using `illuminate/json-schema`). **Serialize it through the SDK's public `ObjectSchema`**, not per-`Type`:
+
+```php
+$json = (new ObjectSchema($tool->schema(new JsonSchemaTypeFactory)))->toSchema();
+// ['type' => 'object', 'properties' => [...], 'required' => ['query'], ...]
+```
+
+`Type::toArray()` deliberately **drops `required`** (`Serializer::$ignore` contains it, because JSON Schema records required-ness on the parent object, and `Serializer::isRequired()` is `protected`). `ObjectSchema` is the same path every provider gateway uses, so the panel shows exactly what the provider receives.
+
+Rendered per the Figma panel as one row per parameter — `name` + a type badge, required marked, with the description on a second line when the tool defines one:
 
 ```
-┌────────────┬─────────┬──────────────────────────────┐
-│ Parameter  │ Type    │ Description                  │
-├────────────┼─────────┼──────────────────────────────┤
-│ query      │ string  │ Search query text            │
-│ max_results│ integer │ Maximum results to return    │
-└────────────┴─────────┴──────────────────────────────┘
+query *                    [ String  ]
+Search query text
+max_results                [ Integer ]
+Maximum results to return
 ```
+
+A tool whose `schema()` throws degrades to a "schema unavailable" note on that tool; the rest of the panel is unaffected.
 
 **"Capabilities" section (per Figma design)** — the Info panel's Config tab section labeled *Capabilities* renders the agent's **tool chips** (matching the design), not interface badges. Interface-derived capability checks (`instanceof Conversational`, `RemembersConversations`, `HasTools`, `HasStructuredOutput`, `HasMiddleware`, `CanActAsTool`) are still performed by discovery — Synapse needs them internally (decorator behavior, structured-output rendering, tools resolution) and they're included in the agent-detail API payload — but they are **not rendered as UI badges in the MVP**.
 

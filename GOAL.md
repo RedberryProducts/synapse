@@ -194,12 +194,13 @@ Open the **Info** panel from any agent card or from inside the playground to see
   - The agent's tools, as chips
 - **Prompt** — the agent's full system instructions, rendered as markdown so it's easy to read and verify.
 - **Tools** — every registered tool with its details:
-  - **Your tools** — name, description, and a parameter table (name / type / description) derived from the tool's schema
+  - **Your tools** — name, description, and each parameter with its type, whether it's required, and its description
+  - **Output schema** — for agents that return structured data, the shape they produce
   - **Provider tools** — labelled `⚡ Provider tool` with their options
   - **Sub-agents** (agents used as tools) — labelled and linked to that agent's own page
   - **MCP tools** — labelled `MCP`
 
-The info panel is a read-only reflection of your code. Change the agent, refresh, and it updates.
+The info panel is a read-only reflection of your code. Change the agent, refresh, and it updates. Its state lives in the URL, so you can link a colleague straight to an agent's Prompt or Tools tab.
 
 ### History
 

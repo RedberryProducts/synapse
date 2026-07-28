@@ -21,8 +21,8 @@ High-level roadmap: phases, epics, and sequence. Each epic has its own folder he
 | # | Epic | Delivers | Size | Depends on |
 |---|------|----------|------|-----------|
 | 0 | **Scaffold** ✅ done | Installable package, migrations, empty SPA, CI gates, e2e harness | — | — |
-| 1 | [Agent Discovery](epic-01-discovery/PLAN.md) | Install → your real agents appear on the dashboard | M | 0 |
-| 2 | [Agent Info Panel](epic-02-info-panel/PLAN.md) | Inspect any agent's full config, prompt, and tools | M | 1 |
+| 1 | [Agent Discovery](epic-01-discovery/PLAN.md) ✅ done | Install → your real agents appear on the dashboard | M | 0 |
+| 2 | [Agent Info Panel](epic-02-info-panel/PLAN.md) ✅ done | Inspect any agent's full config, prompt, and tools | M | 1 |
 | 3 | [Chat MVP](epic-03-chat-mvp/PLAN.md) | Actually talk to an agent: streaming, persistence, errors, tokens | XL | 1 |
 | 4 | [Tool Inspection](epic-04-tool-inspection/PLAN.md) | Inline tool cards: pending → success/error, args/results, provider tools | L | 3 |
 | 5 | [Chat Advanced](epic-05-chat-advanced/PLAN.md) | Attachments, model selector, reasoning pane, structured output | L | 3, 4 |

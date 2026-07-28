@@ -48,3 +48,46 @@ export interface Agent {
     /** Constructor parameters the container could not resolve (empty when the failure was something else). */
     unresolvable: UnresolvableDependency[];
 }
+
+/* ── Info panel detail (GET /api/agents/{slug}) ───────────────────────────── */
+
+export interface ToolChoiceSetting {
+    mode: 'auto' | 'none' | 'required' | 'tool';
+    tool: string | null;
+}
+
+export interface GenerationSettings {
+    temperature: number | null;
+    max_tokens: number | null;
+    max_steps: number | null;
+    top_p: number | null;
+    timeout: number;
+    strict: boolean;
+    tool_choice: ToolChoiceSetting | null;
+}
+
+export interface SchemaParameter {
+    name: string;
+    type: string;
+    description: string | null;
+    required: boolean;
+}
+
+export interface ToolDetail {
+    name: string;
+    type: ToolType;
+    description: string | null;
+    parameters: SchemaParameter[];
+    provider_options: Record<string, unknown> | null;
+    agent_slug: string | null;
+    schema_error: string | null;
+}
+
+export interface AgentDetail extends Agent {
+    instructions: string | null;
+    generation: GenerationSettings | null;
+    provider_options: Record<string, unknown>;
+    middleware: string[];
+    tools: ToolDetail[];
+    output_schema: SchemaParameter[] | null;
+}

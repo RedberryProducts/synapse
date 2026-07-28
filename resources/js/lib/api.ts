@@ -1,5 +1,5 @@
 import { basePath } from './config';
-import type { Agent } from '@/types/agent';
+import type { Agent, AgentDetail } from '@/types/agent';
 
 const csrfToken =
     document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
@@ -29,4 +29,9 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}): Pr
 /** Feature 1 — discovered agents with their card metadata. */
 export function getAgents(signal?: AbortSignal): Promise<Agent[]> {
     return api<Agent[]>('/agents', { signal });
+}
+
+/** Feature 4 — full detail for one agent (Info panel). */
+export function getAgent(slug: string, signal?: AbortSignal): Promise<AgentDetail> {
+    return api<AgentDetail>(`/agents/${encodeURIComponent(slug)}`, { signal });
 }
