@@ -11,7 +11,10 @@ export function EmptyState({
     children?: React.ReactNode;
 }) {
     return (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-16 text-center">
+        <div
+            data-testid="empty-state"
+            className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-16 text-center"
+        >
             {Icon && <Icon className="h-6 w-6 text-subtle-foreground" />}
             <p className="font-medium">{title}</p>
             {children && (

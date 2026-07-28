@@ -16,7 +16,7 @@ export function ToolDetailCard({ tool }: { tool: ToolDetail }) {
     const options = Object.entries(tool.provider_options ?? {});
 
     return (
-        <section className="rounded-xl border border-border bg-card p-4">
+        <section data-testid="tool-detail" className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-start justify-between gap-2">
                 <h3 className="text-xs font-medium tracking-wide text-subtle-foreground uppercase">
                     {tool.name}

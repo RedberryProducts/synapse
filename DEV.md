@@ -97,7 +97,7 @@ Iterating on the package while the test app is running: because the package is *
 | Add a command | Create in `src/Console`, register in `SynapseServiceProvider::registerCommands()`, add a Pest test asserting behavior. |
 | Add an API route | Add under the `/api` group in `routes/web.php` (before the catch-all); back it with a controller in `src/Http/Controllers`. |
 | Add a sample agent | Add to `workbench/app/Agents` (namespace `Workbench\App`); the setup script rewrites it to `App\` for the test app. |
-| Add a browser test | Add to `tests/Browser/` (auto-uses `BrowserTestCase` + group `e2e`); use `visit('/synapse')` and `Agent::fake()` for agent behavior. |
+| Add a browser test | Add to `tests/Browser/` (auto-uses `BrowserTestCase` + group `e2e`); target with `@testid`, assert content with `assertSeeIn`, drive agents with `Agent::fake()`. See AGENTS.md → Writing browser tests. |
 | Verify a change end-to-end | Run `composer check`, then `composer test:e2e` (or boot the test app and check `/synapse` in the browser). |
 
 ## Pre-commit checklist

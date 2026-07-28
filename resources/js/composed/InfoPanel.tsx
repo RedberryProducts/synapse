@@ -32,7 +32,10 @@ export function InfoPanel({
     onClose: () => void;
 }) {
     return (
-        <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-sidebar">
+        <aside
+            data-testid="info-panel"
+            className="flex w-80 shrink-0 flex-col border-l border-border bg-sidebar"
+        >
             <div className="flex h-14 items-center justify-between border-b border-border px-4">
                 <span className="flex items-center gap-2 font-medium">
                     <Info className="h-4 w-4" />

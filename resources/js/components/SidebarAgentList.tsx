@@ -14,7 +14,7 @@ export function SidebarAgentList({ agents, loading }: { agents: Agent[]; loading
     }
 
     return (
-        <div className="flex flex-col gap-0.5">
+        <div data-testid="sidebar-agents" className="flex flex-col gap-0.5">
             {agents.map((agent) => (
                 <NavLink
                     key={agent.slug}

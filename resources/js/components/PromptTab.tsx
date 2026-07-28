@@ -15,7 +15,7 @@ export function PromptTab({ agent }: { agent: AgentDetail }) {
     }
 
     return (
-        <div className="rounded-xl border border-border bg-card">
+        <div data-testid="prompt" className="rounded-xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-4 py-2">
                 <span className="text-xs font-medium tracking-wide text-subtle-foreground uppercase">
                     Instructions

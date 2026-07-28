@@ -97,7 +97,7 @@ Check the repo before writing the table (`find resources/js -type f`) so the sta
 - **Acceptance criteria are observable.** "Discovery caches per request" is an implementation note; "a newly created agent appears after a refresh" is an AC.
 - **Scope out loud.** An explicit "Out" list prevents the epic from absorbing the next one.
 - **Name the traps.** If the SDK has a sharp edge (a method that fatals, an event that only fires on success, a serializer that drops data), it belongs in the technical approach with the reason — that's what makes the plan worth more than the PRD.
-- **Every epic ships tests in both tiers** where it has UI: Pest feature tests for the backend, a browser test for the user-visible flow.
+- **Every epic ships tests in both tiers** where it has UI: Pest feature tests for the backend, a browser test for the user-visible flow. Browser tests target with `data-testid` and assert content as scoped text — add a testid to a component only when a test needs it (AGENTS.md → Writing browser tests).
 - **Both themes, always.** Light and dark component sets exist in Figma; theme-aware from the start, never retrofitted.
 - **Screenshots go in the folder.** Figma asset URLs expire — export a PNG so the plan reads offline.
 

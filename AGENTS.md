@@ -128,6 +128,21 @@ Browser tests are the **only** way to verify the PHP → SSE → React boundary,
 
 **Always drive browser tests with `Agent::fake()`** — never call a real provider: no API spend, no flakiness, deterministic streams.
 
+### Writing browser tests
+
+**Target with `data-testid`; assert content as text.** These are different jobs and mixing them produces tests that pass while the UI is broken.
+
+- **Targeting / scoping → `data-testid`.** Pest resolves `@name` to `[data-testid=name]`. Use it to find an element to click, to assert presence/absence, and to scope a content assertion.
+- **Content → real text**, scoped to the element it belongs to: `assertSeeIn('@tool-detail', 'Search query text')`. Asserting only that `@tool-description` *exists* would pass with empty or garbled copy — exactly the bug a dashboard must never ship.
+- **Interactive controls prefer their accessible name** over a testid — `click('[aria-label="Close info panel"]')` targets *and* enforces a11y. Add a testid only when there's no sensible accessible name. (Pest's plain-string `click()` matches visible text; an icon-only button has none, and it will hang until timeout rather than fail fast.)
+
+**Add a testid only when a test needs it** — never pre-emptively. Sparse, deliberate ids stay meaningful; a testid on every `<div>` turns the suite into structure-testing.
+
+Two gotchas worth knowing:
+
+- **Scoped assertions run in Playwright strict mode** — the text must match exactly one node inside the scope. `assertSeeIn('@info-panel', 'PROVIDER')` fails when the panel also contains "PROVIDER OPTIONS". Pick unambiguous strings.
+- **Text assertions don't wait for a re-render; element assertions do.** After an interaction, prefer `assertPresent` / `assertMissing` over `assertSee` / `assertDontSee`.
+
 ### What to test
 
 | Layer | What to test |

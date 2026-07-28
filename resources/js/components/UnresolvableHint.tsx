@@ -57,7 +57,10 @@ export function UnresolvableHint({
     // Something other than the container failed — usually the constructor body.
     if (kind !== 'binding') {
         return (
-            <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted p-3 text-xs">
+            <div
+                data-testid="unresolvable-hint"
+                className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted p-3 text-xs"
+            >
                 <p className="font-medium text-foreground">This agent threw while starting up</p>
                 <code className="block rounded-md bg-background px-2 py-1.5 break-words text-subtle-foreground">
                     {error ?? 'Unknown error.'}
@@ -70,7 +73,10 @@ export function UnresolvableHint({
     // level deeper (a dependency of a dependency).
     if (dependencies.length === 0) {
         return (
-            <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted p-3 text-xs">
+            <div
+                data-testid="unresolvable-hint"
+                className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted p-3 text-xs"
+            >
                 <p className="font-medium text-foreground">
                     Laravel couldn&rsquo;t build one of this agent&rsquo;s dependencies
                 </p>
@@ -82,7 +88,10 @@ export function UnresolvableHint({
     }
 
     return (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted p-3 text-xs">
+        <div
+            data-testid="unresolvable-hint"
+            className="flex flex-col gap-2 rounded-lg border border-border bg-muted p-3 text-xs"
+        >
             <p className="font-medium text-foreground">
                 Synapse can&rsquo;t construct this agent
             </p>

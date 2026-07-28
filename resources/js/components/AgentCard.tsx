@@ -16,7 +16,7 @@ export function AgentCard({ agent }: { agent: Agent }) {
 
     if (!agent.available) {
         return (
-            <Card>
+            <Card data-testid="agent-card-unavailable">
                 <CardBody>
                     <div className="flex items-start justify-between gap-2">
                         <h3 className="text-lg font-semibold text-muted-foreground">{agent.name}</h3>

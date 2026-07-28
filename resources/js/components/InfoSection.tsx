@@ -13,7 +13,10 @@ export function InfoSection({
     className?: string;
 }) {
     return (
-        <section className={cn('rounded-xl border border-border bg-card p-4', className)}>
+        <section
+            data-testid="info-section"
+            className={cn('rounded-xl border border-border bg-card p-4', className)}
+        >
             <h3 className="mb-3 text-xs font-medium tracking-wide text-subtle-foreground uppercase">
                 {title}
                 {count !== undefined && ` (${count})`}

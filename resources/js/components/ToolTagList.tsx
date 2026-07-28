@@ -40,6 +40,7 @@ export function ToolTagList({ tools, limit = 3 }: { tools: AgentTool[]; limit?: 
                         variant="pill"
                         tabIndex={0}
                         className="cursor-default"
+                        data-testid="tool-overflow"
                         aria-label={`${hidden.length} more tools`}
                     >
                         + {hidden.length}

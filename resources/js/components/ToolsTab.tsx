@@ -8,7 +8,10 @@ export function ToolsTab({ agent }: { agent: AgentDetail }) {
 
     if (hasNothing) {
         return (
-            <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-subtle-foreground">
+            <p
+                data-testid="tools-empty"
+                className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-subtle-foreground"
+            >
                 This agent has no tools.
             </p>
         );
@@ -21,7 +24,7 @@ export function ToolsTab({ agent }: { agent: AgentDetail }) {
             ))}
 
             {agent.output_schema && (
-                <section className="rounded-xl border border-border bg-card p-4">
+                <section data-testid="output-schema" className="rounded-xl border border-border bg-card p-4">
                     <h3 className="mb-3 text-xs font-medium tracking-wide text-subtle-foreground uppercase">
                         Output schema
                     </h3>
