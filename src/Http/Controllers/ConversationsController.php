@@ -7,6 +7,7 @@ use Illuminate\Http\Response;
 use Redberry\Synapse\Discovery\AgentSlug;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
+use Redberry\Synapse\Models\SynapseToolInvocation;
 use Redberry\Synapse\Repositories\ConversationRepository;
 
 class ConversationsController
@@ -34,6 +35,7 @@ class ConversationsController
                 'completion_tokens' => (int) $messages->sum('completion_tokens'),
                 'total_tokens' => (int) ($messages->sum('prompt_tokens') + $messages->sum('completion_tokens')),
             ],
+            'tool_invocations' => $this->toolInvocations($conversation),
             'messages' => $messages->map(fn (SynapseMessage $message): array => [
                 'id' => $message->id,
                 'role' => $message->role,
@@ -45,6 +47,40 @@ class ConversationsController
                 'created_at' => $message->created_at?->toIso8601String(),
             ])->all(),
         ]);
+    }
+
+    /**
+     * Every tool call made in this conversation, oldest first.
+     *
+     * Ordered by `started_at` so the UI can interleave the cards with messages
+     * in the order things actually happened. A row with no `finished_at` was
+     * still running when the run ended — that is shown, not hidden.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function toolInvocations(SynapseConversation $conversation): array
+    {
+        return $conversation->toolInvocations()
+            ->orderBy('started_at')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (SynapseToolInvocation $invocation): array => [
+                'id' => $invocation->id,
+                'message_id' => $invocation->message_id,
+                'tool_call_id' => $invocation->tool_invocation_id,
+                'type' => $invocation->type,
+                'name' => $invocation->name,
+                'arguments' => $invocation->arguments,
+                'result' => $invocation->result,
+                'status' => $invocation->status,
+                // The provider's own word for it, kept unnormalized.
+                'provider_status' => $invocation->provider_status,
+                'error' => $invocation->error,
+                'duration_ms' => $invocation->duration_ms,
+                'started_at' => $invocation->started_at?->toIso8601String(),
+                'finished_at' => $invocation->finished_at?->toIso8601String(),
+            ])
+            ->all();
     }
 
     /**

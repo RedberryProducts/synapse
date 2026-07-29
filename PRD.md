@@ -752,7 +752,8 @@ Schema::create('synapse_tool_invocations', function (Blueprint $table) {
     $table->string('name');                       // tool name, or provider tool type (anthropic.web_search)
     $table->text('arguments');                    // JSON
     $table->text('result')->nullable();           // JSON
-    $table->string('status', 25);                 // pending | success | error (provider: in_progress | completed | failed)
+    $table->string('status', 25);                 // pending | success | error (normalized)
+    $table->string('provider_status')->nullable(); // the provider's own word for it, unnormalized
     $table->text('error')->nullable();
     $table->unsignedInteger('duration_ms')->nullable();
     $table->timestamp('started_at')->nullable();  // chronological card placement in the thread

@@ -1,5 +1,11 @@
 import { basePath } from './config';
-import type { ChatError, StreamHandlers, StreamPart, Usage } from '@/types/chat';
+import type {
+    ChatError,
+    ProviderToolPart,
+    StreamHandlers,
+    StreamPart,
+    Usage,
+} from '@/types/chat';
 
 /**
  * Reads Synapse's SSE chat stream.
@@ -90,6 +96,26 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
             handlers.onStructured?.(part.data ?? {});
             break;
 
+        case 'tool-input-available':
+            handlers.onToolInput?.(
+                part.toolCallId ?? '',
+                part.toolName ?? 'tool',
+                part.input,
+            );
+            break;
+
+        case 'tool-output-available':
+            handlers.onToolOutput?.(part.toolCallId ?? '', part.output);
+            break;
+
+        case 'tool-output-error':
+            handlers.onToolError?.(part.toolCallId ?? '', part.errorText ?? 'The tool failed.');
+            break;
+
+        case 'data-provider-tool':
+            handlers.onProviderTool?.(part.data as unknown as ProviderToolPart);
+            break;
+
         case 'data-synapse-end':
             handlers.onFinish?.(
                 (part.data?.assistantMessageId as string | null) ?? null,
@@ -99,8 +125,8 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
             break;
 
         default:
-            // start / text-start / text-end / reasoning-* / tool-* / finish —
-            // consumed by later epics.
+            // start / text-start / text-end / reasoning-* / finish — consumed
+            // by later epics.
             handlers.onPart?.(part);
     }
 }

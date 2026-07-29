@@ -7,11 +7,14 @@ use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Events\AgentFailedOver;
+use Laravel\Ai\Events\InvokingTool;
+use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StreamedAgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Laravel\Ai\Streaming\Events\Error;
+use Laravel\Ai\Streaming\Events\ProviderToolEvent;
 use Redberry\Synapse\Discovery\DiscoveredAgent;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
@@ -72,11 +75,17 @@ class AgentInvoker
             }
 
             $this->announceFailovers($emitter);
+            $this->recordToolInvocations($conversation);
 
             if ($agent instanceof HasStructuredOutput) {
                 $assistant = $this->promptOnce($agent, $message, $conversation, $emitter, $invocationId);
             } else {
                 $assistant = $this->stream($agent, $history, $message, $conversation, $emitter, $invocationId);
+            }
+
+            // Attach this run's tool cards to the turn they produced.
+            if ($assistant !== null && $invocationId !== null) {
+                (new SynapseRecorder($conversation->id))->linkToMessage($invocationId, $assistant->id);
             }
 
             $emitter->finish($assistant?->id, $assistant?->usage, $assistant?->duration_ms);
@@ -120,7 +129,19 @@ class AgentInvoker
                 );
             });
 
+        $providerTools = new ProviderToolRecorder($conversation->id);
+
         foreach ($response as $event) {
+            // Provider-native tools never fire Laravel events — the stream is
+            // the only place they exist, so they are recorded as they pass.
+            if ($event instanceof ProviderToolEvent) {
+                $providerTools->record($event, $response->invocationId);
+
+                $emitter->event($event);
+
+                continue;
+            }
+
             // A mid-stream error is reported and recorded, but the stream may
             // still continue — the SDK marks these `recoverable`.
             if ($event instanceof Error) {
@@ -227,6 +248,20 @@ class AgentInvoker
                 'error' => $e->getMessage(),
                 'finished_at' => now(),
             ]);
+    }
+
+    /**
+     * Write a row for every tool the run invokes.
+     *
+     * Registered per invocation because a row belongs to a conversation, and a
+     * globally-registered listener would have to guess which one.
+     */
+    protected function recordToolInvocations(SynapseConversation $conversation): void
+    {
+        $recorder = new SynapseRecorder($conversation->id);
+
+        $this->events->listen(InvokingTool::class, $recorder->toolInvoking(...));
+        $this->events->listen(ToolInvoked::class, $recorder->toolInvoked(...));
     }
 
     /**

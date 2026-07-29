@@ -29,8 +29,15 @@
     --accent: #1b1c1f;          /* Blue/Dark — model text on light */
     --success: #4fcf38;         /* Helper/Success */
     --destructive: #ce0000;     /* Helper/Error */
+    --warning: #b8860b;         /* pending tool status */
     --ring: #fe3b1f;
     --radius: 8px;              /* border radius/lg */
+
+    /* JSON syntax tokens (tool card bodies) */
+    --json-key: #1b1c1f;
+    --json-string: #0a7a3d;
+    --json-number: #b45309;
+    --json-keyword: #7c3aed;
 }
 
 .dark {
@@ -49,7 +56,14 @@
     --accent: #7cb1fe;          /* Blue/Light — model text on dark */
     --success: #4fcf38;         /* Helper/Success */
     --destructive: #ce0000;     /* Helper/Error */
+    --warning: #e0a72c;         /* pending tool status */
     --ring: #fe3b1f;
+
+    /* JSON syntax tokens (tool card bodies) */
+    --json-key: #ededed;
+    --json-string: #7ec699;
+    --json-number: #e5a663;
+    --json-keyword: #c792ea;
 }
 
 @theme inline {
@@ -68,7 +82,13 @@
     --color-accent: var(--accent);
     --color-success: var(--success);
     --color-destructive: var(--destructive);
+    --color-warning: var(--warning);
     --color-ring: var(--ring);
+
+    --color-json-key: var(--json-key);
+    --color-json-string: var(--json-string);
+    --color-json-number: var(--json-number);
+    --color-json-keyword: var(--json-keyword);
 
     --radius-md: 6px;
     --radius-lg: 8px;

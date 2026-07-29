@@ -1,7 +1,5 @@
 <?php
 
-use Illuminate\Support\Facades\Event;
-use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Models\SynapseToolInvocation;
@@ -91,21 +89,8 @@ it('closes out a tool invocation the exception left hanging', function () {
         new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
     ]);
 
-    // A throwing tool fires InvokingTool but never ToolInvoked, so its row would
-    // stay `pending` forever. Stand in for Epic 4's recorder to prove the sweep.
-    Event::listen(InvokingTool::class, function (InvokingTool $event): void {
-        SynapseToolInvocation::query()->create([
-            'conversation_id' => 'unused',
-            'invocation_id' => $event->invocationId,
-            'tool_invocation_id' => $event->toolInvocationId,
-            'type' => 'tool',
-            'name' => 'BrokenLedgerTool',
-            'arguments' => $event->arguments,
-            'status' => 'pending',
-            'started_at' => now(),
-        ]);
-    });
-
+    // A throwing tool fires InvokingTool but never ToolInvoked, so the recorder's
+    // row would stay `pending` forever if nothing swept it.
     sendMessage('workbench.app.agents.flaky-tool-agent', 'Look up entry 42');
 
     $invocation = SynapseToolInvocation::query()->sole();

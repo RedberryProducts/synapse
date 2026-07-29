@@ -315,6 +315,16 @@ New testids: `tool-card`, `tool-status`, `tool-arguments`, `tool-result`.
 
 ---
 
+## Delivered
+
+Shipped as planned, with three things worth recording:
+
+1. **The thread reducer was restructured.** The plan assumed cards could be slotted in around a single assistant entry, but that would have grouped every card above the whole answer — wrong for a multi-step run, where the model narrates, calls a tool, then narrates again. Entries are now **appended in arrival order and never reordered**, with one assistant entry per generation step (`AssistantEntry.turnId` ties them to a send). Chronology is now a property of the structure rather than something the renderer has to reconstruct.
+2. **`provider_status` became a real column**, not a field buried in the payload JSON. It's queryable, it survives in the API, and the UI surfaces it on hover — normalization is for layout, never for hiding what the provider said.
+3. **`result` is cast `json`, not `array`.** A tool handler returns a string, and plenty return prose rather than JSON. `JsonView` pretty-prints what parses and shows the rest verbatim.
+
+One test moved from stand-in to real: `ErrorTest`'s dangling-`pending` sweep previously inserted its own row to simulate a recorder that didn't exist yet. The recorder writes it now, so the test asserts the real path.
+
 ## Definition of done
 
 - All 11 acceptance criteria verified

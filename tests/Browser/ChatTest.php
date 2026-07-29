@@ -123,6 +123,85 @@ it('explains a failure inline and keeps the playground usable', function () {
         ->assertNoJavaScriptErrors();
 });
 
+it('shows a tool call as a card and expands it', function () {
+    fakeAgent(SupportAgent::class, [
+        new ToolCall(id: 'call_1', name: 'SearchProductsTool', arguments: ['query' => 'hoodie']),
+        'Found three matches.',
+    ]);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->type('@composer-input', 'Find me a hoodie')->click('Send');
+
+    $page->assertPresent('@tool-card')
+        ->assertSeeIn('@tool-card', 'SearchProductsTool')
+        // Collapsed by default so a chain of calls stays readable.
+        ->assertMissing('@tool-arguments');
+
+    $page->click('[aria-label="SearchProductsTool tool call"]');
+
+    $page->assertSeeIn('@tool-arguments', 'hoodie')
+        ->assertSeeIn('@tool-result', 'Sony WH-1000')
+        ->assertNoJavaScriptErrors();
+});
+
+it('renders a tool card and its answer in the order they happened', function () {
+    fakeAgent(SupportAgent::class, [
+        new ToolCall(id: 'call_1', name: 'SearchProductsTool', arguments: ['query' => 'hoodie']),
+        'Found three matches.',
+    ]);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->type('@composer-input', 'Find me a hoodie')->click('Send');
+    $page->assertSeeIn('@message-assistant', 'Found three matches.');
+
+    // The call happened before the answer, so its card sits above it.
+    $order = $page->script(
+        "Array.from(document.querySelectorAll('[data-testid=tool-card],[data-testid=message-assistant]'))
+            .map(el => el.dataset.testid)"
+    );
+
+    expect($order)->toBe(['tool-card', 'message-assistant']);
+});
+
+it('marks a failed tool on the card and explains it below', function () {
+    fakeAgent(FlakyToolAgent::class, [
+        new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
+    ]);
+
+    $page = visit('/synapse/playground/workbench.app.agents.flaky-tool-agent');
+
+    $page->type('@composer-input', 'Look up entry 42')->click('Send');
+
+    // The card says which tool; the error card says what went wrong.
+    $page->assertSeeIn('@tool-status', 'error')
+        ->assertSeeIn('@error-card', 'Ledger service unavailable')
+        ->assertNoJavaScriptErrors();
+});
+
+it('restores tool cards on a refresh', function () {
+    fakeAgent(SupportAgent::class, [
+        new ToolCall(id: 'call_1', name: 'SearchProductsTool', arguments: ['query' => 'hoodie']),
+        'Found three matches.',
+    ]);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Find me a hoodie')->click('Send');
+    $page->assertPresent('@tool-card');
+
+    $conversationId = SynapseConversation::query()->sole()->id;
+
+    $reopened = visit("/synapse/playground/workbench.app.agents.support-agent?c={$conversationId}");
+
+    $reopened->assertSeeIn('@tool-card', 'SearchProductsTool')
+        ->assertSeeIn('@message-assistant', 'Found three matches.');
+
+    $reopened->click('[aria-label="SearchProductsTool tool call"]');
+
+    $reopened->assertSeeIn('@tool-result', 'Sony WH-1000')->assertNoJavaScriptErrors();
+});
+
 it('starts a fresh thread from the conversation menu', function () {
     fakeAgent(SupportAgent::class, ['An answer.']);
 

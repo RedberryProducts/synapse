@@ -3,6 +3,7 @@ import { Info } from 'lucide-react';
 import { AssistantMessage } from '@/components/AssistantMessage';
 import { ChatEmptyState } from '@/components/ChatEmptyState';
 import { ErrorCard } from '@/components/ErrorCard';
+import { ToolCard } from '@/components/ToolCard';
 import { UserMessage } from '@/components/UserMessage';
 import type { ChatEntry } from '@/types/chat';
 
@@ -60,6 +61,9 @@ function Entry({ entry }: { entry: ChatEntry }) {
 
         case 'assistant':
             return <AssistantMessage entry={entry} />;
+
+        case 'tool':
+            return <ToolCard entry={entry} />;
 
         case 'error':
             return <ErrorCard entry={entry} />;

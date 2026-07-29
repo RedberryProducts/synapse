@@ -182,9 +182,16 @@ Tool cards have three states you'll see live as a message streams:
 - **Success** — completed normally
 - **Error** — the tool threw
 
-**Provider tools** (built-in provider capabilities like web search, web fetch, file search, and code interpreter) get their own distinct card style — marked with a ⚡ and labelled by provider (e.g. `⚡ anthropic.web_search`) — so you can tell them apart from your own tools at a glance.
+A failed tool gives you **both** a failed card and an error card: the card tells you *which* tool, the error card tells you *what went wrong*, with the stack trace a click away.
 
-Multiple tool calls in a single step stack as separate cards, each independently expandable.
+**Provider tools** (built-in provider capabilities like web search, web fetch, file search, and code interpreter) get their own distinct card style — marked with a ⚡ and labelled `provider / tool` — so you can tell them apart from your own tools at a glance. These run inside the provider, and every provider describes them differently: Anthropic says `started` and `result_received`, OpenAI says `in_progress` and `searching`. Synapse normalizes those into the same three states so the cards stay readable, and **keeps the provider's own word for it on hover**, because when you're debugging you want both. A status Synapse doesn't recognise stays *pending* rather than being guessed at.
+
+Cards appear **where the call happened**. When an agent narrates, calls a tool, then keeps talking, you see that sequence — text, card, text — rather than the answer with its tool calls swept to one side. Multiple calls in one step stack as separate cards, each independently expandable.
+
+Two things that look like bugs but aren't:
+
+- **A sub-agent that fails shows as a *success*.** When one agent calls another as a tool, the SDK catches whatever the sub-agent throws and hands the model the string `Agent failed: …` as an ordinary result. That string is what your agent actually received and reasoned from, so that's what the card shows. Expand it and you'll see the failure.
+- **Occasionally a provider tool produces two cards.** Some providers key the "started" and "finished" halves of a call differently, and when Synapse can't be certain the two belong together it shows both rather than attaching a result to the wrong call.
 
 ### Agent info panel
 

@@ -1,8 +1,11 @@
 <?php
 
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
+use Laravel\Ai\Streaming\Events\ProviderToolEvent;
+use Redberry\Synapse\Chat\ProviderToolRecorder;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Models\SynapseToolInvocation;
@@ -83,6 +86,47 @@ it('carries per-message usage and duration', function () {
         ->and($assistant['usage']['completion_tokens'])->toBe(3)
         ->and($assistant['duration_ms'])->toBeInt()
         ->and($assistant['meta']['model'])->toBe('gpt-5.6-luna');
+});
+
+it('replays tool calls alongside the messages', function () {
+    fakeAgent(SupportAgent::class, [
+        new ToolCall(id: 'call_1', name: 'SearchProductsTool', arguments: ['query' => 'hoodie']),
+        'Found three matches.',
+    ]);
+
+    $id = chatConversationId(sendMessage('workbench.app.agents.support-agent', 'Find me a hoodie'));
+
+    $invocation = test()->getJson("/synapse/api/conversations/{$id}")->json('tool_invocations.0');
+
+    expect($invocation['type'])->toBe('tool')
+        ->and($invocation['name'])->toBe('SearchProductsTool')
+        ->and($invocation['arguments'])->toBe(['query' => 'hoodie'])
+        ->and($invocation['status'])->toBe('success')
+        ->and($invocation['duration_ms'])->toBeInt()
+        ->and($invocation['started_at'])->not->toBeNull()
+        // The card is tied to the turn it produced, so replay can place it.
+        ->and($invocation['message_id'])->not->toBeNull();
+});
+
+it('reports a provider tool with the provider own status word', function () {
+    $conversation = SynapseConversation::query()->create([
+        'agent_class' => 'App\\Agents\\SearchAgent',
+        'title' => 'Search run',
+    ]);
+
+    (new ProviderToolRecorder($conversation->id))->record(
+        new ProviderToolEvent('evt_1', 'srvtoolu_1', 'server_tool_use', ['name' => 'web_search'], 'searching', time()),
+        'inv_1',
+    );
+
+    $invocation = test()->getJson("/synapse/api/conversations/{$conversation->id}")
+        ->json('tool_invocations.0');
+
+    expect($invocation['type'])->toBe('provider_tool')
+        ->and($invocation['name'])->toBe('web_search')
+        ->and($invocation['status'])->toBe('pending')
+        // Normalization is for layout; the provider's word survives it.
+        ->and($invocation['provider_status'])->toBe('searching');
 });
 
 it('404s for an unknown conversation', function () {

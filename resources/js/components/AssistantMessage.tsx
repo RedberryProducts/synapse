@@ -6,16 +6,14 @@ import type { AssistantEntry } from '@/types/chat';
  * An agent turn: markdown body, no bubble, full width — the Figma design gives
  * the answer the whole column and reserves the bubble for the question.
  *
- * A multi-step run emits one text block per step (typically narration around a
- * tool call), so blocks are rendered in the order they arrived rather than
- * concatenated into one paragraph.
+ * One entry is one generation step. A run that calls a tool mid-answer produces
+ * several, and the thread keeps them apart so the tool card sits where it
+ * actually happened.
  */
 export function AssistantMessage({ entry }: { entry: AssistantEntry }) {
-    const text = entry.order.map((id) => entry.blocks[id] ?? '').join('\n\n');
-
     return (
         <div data-testid="message-assistant" className="text-sm">
-            <Markdown>{text}</Markdown>
+            <Markdown>{entry.text}</Markdown>
 
             {entry.streaming && (
                 <span

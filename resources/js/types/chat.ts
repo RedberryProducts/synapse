@@ -41,9 +41,24 @@ export interface StreamHandlers {
     onError?: (error: ChatError) => void;
     onNotice?: (message: string) => void;
     onStructured?: (data: Record<string, unknown>) => void;
+    onToolInput?: (toolCallId: string, name: string, input: unknown) => void;
+    onToolOutput?: (toolCallId: string, output: unknown) => void;
+    onToolError?: (toolCallId: string, errorText: string) => void;
+    onProviderTool?: (event: ProviderToolPart) => void;
     onFinish?: (assistantMessageId: string | null, usage: Usage | null, durationMs: number | null) => void;
-    /** Anything Epics 4–5 add; ignored by the MVP thread. */
+    /** Anything a later epic adds; ignored rather than treated as an error. */
     onPart?: (part: StreamPart) => void;
+}
+
+/**
+ * The raw provider-tool event, forwarded whole because the SDK's Vercel
+ * serializer drops it entirely.
+ */
+export interface ProviderToolPart {
+    item_id: string;
+    type: string;
+    status: string;
+    data: Record<string, unknown>;
 }
 
 export interface ChatError {
@@ -65,9 +80,13 @@ export interface UserEntry {
 export interface AssistantEntry {
     kind: 'assistant';
     id: string;
-    /** Text per generation step, keyed by the part id, joined for display. */
-    blocks: Record<string, string>;
-    order: string[];
+    /**
+     * The turn this belongs to. One send can produce several assistant entries —
+     * a multi-step run narrates, calls a tool, then narrates again — and the
+     * thread renders them in that order rather than merging them.
+     */
+    turnId: string;
+    text: string;
     streaming: boolean;
     usage: Usage | null;
     durationMs: number | null;
@@ -90,7 +109,26 @@ export interface NoticeEntry {
     message: string;
 }
 
-export type ChatEntry = UserEntry | AssistantEntry | ErrorEntry | NoticeEntry;
+export type ToolStatus = 'pending' | 'success' | 'error';
+
+export interface ToolEntry {
+    kind: 'tool';
+    id: string;
+    /** `tool` = the developer's own code; `provider_tool` = run inside the provider. */
+    type: 'tool' | 'provider_tool';
+    name: string;
+    /** Provider tools only — the label reads `provider / name`. */
+    provider: string | null;
+    arguments: unknown;
+    result: unknown;
+    status: ToolStatus;
+    /** The provider's own status word, before Synapse normalized it. */
+    providerStatus: string | null;
+    error: string | null;
+    durationMs: number | null;
+}
+
+export type ChatEntry = UserEntry | AssistantEntry | ErrorEntry | NoticeEntry | ToolEntry;
 
 /* ── Replay payload (GET /api/conversations/{id}) ──────────────────────────── */
 
@@ -105,6 +143,22 @@ export interface ConversationMessage {
     created_at: string | null;
 }
 
+export interface ConversationToolInvocation {
+    id: string;
+    message_id: string | null;
+    tool_call_id: string;
+    type: 'tool' | 'provider_tool';
+    name: string;
+    arguments: unknown;
+    result: unknown;
+    status: ToolStatus;
+    provider_status: string | null;
+    error: string | null;
+    duration_ms: number | null;
+    started_at: string | null;
+    finished_at: string | null;
+}
+
 export interface Conversation {
     id: string;
     agent_class: string;
@@ -117,4 +171,5 @@ export interface Conversation {
         total_tokens: number;
     };
     messages: ConversationMessage[];
+    tool_invocations: ConversationToolInvocation[];
 }

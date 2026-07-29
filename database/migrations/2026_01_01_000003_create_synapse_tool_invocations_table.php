@@ -19,6 +19,7 @@ return new class extends SynapseMigration
             $table->text('arguments');                      // JSON
             $table->text('result')->nullable();             // JSON
             $table->string('status', 25);                   // pending | success | error
+            $table->string('provider_status')->nullable();  // raw provider status, unnormalized (provider tools)
             $table->text('error')->nullable();
             $table->unsignedInteger('duration_ms')->nullable();
             $table->timestamp('started_at')->nullable();    // chronological card placement
