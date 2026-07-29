@@ -16,8 +16,9 @@ The designs are approved as the visual source of truth. The items below are the 
 | 5 | Light theme | **DELIVERED** — full parallel `Components_Light` section |
 | 6 | History subtitle copy | **DELIVERED** — "View your previous conversations and continue where you left off" |
 | 7 | Remove Settings nav item | **DELIVERED** — sidebar Workspace nav is Discovery + History only |
+| 8 | "Image & Video" menu item | **NEW** — see below |
 
-**All items are addressed.** The reasoning pane exists as a work-in-progress `✦ Thinking…` state rather than a published component — treat it as done for planning, build to it, and update the component if the designer refines it later. The streaming indicator is designed; the expanded reasoning content (collapsible, with reasoning-token count per the PRD) extends it using the existing collapsible/card language.
+**All items 1–7 are addressed.** The reasoning pane exists as a work-in-progress `✦ Thinking…` state rather than a published component — treat it as done for planning, build to it, and update the component if the designer refines it later. The streaming indicator is designed; the expanded reasoning content (collapsible, with reasoning-token count per the PRD) extends it using the existing collapsible/card language.
 
 ---
 
@@ -64,3 +65,15 @@ The subtitle is copy-pasted from the Discovery screen: *"Auto-scanned from app/A
 **Where:** all screens with the sidebar, e.g. [Discovery](https://www.figma.com/design/3aOnDdOpoAvf9Kd7YP0C8P/Synapse?node-id=324-2362&m=dev)
 
 Synapse has no runtime settings UI — all configuration is file-based (`config/synapse.php`). Please remove `Settings` from the Workspace nav so we don't ship a dead link.
+
+---
+
+## 8. "Image & Video" menu item cannot include video 🆕
+
+**Where:** [`Chat Input`](https://www.figma.com/design/3aOnDdOpoAvf9Kd7YP0C8P/Synapse?node-id=400-6362&m=dev) `400:6362` — the `+` menu, third item.
+
+The attach menu offers **Attach File · Audio · Image & Video**. The Laravel AI SDK models exactly three attachment kinds — image, document and audio (`File::fromArray()` has no video branch) — and no provider in the SDK accepts video on a text call. So the item cannot do what it says.
+
+**What we built:** the item reads **Image**. Video files still go through **Attach File** like any other document, reach the provider, and come back as an error card explaining the rejection — which is the behaviour Synapse wants anyway (the playground shows you what production would do, it doesn't pre-filter on the developer's behalf).
+
+**Ask:** rename the item to `Image` in the component. If video support is intended for a later version, it needs SDK support first.
