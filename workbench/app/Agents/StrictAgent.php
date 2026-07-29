@@ -5,7 +5,6 @@ namespace Workbench\App\Agents;
 use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Strict;
-use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
@@ -23,7 +22,6 @@ use Workbench\App\Tools\SearchProductsTool;
  */
 #[Provider('openai')]
 #[Model('gpt-5.6-luna')]
-#[Temperature(0.2)]
 #[Strict]
 class StrictAgent implements Agent, Conversational, HasTools
 {

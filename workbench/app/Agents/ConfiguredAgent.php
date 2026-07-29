@@ -25,6 +25,12 @@ use Workbench\App\Tools\SearchProductsTool;
 /**
  * Exercises every field the Info panel's Config tab can show, plus a tool whose
  * schema throws.
+ *
+ * An **inspection** fixture, not a chat one. Setting every option at once is the
+ * point, and a provider is entitled to reject some of them — `gpt-5.6-luna`
+ * rejects `temperature`, for instance. Sending it a message against a real
+ * provider is expected to produce an error card, which is itself a fair test of
+ * the error path; use SupportAgent when you want a conversation.
  */
 #[Provider('openai')]
 #[Model('gpt-5.6-luna')]
