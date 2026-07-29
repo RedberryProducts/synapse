@@ -69,6 +69,9 @@ Attachments (upload to configured disk, `Stored*` classes, chips + dropzone, thu
 
 ### Epic 6 — History
 `GET /api/conversations` with search, agent/status/tools filters, date range, sort, pagination; conversation replay merging messages + tool invocations chronologically; `PATCH` rename and `DELETE` with modals; History page with the full filter bar; sidebar Recent Conversations wired with call counts and error indicators.
+
+**Also in scope — per-agent resume.** Opening an agent should return you to where you left off: the specific conversation if you were in one, a fresh page if you had deliberately started a new one. This **supersedes** the Epic 3 decision that a playground always opens empty (that decision assumed the sidebar would be the only way back to a thread, which reads as data loss while the sidebar is a stub). Per-browser UI state, so `localStorage` keyed by agent slug — not a stored preference, and never resurrecting a thread on a machine you've never used. Update [GOAL → Chat playground](../GOAL.md#chat-playground), which currently documents the always-empty behaviour.
+
 **Success:** find any past conversation and reopen it with every card intact.
 
 ### Epic 7 — Release

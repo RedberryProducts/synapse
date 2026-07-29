@@ -49,6 +49,8 @@ Confirmed before planning:
 3. **New / Clear conversation live in a `⋮` More menu** in the playground header, beside the Info button — reusing the `More` + `Dropdown item` components the sidebar already uses. Epic 6 adds Rename to the same menu.
 4. **A fresh playground starts a fresh thread; the conversation id goes in the URL.** `/playground/{slug}` opens empty. The first send returns a conversation id which is pushed to `?c={id}`, so refresh and deep links restore that exact thread. Reopening an old conversation is Epic 6's sidebar/history job — nothing resurrects unbidden.
 
+   > **Superseded in Epic 6.** Manual testing showed the flaw: with the sidebar and History page still stubs, reopening an agent from Discovery looks like the conversation was lost. Epic 6 adds per-agent resume — return to the conversation you were in, or to a fresh page if that's where you deliberately were — kept in `localStorage` per agent slug. See [plans/PLAN.md → Epic 6](../PLAN.md#epic-6--history).
+
 ---
 
 ## Scope
