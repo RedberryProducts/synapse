@@ -16,6 +16,7 @@ class AgentDetail
     public function __construct(
         protected GenerationOptions $generation,
         protected ToolDetail $tools,
+        protected ModelOptions $models,
     ) {}
 
     /**
@@ -44,6 +45,7 @@ class AgentDetail
             'middleware' => $this->middleware($agent),
             'tools' => $this->tools->all($agent, $discovered->provider),
             'output_schema' => $this->tools->outputSchema($agent),
+            'models' => $this->models->for($discovered),
         ]);
     }
 
@@ -94,6 +96,9 @@ class AgentDetail
             'middleware' => [],
             'tools' => [],
             'output_schema' => null,
+            // An agent that cannot be constructed cannot be talked to either,
+            // so there is nothing to offer a model selector.
+            'models' => [],
         ];
     }
 }

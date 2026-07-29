@@ -19,6 +19,8 @@ export function PlaygroundShell({
     entries,
     sending,
     totals,
+    model,
+    onModelChange,
     onSend,
     onNewConversation,
     onClearConversation,
@@ -34,7 +36,9 @@ export function PlaygroundShell({
     entries: ChatEntry[];
     sending: boolean;
     totals: { prompt: number; completion: number };
-    onSend: (message: string) => void;
+    model: string | null;
+    onModelChange: (model: string | null) => void;
+    onSend: (message: string, files: File[]) => void;
     onNewConversation: () => void;
     onClearConversation: () => void;
     panelOpen: boolean;
@@ -99,6 +103,9 @@ export function PlaygroundShell({
                     <div className="mx-auto max-w-3xl">
                         <ChatComposer
                             onSend={onSend}
+                            models={agent?.models ?? []}
+                            model={model}
+                            onModelChange={onModelChange}
                             disabled={sending || agent?.available === false}
                             autoFocus={!started}
                         />

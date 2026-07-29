@@ -43,10 +43,15 @@ class ConversationWriter
 
     /**
      * Store the message the developer just sent.
+     *
+     * @param  array<int, array<string, mixed>>  $attachments  SDK file serializations
      */
-    public function storeUserMessage(SynapseConversation $conversation, string $content): SynapseMessage
-    {
-        return $this->store($conversation, 'user', content: $content);
+    public function storeUserMessage(
+        SynapseConversation $conversation,
+        string $content,
+        array $attachments = [],
+    ): SynapseMessage {
+        return $this->store($conversation, 'user', content: $content, attachments: $attachments);
     }
 
     /**
@@ -59,6 +64,8 @@ class ConversationWriter
         SynapseConversation $conversation,
         AgentResponse $response,
         int $durationMs,
+        ?string $reasoning = null,
+        ?array $structured = null,
     ): SynapseMessage {
         return $this->store(
             $conversation,
@@ -70,7 +77,16 @@ class ConversationWriter
             promptTokens: $response->usage->promptTokens,
             completionTokens: $response->usage->completionTokens,
             durationMs: $durationMs,
-            meta: $response->meta->toArray(),
+            // Reasoning and structured output live only in the stream — the
+            // SDK's `text` is `TextDelta::combine()`, which excludes reasoning,
+            // and `structured` is not persisted anywhere. Without keeping them
+            // here a replayed conversation would quietly differ from the one
+            // the developer watched.
+            meta: array_filter([
+                ...$response->meta->toArray(),
+                'reasoning' => $reasoning,
+                'structured' => $structured,
+            ], fn (mixed $value): bool => $value !== null),
         );
     }
 
@@ -108,6 +124,7 @@ class ConversationWriter
     /**
      * Insert a message row and mark the conversation as active.
      *
+     * @param  array<int, mixed>  $attachments
      * @param  array<int, mixed>  $toolCalls
      * @param  array<int, mixed>  $toolResults
      * @param  array<string, mixed>  $usage
@@ -118,6 +135,7 @@ class ConversationWriter
         SynapseConversation $conversation,
         string $role,
         ?string $content = null,
+        array $attachments = [],
         array $toolCalls = [],
         array $toolResults = [],
         array $usage = [],
@@ -131,7 +149,7 @@ class ConversationWriter
             'conversation_id' => $conversation->id,
             'role' => $role,
             'content' => $content,
-            'attachments' => [],
+            'attachments' => $attachments,
             'tool_calls' => $toolCalls,
             'tool_results' => $toolResults,
             'usage' => $usage,

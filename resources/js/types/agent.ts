@@ -83,7 +83,16 @@ export interface ToolDetail {
     schema_error: string | null;
 }
 
+/** A model the playground can run this agent on, for one send. */
+export interface ModelOption {
+    id: string;
+    label: string;
+    /** `agent` is the agent's own configuration and always the default. */
+    tier: 'agent' | 'cheapest' | 'smartest' | 'configured';
+}
+
 export interface AgentDetail extends Agent {
+    models: ModelOption[];
     instructions: string | null;
     generation: GenerationSettings | null;
     provider_options: Record<string, unknown>;

@@ -57,7 +57,7 @@ export function ChatThread({ entries }: { entries: ChatEntry[] }) {
 function Entry({ entry }: { entry: ChatEntry }) {
     switch (entry.kind) {
         case 'user':
-            return <UserMessage content={entry.content} />;
+            return <UserMessage content={entry.content} attachments={entry.attachments} />;
 
         case 'assistant':
             return <AssistantMessage entry={entry} />;

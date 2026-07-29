@@ -4,6 +4,7 @@ namespace Redberry\Synapse\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Redberry\Synapse\Chat\AgentInvoker;
+use Redberry\Synapse\Chat\AttachmentStore;
 use Redberry\Synapse\Chat\StreamEmitter;
 use Redberry\Synapse\Discovery\AgentDiscovery;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -17,19 +18,37 @@ class ChatController
      * exception escape: by the time the closure runs the headers are already on
      * the wire, so a failure has to arrive as an error *part*, not a status code.
      */
-    public function send(Request $request, string $agent, AgentDiscovery $discovery, AgentInvoker $invoker): StreamedResponse
-    {
+    public function send(
+        Request $request,
+        string $agent,
+        AgentDiscovery $discovery,
+        AgentInvoker $invoker,
+        AttachmentStore $store,
+    ): StreamedResponse {
         $validated = $request->validate([
             'message' => ['required', 'string'],
             'conversation_id' => ['nullable', 'string'],
+            // A per-send override. Deliberately unconstrained: the developer
+            // may want to try a model Synapse has never heard of, and the
+            // provider's rejection is more useful than our guess.
+            'model' => ['nullable', 'string'],
+            'attachments' => ['nullable', 'array'],
+            // No MIME allowlist — an unsupported type should reach the provider
+            // and come back as an error card, exactly as it would in production.
+            'attachments.*' => ['file'],
         ]);
 
         $discovered = $discovery->find($agent);
 
         abort_if($discovered === null, 404, 'Agent not found.');
 
+        // Uploads are moved to the disk before the stream opens: once the
+        // response is being sent there is no way to report a storage failure
+        // other than as an error part.
+        $attachments = $store->store($request->file('attachments') ?? []);
+
         return response()->stream(
-            function () use ($discovered, $validated, $invoker): void {
+            function () use ($discovered, $validated, $invoker, $attachments): void {
                 // Finish the turn even if the browser goes away.
                 //
                 // PHP aborts a script on the first write to a dead connection,
@@ -48,6 +67,8 @@ class ChatController
                     $validated['message'],
                     $validated['conversation_id'] ?? null,
                     new StreamEmitter,
+                    $attachments,
+                    $validated['model'] ?? null,
                 );
             },
             headers: [

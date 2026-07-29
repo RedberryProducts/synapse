@@ -22,20 +22,29 @@ const csrfToken =
 
 export async function streamChat(
     slug: string,
-    body: { message: string; conversation_id?: string | null },
+    body: {
+        message: string;
+        conversation_id?: string | null;
+        model?: string | null;
+        files?: File[];
+    },
     handlers: StreamHandlers,
     signal?: AbortSignal,
 ): Promise<void> {
+    const hasFiles = (body.files?.length ?? 0) > 0;
+
     const response = await fetch(`${basePath}/api/chat/${encodeURIComponent(slug)}/send`, {
         method: 'POST',
         signal,
         headers: {
-            'Content-Type': 'application/json',
+            // Content-Type is omitted for multipart so the browser can set the
+            // boundary; a text-only turn keeps its JSON body.
+            ...(hasFiles ? {} : { 'Content-Type': 'application/json' }),
             Accept: 'text/event-stream',
             'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': csrfToken,
         },
-        body: JSON.stringify(body),
+        body: hasFiles ? toFormData(body) : JSON.stringify(body),
     });
 
     if (!response.ok || !response.body) {
@@ -69,6 +78,31 @@ export async function streamChat(
             dispatch(JSON.parse(payload) as StreamPart, handlers);
         }
     }
+}
+
+function toFormData(body: {
+    message: string;
+    conversation_id?: string | null;
+    model?: string | null;
+    files?: File[];
+}): FormData {
+    const form = new FormData();
+
+    form.append('message', body.message);
+
+    if (body.conversation_id) {
+        form.append('conversation_id', body.conversation_id);
+    }
+
+    if (body.model) {
+        form.append('model', body.model);
+    }
+
+    for (const file of body.files ?? []) {
+        form.append('attachments[]', file);
+    }
+
+    return form;
 }
 
 function dispatch(part: StreamPart, handlers: StreamHandlers): void {
@@ -114,6 +148,18 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
 
         case 'data-provider-tool':
             handlers.onProviderTool?.(part.data as unknown as ProviderToolPart);
+            break;
+
+        case 'reasoning-start':
+            handlers.onReasoningStart?.();
+            break;
+
+        case 'reasoning-delta':
+            handlers.onReasoningDelta?.(part.delta ?? '');
+            break;
+
+        case 'reasoning-end':
+            handlers.onReasoningEnd?.();
             break;
 
         case 'data-synapse-end':

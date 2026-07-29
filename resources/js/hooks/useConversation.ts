@@ -86,8 +86,14 @@ export function useConversation(slug: string | undefined, conversationId: string
     useEffect(() => () => abort.current?.abort(), []);
 
     const send = useCallback(
-        async (message: string, onConversation: (id: string) => void) => {
-            if (!slug || sending || message.trim() === '') {
+        async (
+            message: string,
+            onConversation: (id: string) => void,
+            options: { files?: File[]; model?: string | null } = {},
+        ) => {
+            const files = options.files ?? [];
+
+            if (!slug || sending || (message.trim() === '' && files.length === 0)) {
                 return;
             }
 
@@ -100,13 +106,24 @@ export function useConversation(slug: string | undefined, conversationId: string
 
             setEntries((current) => [
                 ...current,
-                { kind: 'user', id: `${turnId}-user`, content: message },
+                {
+                    kind: 'user',
+                    id: `${turnId}-user`,
+                    content: message,
+                    // Shown from the local file until the turn is replayed from
+                    // the server, which is when a real URL exists.
+                    attachments: files.map((file) => ({
+                        type: file.type,
+                        name: file.name,
+                        url: URL.createObjectURL(file),
+                    })),
+                },
             ]);
 
             try {
                 await streamChat(
                     slug,
-                    { message, conversation_id: conversationId },
+                    { message, conversation_id: conversationId, model: options.model, files },
                     {
                         onConversation: (id) => {
                             // Claim it before the URL changes, so the load
@@ -169,6 +186,27 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onProviderTool: (event) =>
                             setEntries((current) => applyProviderTool(current, event)),
+
+                        // Reasoning arrives before the answer, so the entry it
+                        // belongs to may not exist yet — open one for it.
+                        onReasoningStart: () =>
+                            setEntries((current) => openReasoning(current, turnId)),
+
+                        onReasoningDelta: (delta) =>
+                            setEntries((current) =>
+                                updateLastAssistant(openReasoning(current, turnId), turnId, (entry) => ({
+                                    ...entry,
+                                    reasoning: entry.reasoning + delta,
+                                })),
+                            ),
+
+                        onReasoningEnd: () =>
+                            setEntries((current) =>
+                                updateLastAssistant(current, turnId, (entry) => ({
+                                    ...entry,
+                                    reasoningStreaming: false,
+                                })),
+                            ),
 
                         onNotice: (notice) =>
                             setEntries((current) => [
@@ -275,20 +313,40 @@ function appendText(
         );
     }
 
+    return [...entries, { ...emptyAssistant(turnId, id), text: delta }];
+}
+
+/**
+ * Ensure the turn has an assistant entry to attach reasoning to.
+ *
+ * A reasoning model thinks before it speaks, so the first thing that arrives
+ * for the turn may be a reasoning delta rather than any text.
+ */
+function openReasoning(entries: ChatEntry[], turnId: string): ChatEntry[] {
+    if (lastAssistantId(entries, turnId) !== null) {
+        return entries;
+    }
+
     return [
         ...entries,
-        {
-            kind: 'assistant',
-            id,
-            turnId,
-            text: delta,
-            streaming: true,
-            usage: null,
-            durationMs: null,
-            meta: null,
-            structured: null,
-        },
+        { ...emptyAssistant(turnId, `${turnId}:reasoning`), reasoningStreaming: true },
     ];
+}
+
+function emptyAssistant(turnId: string, id: string): AssistantEntry {
+    return {
+        kind: 'assistant',
+        id,
+        turnId,
+        text: '',
+        reasoning: '',
+        reasoningStreaming: false,
+        streaming: true,
+        usage: null,
+        durationMs: null,
+        meta: null,
+        structured: null,
+    };
 }
 
 function updateLastAssistant(
@@ -340,17 +398,34 @@ function settleTurn(
         }
 
         return entry.id === target
-            ? { ...entry, id: messageId ?? entry.id, streaming: false, usage, durationMs }
-            : { ...entry, streaming: false };
+            ? {
+                  ...entry,
+                  id: messageId ?? entry.id,
+                  streaming: false,
+                  reasoningStreaming: false,
+                  usage,
+                  durationMs,
+              }
+            : { ...entry, streaming: false, reasoningStreaming: false };
     });
 }
 
 function stopStreaming(entries: ChatEntry[], turnId: string): ChatEntry[] {
-    return entries.map((entry) =>
-        entry.kind === 'assistant' && entry.turnId === turnId
-            ? { ...entry, streaming: false }
-            : entry,
-    );
+    return entries
+        .map((entry) =>
+            entry.kind === 'assistant' && entry.turnId === turnId
+                ? { ...entry, streaming: false, reasoningStreaming: false }
+                : entry,
+        )
+        // A turn that produced neither text nor reasoning — a failure before any
+        // output — would otherwise leave an empty bubble under the error card.
+        .filter(
+            (entry) =>
+                entry.kind !== 'assistant' ||
+                entry.text !== '' ||
+                entry.reasoning !== '' ||
+                entry.structured !== null,
+        );
 }
 
 /* ── Tool cards ───────────────────────────────────────────────────────────── */
@@ -496,7 +571,12 @@ function toToolEntry(
 
 function toEntry(message: ConversationMessage): ChatEntry {
     if (message.role === 'user') {
-        return { kind: 'user', id: message.id, content: message.content ?? '' };
+        return {
+            kind: 'user',
+            id: message.id,
+            content: message.content ?? '',
+            attachments: message.attachments ?? [],
+        };
     }
 
     if (message.role === 'error') {
@@ -516,12 +596,17 @@ function toEntry(message: ConversationMessage): ChatEntry {
         kind: 'assistant',
         id: message.id,
         turnId: message.id,
-        text: message.content ?? '',
+        // A structured agent's text *is* its JSON; the card renders the parsed
+        // payload instead, so the raw copy would just be noise.
+        text: message.meta?.structured ? '' : (message.content ?? ''),
+        // Both were kept on `meta` precisely so a replay matches what streamed.
+        reasoning: message.meta?.reasoning ?? '',
+        reasoningStreaming: false,
         streaming: false,
         usage: message.usage,
         durationMs: message.duration_ms,
         meta: message.meta,
-        structured: null,
+        structured: message.meta?.structured ?? null,
     };
 }
 

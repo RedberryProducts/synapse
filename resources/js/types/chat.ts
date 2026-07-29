@@ -17,6 +17,9 @@ export interface Usage {
 export interface MessageMetaData {
     provider: string | null;
     model: string | null;
+    /** Kept because the SDK's response drops both — see AgentInvoker. */
+    reasoning?: string | null;
+    structured?: Record<string, unknown> | null;
 }
 
 /* ── Stream parts ─────────────────────────────────────────────────────────── */
@@ -41,6 +44,9 @@ export interface StreamHandlers {
     onError?: (error: ChatError) => void;
     onNotice?: (message: string) => void;
     onStructured?: (data: Record<string, unknown>) => void;
+    onReasoningStart?: () => void;
+    onReasoningDelta?: (delta: string) => void;
+    onReasoningEnd?: () => void;
     onToolInput?: (toolCallId: string, name: string, input: unknown) => void;
     onToolOutput?: (toolCallId: string, output: unknown) => void;
     onToolError?: (toolCallId: string, errorText: string) => void;
@@ -74,10 +80,19 @@ export interface ChatError {
 
 /* ── Thread entries ───────────────────────────────────────────────────────── */
 
+/** A file a message carried, as the browser can reach it. */
+export interface MessageAttachment {
+    /** The SDK's own type: `stored-image` / `stored-audio` / `stored-document`. */
+    type: string;
+    name: string;
+    url: string;
+}
+
 export interface UserEntry {
     kind: 'user';
     id: string;
     content: string;
+    attachments: MessageAttachment[];
 }
 
 export interface AssistantEntry {
@@ -90,6 +105,9 @@ export interface AssistantEntry {
      */
     turnId: string;
     text: string;
+    /** Extended-thinking transcript, empty when the model did none. */
+    reasoning: string;
+    reasoningStreaming: boolean;
     streaming: boolean;
     usage: Usage | null;
     durationMs: number | null;
@@ -141,6 +159,7 @@ export interface ConversationMessage {
     id: string;
     role: 'user' | 'assistant' | 'error';
     content: string | null;
+    attachments: MessageAttachment[];
     usage: Usage | null;
     duration_ms: number | null;
     meta: MessageMetaData | null;

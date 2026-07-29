@@ -144,6 +144,7 @@ Gotchas worth knowing:
 - **Text assertions don't wait for a re-render; element assertions do.** After an interaction, prefer `assertPresent` / `assertMissing` over `assertSee` / `assertDontSee`.
 - **`type()` resolves fields by `name`/`id`, not by label.** Pass a testid — `type('@composer-input', '…')`. A field with only an `aria-label` hangs until timeout.
 - **The harness captures a streamed body in its own output buffer** (`ob_start()` → `sendContent()` → `ob_get_clean()`), so anything that calls `ob_flush()` sends its bytes to stdout and hands the browser nothing. Flush only when `headers_sent()` — see `StreamEmitter`.
+- **The harness cannot upload a file.** It parses only `application/x-www-form-urlencoded` bodies and passes an empty files array to `Request::create()` (a `@TODO` in pest-plugin-browser). Browser tests can drive the composer as far as the chip; everything past it belongs in a feature test with a real multipart request.
 - **Faked responses given as a list don't advance past a throwing entry.** The SDK's fake increments its cursor with `tap()` *after* marshalling, so an entry that throws is returned forever. Use a closure keyed on the prompt when a test needs a failure followed by a success.
 
 ### What to test

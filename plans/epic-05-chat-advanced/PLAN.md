@@ -365,6 +365,15 @@ New testids: `file-chip`, `drop-zone`, `model-selector`, `reasoning`, `structure
 
 ---
 
+## Delivered
+
+Shipped as planned, plus two findings:
+
+1. **The browser harness cannot upload a file at all.** `pest-plugin-browser`'s `LaravelHttpServer` parses only `application/x-www-form-urlencoded` bodies and passes an empty files array to `Request::create()` — a literal `@TODO` upstream. Browser tests drive the composer as far as the chip (picker *and* drop paths); upload, storage, rehydration and serving are covered by `AttachmentTest` against a real multipart request. Recorded in AGENTS.md → Writing browser tests.
+2. **Playwright refuses local file paths from a non-local client**, so `attach()` is unusable here. The tests construct a `File` in the page and hand it to the same input the picker drives, or drop it on the composer via `DataTransfer` — which has the side benefit of exercising drag-and-drop for real rather than simulating a click.
+
+Also of note: `ReasoningBuffer` exists because PHPStan cannot track a by-reference string mutated between a callback's registration and the stream's iteration. Passing the accumulator as an object makes that ordering explicit instead of implicit, which is worth more than the sentence of ceremony it costs.
+
 ## Definition of done
 
 - All 13 acceptance criteria verified

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
@@ -12,6 +12,13 @@ export default function Playground() {
     const [params, setParams] = useSearchParams();
     const { agent, loading, notFound, error } = useAgent(slug);
     const { open, tab, openPanel, closePanel, setTab } = usePanelState();
+
+    // A per-send override, held only for as long as you are on this page. The
+    // agent's own configuration is what the playground opens on, so an
+    // experiment can never be mistaken for the agent's real setting later.
+    const [model, setModel] = useState<string | null>(null);
+
+    useEffect(() => setModel(null), [slug]);
 
     // A fresh playground starts empty; the conversation id only enters the URL
     // once the server announces it, which is what makes a refresh land back on
@@ -61,7 +68,9 @@ export default function Playground() {
             entries={entries}
             sending={sending}
             totals={totals}
-            onSend={(message) => void send(message, setConversation)}
+            model={model}
+            onModelChange={setModel}
+            onSend={(message, files) => void send(message, setConversation, { files, model })}
             onNewConversation={() => {
                 reset();
                 setConversation(null);

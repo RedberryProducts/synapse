@@ -1,5 +1,7 @@
 import { Markdown } from '@/elements/Markdown';
 import { MessageMeta } from './MessageMeta';
+import { ReasoningPane } from './ReasoningPane';
+import { StructuredOutputCard } from './StructuredOutputCard';
 import type { AssistantEntry } from '@/types/chat';
 
 /**
@@ -13,6 +15,10 @@ import type { AssistantEntry } from '@/types/chat';
 export function AssistantMessage({ entry }: { entry: AssistantEntry }) {
     return (
         <div data-testid="message-assistant" className="text-sm">
+            {(entry.reasoning !== '' || entry.reasoningStreaming) && (
+                <ReasoningPane text={entry.reasoning} streaming={entry.reasoningStreaming} />
+            )}
+
             {/*
                 A structured-output agent's text *is* its JSON, so rendering
                 both would print the same payload twice — once unformatted.
@@ -27,17 +33,10 @@ export function AssistantMessage({ entry }: { entry: AssistantEntry }) {
                 />
             )}
 
-            {entry.structured && (
-                <pre
-                    data-testid="structured-output"
-                    className="mt-3 overflow-x-auto rounded-lg border border-border bg-muted p-3 text-xs"
-                >
-                    {JSON.stringify(entry.structured, null, 2)}
-                </pre>
-            )}
+            {entry.structured && <StructuredOutputCard data={entry.structured} />}
 
             {!entry.streaming && entry.usage && (
-                <MessageMeta usage={entry.usage} durationMs={entry.durationMs} />
+                <MessageMeta usage={entry.usage} durationMs={entry.durationMs} meta={entry.meta} />
             )}
         </div>
     );

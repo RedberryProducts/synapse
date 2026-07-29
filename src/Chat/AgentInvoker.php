@@ -9,12 +9,14 @@ use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Events\AgentFailedOver;
 use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\ToolInvoked;
+use Laravel\Ai\Files\File;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StreamedAgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Laravel\Ai\Streaming\Events\Error;
 use Laravel\Ai\Streaming\Events\ProviderToolEvent;
+use Laravel\Ai\Streaming\Events\ReasoningDelta;
 use Redberry\Synapse\Discovery\DiscoveredAgent;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
@@ -38,6 +40,7 @@ class AgentInvoker
     public function __construct(
         protected ConversationWriter $writer,
         protected MessageHistory $history,
+        protected AttachmentStore $attachments,
         protected Dispatcher $events,
     ) {}
 
@@ -49,6 +52,8 @@ class AgentInvoker
         string $message,
         ?string $conversationId,
         StreamEmitter $emitter,
+        array $attachments = [],
+        ?string $model = null,
     ): void {
         $conversation = null;
         $invocationId = null;
@@ -60,7 +65,11 @@ class AgentInvoker
             // own `new UserMessage($prompt)` would repeat the current message.
             $history = $this->history->for($conversation->id);
 
-            $userMessage = $this->writer->storeUserMessage($conversation, $message);
+            $userMessage = $this->writer->storeUserMessage(
+                $conversation,
+                $message,
+                $this->attachments->toArray($attachments),
+            );
 
             $emitter->conversationStarted($conversation->id, $userMessage->id);
 
@@ -78,9 +87,9 @@ class AgentInvoker
             $this->recordToolInvocations($conversation);
 
             if ($agent instanceof HasStructuredOutput) {
-                $assistant = $this->promptOnce($agent, $message, $conversation, $emitter, $invocationId);
+                $assistant = $this->promptOnce($agent, $message, $conversation, $emitter, $invocationId, $attachments, $model);
             } else {
-                $assistant = $this->stream($agent, $history, $message, $conversation, $emitter, $invocationId);
+                $assistant = $this->stream($agent, $history, $message, $conversation, $emitter, $invocationId, $attachments, $model);
             }
 
             // Attach this run's tool cards to the turn they produced.
@@ -98,6 +107,7 @@ class AgentInvoker
      * Stream a turn, emitting protocol parts as the events arrive.
      *
      * @param  Message[]  $history
+     * @param  array<int, File>  $attachments
      */
     protected function stream(
         Agent $agent,
@@ -106,6 +116,8 @@ class AgentInvoker
         SynapseConversation $conversation,
         StreamEmitter $emitter,
         ?string &$invocationId,
+        array $attachments = [],
+        ?string $model = null,
     ): ?SynapseMessage {
         // Only conversational agents get history. A stateless agent is invoked
         // exactly as it runs in production: current message, nothing else.
@@ -115,23 +127,34 @@ class AgentInvoker
 
         $startedAt = hrtime(true);
         $assistant = null;
+        $reasoning = new ReasoningBuffer;
 
-        $response = $target->stream($message);
+        // A non-null model skips the agent's own resolution inside the SDK, so
+        // the override applies without touching the agent's code.
+        $response = $target->stream($message, $attachments, model: $model);
 
         $invocationId = $response->invocationId;
 
         $response->withinConversation($conversation->id)
-            ->then(function (StreamedAgentResponse $streamed) use ($conversation, $startedAt, &$assistant): void {
+            ->then(function (StreamedAgentResponse $streamed) use ($conversation, $startedAt, &$assistant, $reasoning): void {
                 $assistant = $this->writer->storeAssistantMessage(
                     $conversation,
                     $streamed,
                     $this->elapsedMs($startedAt),
+                    reasoning: $reasoning->text(),
                 );
             });
 
         $providerTools = new ProviderToolRecorder($conversation->id);
 
         foreach ($response as $event) {
+            // Reasoning exists only here: `StreamedAgentResponse->text` is
+            // `TextDelta::combine()`, which excludes it. Accumulating as it
+            // passes is what lets a replay show the thinking that was watched.
+            if ($event instanceof ReasoningDelta) {
+                $reasoning->append($event->delta);
+            }
+
             // Provider-native tools never fire Laravel events — the stream is
             // the only place they exist, so they are recorded as they pass.
             if ($event instanceof ProviderToolEvent) {
@@ -177,10 +200,12 @@ class AgentInvoker
         SynapseConversation $conversation,
         StreamEmitter $emitter,
         ?string &$invocationId,
+        array $attachments = [],
+        ?string $model = null,
     ): SynapseMessage {
         $startedAt = hrtime(true);
 
-        $response = $agent->prompt($message);
+        $response = $agent->prompt($message, $attachments, model: $model);
 
         $invocationId = $response->invocationId;
 
@@ -188,6 +213,9 @@ class AgentInvoker
             $conversation,
             $response,
             $this->elapsedMs($startedAt),
+            // The parsed payload is not in `text`, which holds the raw JSON
+            // string, so it has to be kept or replay falls back to plain text.
+            structured: $response instanceof StructuredAgentResponse ? $response->structured : null,
         );
 
         $this->emitPrompted($response, $emitter);

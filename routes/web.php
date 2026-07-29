@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Redberry\Synapse\Http\Controllers\AgentsController;
+use Redberry\Synapse\Http\Controllers\AttachmentsController;
 use Redberry\Synapse\Http\Controllers\ChatController;
 use Redberry\Synapse\Http\Controllers\ConversationsController;
 use Redberry\Synapse\Http\Controllers\HomeController;
@@ -31,7 +32,7 @@ Route::prefix('api')->group(function (): void {
     Route::post('/chat/{agent}/send', [ChatController::class, 'send']);
 
     // Attachments
-    Route::get('/attachments/{message}/{index}', fn (string $message, int $index) => response()->noContent());
+    Route::get('/attachments/{message}/{index}', [AttachmentsController::class, 'show']);
 
     // Feature 5 — History
     Route::get('/conversations', fn () => response()->json(['data' => []]));

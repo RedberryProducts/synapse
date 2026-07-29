@@ -131,16 +131,16 @@ The playground is a real conversation with a real agent. Messages stream token-b
 **Composing messages:**
 
 - **Text** — type and send.
-- **Attachments** — attach images, documents, or audio with the file picker or by dragging files onto the chat. Attachments show as chips before you send and as thumbnails/chips on your message afterward. (Attachments are uploaded to your app's storage — see [Where your data lives](#where-your-data-lives).)
-- **Model selector** — a dropdown in the composer lets you run the next message on a different model without touching your agent's code. It always offers the agent's own configured model (the default) plus its provider's **cheapest** and **smartest** tiers, and any extra models you list in config (see [Configuration](#configuration)). Whatever model actually ran is recorded per message, so replaying a conversation always shows the truth.
+- **Attachments** — attach images, documents, or audio with the file picker or by dragging files onto the composer. Attachments show as chips before you send, and as thumbnails (images) or chips on your message afterward. They stay attached for the rest of the conversation, so a follow-up question about the same file still works. There is no file-type allowlist: anything your provider rejects comes back as an error card explaining why, which is exactly what production would do. (Files go to your app's storage — see [Where your data lives](#where-your-data-lives).)
+- **Model selector** — a dropdown in the composer lets you run the next message on a different model without touching your agent's code. It always offers the agent's own configured model (the default) plus its provider's **cheapest** and **smartest** tiers, and any extra models you list in config (see [Configuration](#configuration)). Whatever model actually ran is recorded per message, so replaying a conversation always shows the truth. The choice lasts while you're on the page and resets to the agent's own model when you come back — an override is an experiment, and you should never return later and mistake one for how the agent is actually configured.
 
 **In the response, you'll see:**
 
 - **Streaming text** — the answer as it arrives.
-- **Reasoning** — for models with extended thinking (Anthropic, OpenAI o-series, DeepSeek), the thinking appears in a collapsible "Thinking…" pane above the answer, with its own reasoning-token count. Collapsed by default so it never gets in the way.
+- **Reasoning** — for models with extended thinking (Anthropic, OpenAI o-series, DeepSeek), `✦ Thinking…` appears while the model works, then collapses into a "Thinking" pane above the answer, with its own reasoning-token count in the per-message counts. Collapsed by default so it never gets in the way — and kept, so reopening the conversation later shows the same thinking you watched.
 - **Tool calls** — inline cards, in the order they happened (see [Tool inspection](#tool-inspection)).
 - **Structured output** — if your agent returns structured data, the response renders as a formatted, collapsible JSON card instead of plain text. Structured-output agents can't stream (the SDK doesn't support it), so Synapse runs them in one shot and shows the finished answer — the only visible difference is that the text arrives all at once.
-- **Metadata** — prompt/completion token counts and response time on each answer.
+- **Metadata** — prompt/completion token counts and response time on each answer, plus the model that ran it whenever you overrode the agent's own.
 
 **Conversation controls:**
 

@@ -13,6 +13,7 @@ use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
+use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SupportAgent;
 use Workbench\App\Agents\WeatherAgent;
@@ -250,6 +251,107 @@ it('leaves the composer one line tall on an empty playground', function () {
     );
 
     expect($height)->toBeLessThan(60);
+});
+
+/*
+| Attach a file the way the browser would.
+|
+| Playwright refuses local paths when the client is not local, so the file is
+| constructed in the page and handed to the same input the picker drives — or,
+| with `drop: true`, dropped onto the composer.
+|
+| These tests stop at the composer on purpose. The browser harness cannot send a
+| file to the app at all: it parses only `application/x-www-form-urlencoded`
+| bodies and passes an empty files array to `Request::create()` (a `@TODO` in
+| pest-plugin-browser's LaravelHttpServer). Everything past the chip — upload,
+| storage, rehydration into the next turn, serving the file back — is covered by
+| tests/Feature/Chat/AttachmentTest.php against a real multipart request.
+*/
+function attachFile(object $page, bool $drop = false): void
+{
+    $mode = $drop ? 'true' : 'false';
+
+    $page->script(<<<JS
+        (() => {
+            const file = new File([new Uint8Array([137, 80, 78, 71])], 'sky.png', { type: 'image/png' });
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+
+            if ({$mode}) {
+                const composer = document.querySelector('[data-testid=chat-composer]');
+                composer.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: transfer }));
+                composer.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer }));
+
+                return;
+            }
+
+            const input = document.querySelector('input[type=file]');
+            input.files = transfer.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        })()
+    JS);
+}
+
+it('attaches a file from the picker and lets you remove it', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.vision-agent');
+
+    attachFile($page);
+
+    $page->assertSeeIn('@file-chip', 'sky.png');
+
+    $page->click('[aria-label="Remove sky.png"]');
+
+    $page->assertMissing('@file-chip')->assertNoJavaScriptErrors();
+});
+
+it('accepts a file dropped onto the composer', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.vision-agent');
+
+    attachFile($page, drop: true);
+
+    $page->assertSeeIn('@file-chip', 'sky.png')->assertNoJavaScriptErrors();
+});
+
+it('offers the agent model plus its provider tiers', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->assertSeeIn('@model-selector', 'gpt-5.6-luna');
+
+    $page->click('[aria-label="Model: gpt-5.6-luna"]');
+
+    $page->assertSee('agent default')
+        ->assertSee('cheapest')
+        ->assertSee('smartest')
+        ->assertNoJavaScriptErrors();
+});
+
+it('names the model on a message that overrode it', function () {
+    fakeAgent(SupportAgent::class, ['Answered elsewhere.']);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->click('[aria-label="Model: gpt-5.6-luna"]');
+    $page->click('smartest');
+
+    $page->type('@composer-input', 'Try the smart one')->click('Send');
+
+    // A replayed conversation must never let an override read as the agent's
+    // own configuration.
+    $page->assertSeeIn('@message-meta', 'on ')->assertNoJavaScriptErrors();
+});
+
+it('renders a structured agent as a json card', function () {
+    fakeAgent(ExtractorAgent::class, [
+        ['name' => 'Ada Lovelace', 'email' => 'ada@example.com'],
+    ]);
+
+    $page = visit('/synapse/playground/workbench.app.agents.extractor-agent');
+
+    $page->type('@composer-input', 'Ada Lovelace, ada@example.com')->click('Send');
+
+    $page->assertPresent('@structured-card')
+        ->assertSeeIn('@structured-output', 'Ada Lovelace')
+        ->assertNoJavaScriptErrors();
 });
 
 it('starts a fresh thread from the conversation menu', function () {

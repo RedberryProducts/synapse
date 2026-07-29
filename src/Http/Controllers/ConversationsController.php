@@ -40,6 +40,7 @@ class ConversationsController
                 'id' => $message->id,
                 'role' => $message->role,
                 'content' => $message->content,
+                'attachments' => $this->attachments($message),
                 'usage' => $message->usage ?: null,
                 'duration_ms' => $message->duration_ms,
                 'meta' => $message->meta ?: null,
@@ -47,6 +48,30 @@ class ConversationsController
                 'created_at' => $message->created_at?->toIso8601String(),
             ])->all(),
         ]);
+    }
+
+    /**
+     * A message's attachments, as things the browser can fetch.
+     *
+     * `path` and `disk` stay on the server: the UI needs to show and download a
+     * file, not to know where it lives on the filesystem.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function attachments(SynapseMessage $message): array
+    {
+        $base = rtrim((string) config('synapse.ui.path', 'synapse'), '/');
+
+        return collect($message->attachments)
+            ->values()
+            ->map(fn (mixed $attachment, int $index): ?array => is_array($attachment) ? [
+                'type' => $attachment['type'] ?? 'stored-document',
+                'name' => $attachment['name'] ?? 'attachment',
+                'url' => url("{$base}/api/attachments/{$message->id}/{$index}"),
+            ] : null)
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**

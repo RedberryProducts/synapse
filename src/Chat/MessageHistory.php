@@ -6,6 +6,7 @@ use Illuminate\Support\Collection;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\ToolResultMessage;
+use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
 use Redberry\Synapse\Models\SynapseMessage;
@@ -25,6 +26,8 @@ class MessageHistory
      * Matches the SDK's own `maxConversationMessages()` default.
      */
     public const int LIMIT = 100;
+
+    public function __construct(protected AttachmentStore $attachments) {}
 
     /**
      * @return Message[]
@@ -54,8 +57,14 @@ class MessageHistory
         }
 
         if ($record->role === 'user') {
-            // Attachments are rehydrated in Epic 5; a plain text turn until then.
-            return [new Message('user', (string) $record->content)];
+            // A turn that carried files has to carry them again, or a follow-up
+            // question silently loses the image it refers to and the model
+            // answers about a picture it can no longer see.
+            $attachments = $this->attachments->rehydrate($record->attachments);
+
+            return $attachments === []
+                ? [new Message('user', (string) $record->content)]
+                : [new UserMessage((string) $record->content, $attachments)];
         }
 
         $toolCalls = new Collection($record->tool_calls);
