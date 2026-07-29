@@ -1,5 +1,8 @@
 <?php
 
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Models\SynapseToolInvocation;
@@ -48,6 +51,53 @@ it('stores the failure so the thread still explains itself after a refresh', fun
     expect($error->content)->toBe('Provider exploded')
         ->and($error->metadata['exception_class'])->toBe(RuntimeException::class)
         ->and($error->metadata['stack_trace'])->toBeString();
+});
+
+it('surfaces what the provider actually said, not just the status code', function () {
+    // A RequestException's message is only ever "HTTP request returned status
+    // code 400". The reason lives in the response body, and dropping it would
+    // leave a debugging tool telling you nothing you couldn't already see.
+    $response = new Response(new Psr7Response(400, [], json_encode([
+        'error' => ['message' => "Unsupported parameter: 'temperature'.", 'code' => 'unsupported_parameter'],
+    ])));
+
+    fakeAgent(SupportAgent::class, [
+        fn () => throw new RequestException($response),
+    ]);
+
+    $error = chatPart(sendMessage('workbench.app.agents.support-agent', 'Anything'), 'error');
+
+    expect($error['data']['responseStatus'])->toBe(400)
+        ->and($error['data']['responseBody'])->toContain('Unsupported parameter');
+
+    expect(SynapseMessage::query()->where('role', 'error')->sole()->metadata)
+        ->toMatchArray(['response_status' => 400]);
+});
+
+it('finds the response on an exception the SDK wrapped', function () {
+    // The SDK converts rate limits and credit failures into its own types with
+    // the original attached as `previous`, so the chain has to be walked.
+    $response = new Response(new Psr7Response(429, [], '{"error":{"message":"Rate limit reached."}}'));
+
+    fakeAgent(SupportAgent::class, [
+        fn () => throw new RuntimeException('Rate limited', 429, new RequestException($response)),
+    ]);
+
+    $error = chatPart(sendMessage('workbench.app.agents.support-agent', 'Anything'), 'error');
+
+    expect($error['data']['responseStatus'])->toBe(429)
+        ->and($error['data']['responseBody'])->toContain('Rate limit reached');
+});
+
+it('leaves the response fields empty for a failure that was not an http call', function () {
+    fakeAgent(SupportAgent::class, [
+        fn () => throw new RuntimeException('Something local broke'),
+    ]);
+
+    $error = chatPart(sendMessage('workbench.app.agents.support-agent', 'Anything'), 'error');
+
+    expect($error['data']['responseStatus'])->toBeNull()
+        ->and($error['data']['responseBody'])->toBeNull();
 });
 
 it('still closes the stream cleanly when the agent fails', function () {

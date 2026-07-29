@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import { Collapsible } from '@/elements/Collapsible';
 import { Copy } from '@/elements/Copy';
+import { JsonView } from '@/elements/JsonView';
 import { cn } from '@/lib/utils';
 import type { ErrorEntry } from '@/types/chat';
 
@@ -42,6 +43,22 @@ export function ErrorCard({ entry }: { entry: ErrorEntry }) {
                     )}
 
                     <p className="mt-1 text-sm break-words">{entry.message}</p>
+
+                    {/*
+                        The provider's own explanation. An HTTP failure's message
+                        is only ever "returned status code 400" — this is the
+                        part that says what it actually objected to, so it sits
+                        open rather than behind a toggle.
+                    */}
+                    {entry.responseBody && (
+                        <JsonView
+                            label={`Provider response${entry.responseStatus ? ` (${entry.responseStatus})` : ''}`}
+                            tone="error"
+                            value={entry.responseBody}
+                            testId="error-response"
+                            className="mt-3"
+                        />
+                    )}
 
                     {entry.stackTrace && (
                         <Collapsible label="Stack trace" className="mt-3">

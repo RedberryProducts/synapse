@@ -137,6 +137,8 @@ function toChatError(part: StreamPart): ChatError {
         message: part.errorText ?? 'The agent failed.',
         exceptionClass: (part.data?.exceptionClass as string | null) ?? null,
         stackTrace: (part.data?.stackTrace as string | null) ?? null,
+        responseStatus: (part.data?.responseStatus as number | null) ?? null,
+        responseBody: (part.data?.responseBody as string | null) ?? null,
         recoverable: Boolean(part.data?.recoverable),
     };
 }

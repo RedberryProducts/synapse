@@ -82,9 +82,15 @@ class ConversationWriter
      */
     public function storeError(SynapseConversation $conversation, Throwable $e): SynapseMessage
     {
+        $detail = ProviderErrorDetail::for($e);
+
         return $this->store($conversation, 'error', content: $e->getMessage(), metadata: [
             'exception_class' => $e::class,
             'stack_trace' => $e->getTraceAsString(),
+            // What the provider actually said. `getMessage()` on an HTTP failure
+            // is just "returned status code 400"; the reason is in the body.
+            'response_status' => $detail['status'] ?? null,
+            'response_body' => $detail['body'] ?? null,
         ]);
     }
 

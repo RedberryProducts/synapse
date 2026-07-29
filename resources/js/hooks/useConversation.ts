@@ -152,6 +152,8 @@ export function useConversation(slug: string | undefined, conversationId: string
                                     message: error.message,
                                     exceptionClass: error.exceptionClass,
                                     stackTrace: error.stackTrace,
+                                    responseStatus: error.responseStatus,
+                                    responseBody: error.responseBody,
                                     recoverable: error.recoverable,
                                 },
                             ]),
@@ -175,6 +177,8 @@ export function useConversation(slug: string | undefined, conversationId: string
                             message: error instanceof Error ? error.message : 'The request failed.',
                             exceptionClass: null,
                             stackTrace: null,
+                            responseStatus: null,
+                            responseBody: null,
                             recoverable: false,
                         },
                     ]);
@@ -453,6 +457,8 @@ function toEntry(message: ConversationMessage): ChatEntry {
             message: message.content ?? 'The agent failed.',
             exceptionClass: (message.metadata?.exception_class as string | null) ?? null,
             stackTrace: (message.metadata?.stack_trace as string | null) ?? null,
+            responseStatus: (message.metadata?.response_status as number | null) ?? null,
+            responseBody: (message.metadata?.response_body as string | null) ?? null,
             recoverable: Boolean(message.metadata?.recoverable),
         };
     }

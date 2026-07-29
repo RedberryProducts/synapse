@@ -159,6 +159,8 @@ class StreamEmitter
      */
     public function error(Throwable $e, string $messageId): void
     {
+        $detail = ProviderErrorDetail::for($e);
+
         $this->part([
             'type' => 'error',
             'errorText' => $e->getMessage(),
@@ -166,6 +168,10 @@ class StreamEmitter
                 'messageId' => $messageId,
                 'exceptionClass' => $e::class,
                 'stackTrace' => $e->getTraceAsString(),
+                // The provider's own words, which getMessage() drops entirely
+                // on an HTTP failure.
+                'responseStatus' => $detail['status'] ?? null,
+                'responseBody' => $detail['body'] ?? null,
                 'recoverable' => false,
             ],
         ]);
@@ -183,6 +189,8 @@ class StreamEmitter
                 'messageId' => $messageId,
                 'exceptionClass' => Error::class,
                 'stackTrace' => null,
+                'responseStatus' => null,
+                'responseBody' => null,
                 'recoverable' => $event->recoverable,
             ],
         ]);

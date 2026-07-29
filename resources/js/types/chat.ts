@@ -66,6 +66,9 @@ export interface ChatError {
     message: string;
     exceptionClass: string | null;
     stackTrace: string | null;
+    /** HTTP status and body when the failure was a provider request. */
+    responseStatus: number | null;
+    responseBody: string | null;
     recoverable: boolean;
 }
 
@@ -100,6 +103,8 @@ export interface ErrorEntry {
     message: string;
     exceptionClass: string | null;
     stackTrace: string | null;
+    responseStatus: number | null;
+    responseBody: string | null;
     recoverable: boolean;
 }
 
