@@ -202,6 +202,56 @@ it('restores tool cards on a refresh', function () {
     $reopened->assertSeeIn('@tool-result', 'Sony WH-1000')->assertNoJavaScriptErrors();
 });
 
+it('clears the thread when you switch agents', function () {
+    fakeAgent(SupportAgent::class, ['Returns are accepted within thirty days.']);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->type('@composer-input', 'What is your return policy?')->click('Send');
+    $page->assertSeeIn('@message-assistant', 'Returns are accepted within thirty days.');
+
+    // One agent's conversation must never appear under another agent's name.
+    // Targeted by href: the sidebar uppercases its labels in CSS, so the
+    // rendered text and the DOM text disagree.
+    $page->click('a[href$="workbench.app.agents.weather-agent"]');
+
+    $page->assertPresent('@chat-empty')
+        ->assertMissing('@message-assistant')
+        ->assertMissing('@conversation-tokens')
+        ->assertNoJavaScriptErrors();
+});
+
+it('keeps the live thread when the conversation id lands in the url', function () {
+    // The server announces the id mid-stream and the page puts it in the URL.
+    // If that were treated as "load this conversation", the fetch would replace
+    // the in-flight thread with whatever happened to be stored at that moment.
+    fakeAgent(SupportAgent::class, [
+        new ToolCall(id: 'call_1', name: 'SearchProductsTool', arguments: ['query' => 'hoodie']),
+        'Found three matches.',
+    ]);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->type('@composer-input', 'Find me a hoodie')->click('Send');
+
+    $page->assertSeeIn('@message-assistant', 'Found three matches.')
+        ->assertPresent('@tool-card')
+        ->assertPresent('@message-meta')
+        ->assertNoJavaScriptErrors();
+});
+
+it('leaves the composer one line tall on an empty playground', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->assertPresent('@chat-empty');
+
+    $height = $page->script(
+        "document.querySelector('[data-testid=composer-input]').getBoundingClientRect().height"
+    );
+
+    expect($height)->toBeLessThan(60);
+});
+
 it('starts a fresh thread from the conversation menu', function () {
     fakeAgent(SupportAgent::class, ['An answer.']);
 

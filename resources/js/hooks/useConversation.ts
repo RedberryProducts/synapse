@@ -32,9 +32,38 @@ export function useConversation(slug: string | undefined, conversationId: string
     const [loading, setLoading] = useState(false);
     const abort = useRef<AbortController | null>(null);
 
+    /**
+     * The conversation currently on screen.
+     *
+     * Set both when a thread is fetched and when the server announces the id of
+     * one we are streaming, so the load effect below can tell "I need this" from
+     * "I already have this".
+     */
+    const loaded = useRef<string | null>(null);
+
+    // Switching agents starts over. Without this the previous agent's thread
+    // stays on screen under the new agent's name — the worst thing a tool built
+    // for attribution can do.
+    useEffect(() => {
+        abort.current?.abort();
+        setEntries([]);
+        loaded.current = null;
+    }, [slug]);
+
     // Load an existing thread when the URL names one (refresh, deep link).
     useEffect(() => {
         if (!conversationId) {
+            setEntries([]);
+            loaded.current = null;
+
+            return;
+        }
+
+        // The id we just streamed into is already rendered, live and complete.
+        // Refetching it here would replace the in-flight thread with whatever
+        // happens to be stored mid-run — dropping tool cards, structured output
+        // and the running token counts.
+        if (loaded.current === conversationId) {
             return;
         }
 
@@ -42,7 +71,10 @@ export function useConversation(slug: string | undefined, conversationId: string
         setLoading(true);
 
         getConversation(conversationId, controller.signal)
-            .then((conversation) => setEntries(replay(conversation)))
+            .then((conversation) => {
+                loaded.current = conversation.id;
+                setEntries(replay(conversation));
+            })
             .catch(() => {
                 // A deleted or unknown id just leaves an empty playground.
             })
@@ -76,7 +108,12 @@ export function useConversation(slug: string | undefined, conversationId: string
                     slug,
                     { message, conversation_id: conversationId },
                     {
-                        onConversation: (id) => onConversation(id),
+                        onConversation: (id) => {
+                            // Claim it before the URL changes, so the load
+                            // effect knows this thread is already on screen.
+                            loaded.current = id;
+                            onConversation(id);
+                        },
 
                         // One entry per generation step, so text that arrives
                         // after a tool call renders after its card.
@@ -145,7 +182,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onError: (error) =>
                             setEntries((current) => [
-                                ...current,
+                                ...failPendingTools(current, error.message),
                                 {
                                     kind: 'error',
                                     id: error.messageId || `${turnId}-error-${current.length}`,
@@ -185,6 +222,7 @@ export function useConversation(slug: string | undefined, conversationId: string
                 }
             } finally {
                 setEntries((current) => stopStreaming(current, turnId));
+                setEntries((current) => failPendingTools(current, 'The run ended before this tool returned.'));
                 setSending(false);
                 abort.current = null;
             }
@@ -328,6 +366,29 @@ function updateTool(
 }
 
 /**
+ * Close out any tool card still showing as running.
+ *
+ * The SDK has no failed-tool-result path: a tool that throws exits the whole
+ * run, so `tool-output-error` never arrives for it and the card would sit
+ * pending forever. This mirrors what the server does to the stored rows — every
+ * still-pending invocation for a run that died becomes an error — and it is
+ * accurate either way, because nothing pending when the stream ends will ever
+ * complete.
+ *
+ * The live card is keyed on the provider's tool-call id while the stored row is
+ * keyed on the SDK's own invocation uuid, so there is no id to match on here.
+ * There doesn't need to be: "everything still running has stopped" is the whole
+ * truth of the situation.
+ */
+function failPendingTools(entries: ChatEntry[], message: string): ChatEntry[] {
+    return entries.map((entry) =>
+        entry.kind === 'tool' && entry.status === 'pending'
+            ? { ...entry, status: 'error' as const, error: entry.error ?? message }
+            : entry,
+    );
+}
+
+/**
  * Fold a provider-tool event into its card, creating it on first sight.
  *
  * These never announce themselves the way a user tool does — there is no
@@ -386,39 +447,27 @@ function normalizeProviderStatus(status: string): ToolStatus {
 /* ── Replay ───────────────────────────────────────────────────────────────── */
 
 /**
- * Rebuild a stored conversation as thread entries.
+ * Rebuild a stored conversation as thread entries, in the order things happened.
  *
- * Tool cards precede the assistant message they produced, which is the order
- * they happened in: the model called the tool, then answered with the result.
- * Rows with no `message_id` — a run that died before its turn landed — are
- * appended rather than dropped, because a call that happened is worth seeing
- * even when the turn it belonged to never finished.
+ * Messages and tool invocations live in different tables but share one clock:
+ * both use uuid7 primary keys, which embed a millisecond timestamp and sort
+ * lexicographically in creation order. Sorting the merged list by id therefore
+ * gives true chronology across both tables — a tool row written when the call
+ * started lands before the assistant message written when the turn closed, and
+ * before the error row written when it failed.
+ *
+ * Grouping cards under their `message_id` instead would strand the interesting
+ * case: a tool that threw has no assistant message to attach to, and its card
+ * would drift to the end of the thread — below the error card explaining a
+ * failure that happened after it.
  */
 function replay(conversation: Conversation): ChatEntry[] {
-    const byMessage = new Map<string, ToolEntry[]>();
-    const orphans: ToolEntry[] = [];
-
-    for (const invocation of conversation.tool_invocations) {
-        const entry = toToolEntry(invocation, conversation.messages);
-
-        if (invocation.message_id === null) {
-            orphans.push(entry);
-
-            continue;
-        }
-
-        byMessage.set(invocation.message_id, [
-            ...(byMessage.get(invocation.message_id) ?? []),
-            entry,
-        ]);
-    }
-
-    const entries = conversation.messages.flatMap((message) => [
-        ...(byMessage.get(message.id) ?? []),
-        toEntry(message),
-    ]);
-
-    return [...entries, ...orphans];
+    return [
+        ...conversation.messages.map(toEntry),
+        ...conversation.tool_invocations.map((invocation) =>
+            toToolEntry(invocation, conversation.messages),
+        ),
+    ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 function toToolEntry(

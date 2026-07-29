@@ -113,6 +113,25 @@ it('emits the tool parts on the stream', function () {
         ->toBeLessThan(array_search('tool-output-available', $types, true));
 });
 
+it('orders a failed tool call before the error that ended the run', function () {
+    fakeAgent(FlakyToolAgent::class, [
+        new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
+    ]);
+
+    $id = chatConversationId(sendMessage('workbench.app.agents.flaky-tool-agent', 'Look up entry 42'));
+
+    $conversation = test()->getJson("/synapse/api/conversations/{$id}")->json();
+
+    // Both tables use uuid7 keys, so merging them by id is true chronology:
+    // the call was recorded when it started, the error when the run died.
+    // The client sorts on exactly this, so the ids have to line up.
+    expect($conversation['tool_invocations'][0]['id'])
+        ->toBeGreaterThan($conversation['messages'][0]['id'])
+        ->toBeLessThan($conversation['messages'][1]['id']);
+
+    expect($conversation['messages'][1]['role'])->toBe('error');
+});
+
 it('replays a real tool turn from the message row, not the tool table', function () {
     fakeAgent(SupportAgent::class, [
         new ToolCall(id: 'call_1', name: 'SearchProductsTool', arguments: ['query' => 'hoodie']),

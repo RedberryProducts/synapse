@@ -13,7 +13,12 @@ import type { AssistantEntry } from '@/types/chat';
 export function AssistantMessage({ entry }: { entry: AssistantEntry }) {
     return (
         <div data-testid="message-assistant" className="text-sm">
-            <Markdown>{entry.text}</Markdown>
+            {/*
+                A structured-output agent's text *is* its JSON, so rendering
+                both would print the same payload twice — once unformatted.
+                The card below is the same data, readable.
+            */}
+            {!entry.structured && <Markdown>{entry.text}</Markdown>}
 
             {entry.streaming && (
                 <span
