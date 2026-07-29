@@ -56,7 +56,7 @@ Which primitive each epic introduces. Built on demand — an element appears whe
 | `Skeleton` | — | 1 | Loading shimmer on `--color-muted` |
 | `Tabs` | `Tabs` `187:1382` | 2 | Config / Prompt / Tools |
 | `Table` | `Data Table / TableHead` | 2, 6 | Tool parameter tables, history rows |
-| `JsonView` | tool card bodies | 2, 4 | Collapsible JSON tree (`@uiw/react-json-view`) |
+| `JsonView` | tool card bodies | 4 | Hand-rolled pretty-print + token colouring. The design is a formatted block, not an interactive tree, so a library isn't worth its weight in a bundle that's inlined on every page load |
 | `Markdown` | Info panel Prompt tab | 2 | `react-markdown` wrapper |
 | `Copy` | `Copy` `408:5907` | 4 | Default / hover / copied |
 | `Collapsible` | `Inline Tool Call cards` `271:2353` | 3 | Expand/collapse — first needed by the error card's stack trace |
