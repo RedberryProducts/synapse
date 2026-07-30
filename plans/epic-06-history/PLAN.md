@@ -343,6 +343,16 @@ Conversations are seeded through the existing chat pipeline with `fakeAgent()` r
 
 ---
 
+## Delivered
+
+Shipped as planned, with three notes:
+
+1. **`DateRangePicker` is two native date inputs, not a two-month calendar grid.** The browser's own picker is keyboard-accessible, localised and already familiar to every developer using this dashboard; a bespoke grid would have been a lot of code to end up slightly worse. It's one element to replace if the design ever needs the exact visuals.
+2. **`Dialog` is built on native `<dialog>`.** Focus trapping, `Escape` and the backdrop come from the platform instead of being re-implemented — and `onClose` fires for every dismissal path, so the caller's state can't drift out of step with what's on screen.
+3. **A sharp edge in the test helper, now documented.** `fakeAgent()` registers under the decorator classes, so *all* conversational agents share one fake gateway: calling it twice with different responses silently replaces the first. A filter test spent a while looking like a query bug before that surfaced. Recorded in `tests/Pest.php` and AGENTS.md; tests needing two agents to differ pass one closure keyed on the prompt.
+
+Also: `HistoryRow` carries `data-agent` so browser tests can assert filtering with auto-waiting element assertions instead of text ones — six of the fourteen browser tests failed first time on exactly the two gotchas AGENTS.md already warns about (Playwright strict mode, and text assertions not waiting for a re-render).
+
 ## Definition of done
 
 - All 16 acceptance criteria verified

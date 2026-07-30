@@ -1,8 +1,9 @@
-import { Info } from 'lucide-react';
+import { Info, TriangleAlert } from 'lucide-react';
 import { ChatComposer } from '@/components/ChatComposer';
 import { ConversationMenu } from '@/components/ConversationMenu';
 import { ConversationTokens } from '@/components/ConversationTokens';
 import { StatelessNotice } from '@/components/StatelessNotice';
+import { Badge } from '@/elements/Badge';
 import { Button } from '@/elements/Button';
 import { ChatThread } from './ChatThread';
 import { InfoPanel, type InfoTab } from './InfoPanel';
@@ -14,6 +15,7 @@ import type { ChatEntry } from '@/types/chat';
  */
 export function PlaygroundShell({
     agent,
+    agentMissing = false,
     loading,
     error,
     entries,
@@ -31,6 +33,8 @@ export function PlaygroundShell({
     onClosePanel,
 }: {
     agent: AgentDetail | null;
+    /** The class is gone; the conversation is still readable. */
+    agentMissing?: boolean;
     loading: boolean;
     error: string | null;
     entries: ChatEntry[];
@@ -73,6 +77,17 @@ export function PlaygroundShell({
                             />
                         )}
 
+                        {agentMissing && (
+                            <Badge
+                                data-testid="agent-missing-notice"
+                                variant="pill"
+                                className="text-destructive"
+                            >
+                                <TriangleAlert className="h-3 w-3" />
+                                This agent no longer exists — the conversation is read-only
+                            </Badge>
+                        )}
+
                         {agent && !agent.capabilities.conversational && <StatelessNotice />}
                     </div>
 
@@ -106,7 +121,7 @@ export function PlaygroundShell({
                             models={agent?.models ?? []}
                             model={model}
                             onModelChange={onModelChange}
-                            disabled={sending || agent?.available === false}
+                            disabled={sending || agentMissing || agent?.available === false}
                             autoFocus={!started}
                         />
                     </div>

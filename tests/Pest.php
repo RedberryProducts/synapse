@@ -23,6 +23,12 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
  * provider. Registering all three classes is what makes the fake stick
  * regardless of which path the invoker takes.
  *
+ * **Every conversational agent therefore shares one gateway** — the decorator's.
+ * Calling this twice with different responses replaces the first, so a test that
+ * needs two agents to behave differently must pass one closure that keys on the
+ * prompt rather than two sets of responses. The fake gateway is handed the
+ * prompt but never the agent, so there is nothing else to discriminate on.
+ *
  * @param  array<int, mixed>|Closure  $responses
  */
 function fakeAgent(string $agent, array|Closure $responses = []): void

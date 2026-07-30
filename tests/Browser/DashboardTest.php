@@ -26,7 +26,7 @@ it('navigates to history via the sidebar without a full page load', function () 
     visit('/synapse')
         ->click('History')
         ->assertPathIs('/synapse/history')
-        ->assertSee('Past conversations will appear here.')
+        ->assertPresent('@history-empty')
         ->assertNoJavaScriptErrors();
 });
 

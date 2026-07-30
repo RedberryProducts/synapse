@@ -35,11 +35,13 @@ Route::prefix('api')->group(function (): void {
     Route::get('/attachments/{message}/{index}', [AttachmentsController::class, 'show']);
 
     // Feature 5 — History
-    Route::get('/conversations', fn () => response()->json(['data' => []]));
+    Route::get('/conversations', [ConversationsController::class, 'index']);
     Route::get('/conversations/{id}', [ConversationsController::class, 'show']);
-    Route::patch('/conversations/{id}', fn (string $id) => response()->noContent());
+    Route::patch('/conversations/{id}', [ConversationsController::class, 'update']);
     Route::delete('/conversations/{id}', [ConversationsController::class, 'destroy']);
-    Route::post('/conversations/clear', fn () => response()->noContent());
+    // No clear-all route: `synapse:clear` does that, and the dashboard has no
+    // control for it. A route that returned 204 and did nothing used to live
+    // here — worse than no route at all.
 });
 
 /*

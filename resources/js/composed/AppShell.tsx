@@ -4,8 +4,10 @@ import { Compass, History, PanelLeft } from 'lucide-react';
 import { Button } from '@/elements/Button';
 import { SidebarNavLink } from '@/elements/SidebarItem';
 import { SidebarAgentList } from '@/components/SidebarAgentList';
+import { SidebarConversationList } from '@/components/SidebarConversationList';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { useAgents } from '@/hooks/useAgents';
+import { useRecentConversations } from '@/hooks/useRecentConversations';
 import { config } from '@/lib/config';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +23,7 @@ export function AppShell() {
         () => localStorage.getItem(COLLAPSED_KEY) === '1',
     );
     const { agents, loading } = useAgents();
+    const { conversations, loading: loadingConversations } = useRecentConversations();
 
     useEffect(() => {
         localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
@@ -50,9 +53,10 @@ export function AppShell() {
                 {!collapsed ? (
                     <div className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
                         <Section title="Recent Conversations">
-                            <p className="px-2 text-sm text-subtle-foreground">
-                                No conversations yet.
-                            </p>
+                            <SidebarConversationList
+                                conversations={conversations}
+                                loading={loadingConversations}
+                            />
                         </Section>
                         <Section title="Agents">
                             <SidebarAgentList agents={agents} loading={loading} />
