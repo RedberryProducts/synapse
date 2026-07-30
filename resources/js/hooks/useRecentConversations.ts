@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getConversations } from '@/lib/api';
+import { onConversationsChanged } from '@/lib/conversationsChanged';
 import type { ConversationSummary } from '@/types/conversation';
 
 const LIMIT = 5;
@@ -8,15 +9,17 @@ const LIMIT = 5;
 /**
  * The sidebar's short list of recent conversations.
  *
- * Re-fetched on navigation rather than kept in a shared store: writes happen in
- * the playground and the list lives in the shell, and moving between the two is
- * exactly when the list needs to be right. One request per navigation is a
- * cheaper price than a store for a five-row list.
+ * Refreshed on navigation and whenever a conversation is written. Navigation
+ * alone is not enough: a rename or delete on the History page never changes the
+ * route, and the sidebar would go on showing a title that no longer exists.
  */
 export function useRecentConversations() {
     const [conversations, setConversations] = useState<ConversationSummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [revision, setRevision] = useState(0);
     const location = useLocation();
+
+    useEffect(() => onConversationsChanged(() => setRevision((value) => value + 1)), []);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -33,7 +36,7 @@ export function useRecentConversations() {
             });
 
         return () => controller.abort();
-    }, [location.pathname, location.search]);
+    }, [location.pathname, location.search, revision]);
 
     return { conversations, loading };
 }

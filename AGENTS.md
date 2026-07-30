@@ -143,10 +143,33 @@ Gotchas worth knowing:
 - **Scoped assertions run in Playwright strict mode** — the text must match exactly one node inside the scope. `assertSeeIn('@info-panel', 'PROVIDER')` fails when the panel also contains "PROVIDER OPTIONS". Pick unambiguous strings.
 - **Text assertions don't wait for a re-render; element assertions do.** After an interaction, prefer `assertPresent` / `assertMissing` over `assertSee` / `assertDontSee`.
 - **`type()` resolves fields by `name`/`id`, not by label.** Pass a testid — `type('@composer-input', '…')`. A field with only an `aria-label` hangs until timeout.
-- **The harness captures a streamed body in its own output buffer** (`ob_start()` → `sendContent()` → `ob_get_clean()`), so anything that calls `ob_flush()` sends its bytes to stdout and hands the browser nothing. Flush only when `headers_sent()` — see `StreamEmitter`.
+- **The harness captures a streamed body in its own output buffer** (`ob_start()` → `sendContent()` → `ob_get_clean()`), so anything that calls `ob_flush()` sends its bytes to stdout and hands the browser nothing. Guard the flush on `PHP_SAPI`, never on `headers_sent()` — see `StreamEmitter::shouldFlush()` and `tests/Feature/Chat/StreamFlushTest.php`.
+- **No browser test can observe a mid-stream state.** That same buffer means every SSE part reaches the page in one chunk, however long the run takes — a `pending` tool card is already `success` by the time the DOM exists. Assert the *end* state in a browser test and the streaming itself against a real server (below).
 - **The harness cannot upload a file.** It parses only `application/x-www-form-urlencoded` bodies and passes an empty files array to `Request::create()` (a `@TODO` in pest-plugin-browser). Browser tests can drive the composer as far as the chip; everything past it belongs in a feature test with a real multipart request.
 - **All conversational agents share one fake gateway** (the decorator's), so calling `fakeAgent()` twice with different responses replaces the first. A test needing two agents to behave differently passes one closure keyed on the prompt.
 - **Faked responses given as a list don't advance past a throwing entry.** The SDK's fake increments its cursor with `tap()` *after* marshalling, so an entry that throws is returned forever. Use a closure keyed on the prompt when a test needs a failure followed by a success.
+
+### Verifying that it actually streams
+
+Neither tier can: both run Laravel in-process on the CLI SAPI, where flushing is
+deliberately off. Streaming is only real over HTTP, so check it against
+`testing-laravel-project` — and check it after any change to `StreamEmitter` or
+the controller's stream closure.
+
+```bash
+curl -sN -o /dev/null -X POST http://127.0.0.1:8000/synapse/api/chat/app.agents.slow-tool-agent/send -b cookies.txt -H "X-XSRF-TOKEN: $TOKEN" -H 'Content-Type: application/json' -d '{"message":"Query the analytics service with seconds=4."}' -w 'ttfb=%{time_starttransfer}s total=%{time_total}s\n'
+```
+
+**`ttfb` must be a few milliseconds.** If it equals `total`, nothing is
+streaming: the whole conversation is buffered and painted at once, which looks
+like a hang and then a jump. That is precisely the regression
+`StreamFlushTest` exists to prevent.
+
+`SlowToolAgent` / `SlowTool` are the fixtures for this. Every other tool returns
+in microseconds, so its `tool-input-available` and `tool-output-available` land
+in the same TCP segment and the card renders already green — the `pending` state
+is real but unobservable. `SlowTool` sleeps for a requested 0–5 seconds, which
+holds the amber card open long enough to watch in the playground.
 
 ### What to test
 

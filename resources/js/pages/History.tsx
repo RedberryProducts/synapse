@@ -7,6 +7,7 @@ import { RenameDialog } from '@/components/RenameDialog';
 import { HistoryTable } from '@/composed/HistoryTable';
 import { useConversations } from '@/hooks/useConversations';
 import { deleteConversation, renameConversation } from '@/lib/api';
+import { conversationsChanged } from '@/lib/conversationsChanged';
 import { forget } from '@/lib/lastConversation';
 import {
     activeFilterCount,
@@ -45,6 +46,7 @@ export default function History() {
 
         setRenaming(null);
         refresh();
+        conversationsChanged();
     };
 
     const remove = async () => {
@@ -60,6 +62,7 @@ export default function History() {
 
         setDeleting(null);
         refresh();
+        conversationsChanged();
     };
 
     return (

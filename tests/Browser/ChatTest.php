@@ -15,6 +15,7 @@ use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
+use Workbench\App\Agents\SlowToolAgent;
 use Workbench\App\Agents\SupportAgent;
 use Workbench\App\Agents\WeatherAgent;
 
@@ -164,6 +165,29 @@ it('renders a tool card and its answer in the order they happened', function () 
     );
 
     expect($order)->toBe(['tool-card', 'message-assistant']);
+});
+
+it('resolves a slow tool without leaving the card behind', function () {
+    // The `pending` window itself is not assertable here: the browser driver
+    // runs Laravel in-process and collects the whole response with
+    // `ob_start()` / `ob_get_clean()`, so every SSE part reaches the page in one
+    // chunk no matter how long the tool takes. What this does cover is that a
+    // multi-second tool still lands as a resolved card with its answer below —
+    // see StreamFlushTest for the flush decision, and AGENTS.md for how to watch
+    // the amber state by hand.
+    fakeAgent(SlowToolAgent::class, [
+        new ToolCall(id: 'call_1', name: 'SlowTool', arguments: ['seconds' => 1]),
+        'Forty-two rows.',
+    ]);
+
+    $page = visit('/synapse/playground/workbench.app.agents.slow-tool-agent');
+
+    $page->type('@composer-input', 'Query the analytics service')->click('Send');
+
+    $page->assertPresent('[data-tool-status=success]')
+        ->assertSeeIn('@tool-card', 'SlowTool')
+        ->assertSeeIn('@message-assistant', 'Forty-two rows.')
+        ->assertNoJavaScriptErrors();
 });
 
 it('marks a failed tool on the card and explains it below', function () {

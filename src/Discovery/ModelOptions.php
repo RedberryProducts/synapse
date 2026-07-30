@@ -19,14 +19,24 @@ class ModelOptions
      */
     public function for(DiscoveredAgent $agent): array
     {
+        $tiers = $this->providerTiers($agent);
         $options = [];
 
-        if ($agent->model !== null) {
-            $options[] = $this->option($agent->model, 'agent');
+        // An agent that names no model still has a default — the tier attribute
+        // (`#[UseSmartestModel]`) or the provider's own default resolves it at
+        // invocation time. Without this the first option in the list would be
+        // whatever came next, and the composer would sit there labelled with a
+        // model the agent is not going to use.
+        $default = $agent->model ?? ($tiers[$agent->modelTier] ?? $tiers['default'] ?? null);
+
+        if ($default !== null) {
+            $options[] = $this->option($default, 'agent');
         }
 
-        foreach ($this->providerTiers($agent) as $tier => $model) {
-            $options[] = $this->option($model, $tier);
+        foreach ($tiers as $tier => $model) {
+            if ($tier !== 'default') {
+                $options[] = $this->option($model, $tier);
+            }
         }
 
         foreach ((array) config('synapse.playground.models', []) as $model) {
@@ -65,6 +75,9 @@ class ModelOptions
             return [
                 'cheapest' => $provider->cheapestTextModel(),
                 'smartest' => $provider->smartestTextModel(),
+                // Not offered as a choice — only used to resolve the default of
+                // an agent that names neither a model nor a tier.
+                'default' => $provider->defaultTextModel(),
             ];
         } catch (Throwable) {
             return [];

@@ -4,6 +4,7 @@ namespace Redberry\Synapse\Chat;
 
 use Illuminate\Http\Client\RequestException;
 use Throwable;
+use WeakMap;
 
 /**
  * Digs the provider's own explanation out of a failed HTTP call.
@@ -23,6 +24,23 @@ class ProviderErrorDetail
     protected const int MAX_BODY = 8000;
 
     /**
+     * Bodies already read, keyed by the throwable they came from.
+     *
+     * `Response::body()` is `(string) $response->getBody()`, and a failure from
+     * a *streaming* request carries a non-seekable stream — so the first read
+     * drains it and every read after that returns an empty string. One turn asks
+     * twice (the stored error row, then the SSE part), which is exactly how the
+     * browser ended up with a blank provider response while the database had the
+     * real one.
+     *
+     * A WeakMap rather than a plain array: entries disappear with the throwable,
+     * so nothing is held past the request that produced it.
+     *
+     * @var WeakMap<Throwable, array{status: int, body: string}>
+     */
+    protected static ?WeakMap $cache = null;
+
+    /**
      * The status and body of the failed request, walking the exception chain.
      *
      * The SDK converts some failures into its own exception types (rate limits,
@@ -33,15 +51,41 @@ class ProviderErrorDetail
      */
     public static function for(?Throwable $e): ?array
     {
-        while ($e !== null) {
-            if ($e instanceof RequestException && $e->response !== null) {
+        if ($e === null) {
+            return null;
+        }
+
+        static::$cache ??= new WeakMap;
+
+        if (isset(static::$cache[$e])) {
+            return static::$cache[$e];
+        }
+
+        $found = static::read($e);
+
+        if ($found !== null) {
+            static::$cache[$e] = $found;
+        }
+
+        return $found;
+    }
+
+    /**
+     * @return array{status: int, body: string}|null
+     */
+    protected static function read(Throwable $e): ?array
+    {
+        $current = $e;
+
+        while ($current !== null) {
+            if ($current instanceof RequestException && $current->response !== null) {
                 return [
-                    'status' => $e->response->status(),
-                    'body' => mb_substr($e->response->body(), 0, self::MAX_BODY),
+                    'status' => $current->response->status(),
+                    'body' => mb_substr($current->response->body(), 0, self::MAX_BODY),
                 ];
             }
 
-            $e = $e->getPrevious();
+            $current = $current->getPrevious();
         }
 
         return null;

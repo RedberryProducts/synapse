@@ -14,7 +14,14 @@ import type { ChatEntry } from '@/types/chat';
  * scrolls up — yanking someone back to the bottom mid-read is the fastest way
  * to make a live view useless.
  */
-export function ChatThread({ entries }: { entries: ChatEntry[] }) {
+export function ChatThread({
+    entries,
+    agentModel,
+}: {
+    entries: ChatEntry[];
+    /** Passed to assistant turns so an overridden model can be named. */
+    agentModel?: string | null;
+}) {
     const container = useRef<HTMLDivElement>(null);
     const pinned = useRef(true);
 
@@ -47,20 +54,20 @@ export function ChatThread({ entries }: { entries: ChatEntry[] }) {
         >
             <div className="mx-auto flex max-w-3xl flex-col gap-6">
                 {entries.map((entry) => (
-                    <Entry key={entry.id} entry={entry} />
+                    <Entry key={entry.id} entry={entry} agentModel={agentModel} />
                 ))}
             </div>
         </div>
     );
 }
 
-function Entry({ entry }: { entry: ChatEntry }) {
+function Entry({ entry, agentModel }: { entry: ChatEntry; agentModel?: string | null }) {
     switch (entry.kind) {
         case 'user':
             return <UserMessage content={entry.content} attachments={entry.attachments} />;
 
         case 'assistant':
-            return <AssistantMessage entry={entry} />;
+            return <AssistantMessage entry={entry} agentModel={agentModel} />;
 
         case 'tool':
             return <ToolCard entry={entry} />;

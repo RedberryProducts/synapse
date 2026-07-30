@@ -44,7 +44,32 @@ class StreamEmitter
      */
     protected array $written = [];
 
-    public function __construct(protected bool $echo = true) {}
+    /**
+     * @param  string  $sapi  Injectable only so the flush decision can be tested;
+     *                        production always passes the real SAPI.
+     */
+    public function __construct(protected bool $echo = true, protected string $sapi = PHP_SAPI) {}
+
+    /**
+     * Whether each part should be pushed to the client as it is written.
+     *
+     * Deliberately *not* `headers_sent()`. The stock php.ini sets
+     * `output_buffering=4096`, so the first echo lands in PHP's own buffer and
+     * the headers are never sent — a `headers_sent()` check therefore answers
+     * "no" on every part for the whole run, and the dashboard sits blank until
+     * the agent finishes and then paints the entire conversation at once.
+     * Silent, and only on real deployments.
+     *
+     * The honest question is whether this is being served over HTTP at all.
+     * Under CLI it is a test harness, which calls `sendContent()` inside its own
+     * output buffer and reads the body back with `ob_get_clean()` — flushing
+     * there would push our bytes past that buffer to stdout and hand the caller
+     * an empty response. Symfony's `Response::send()` discriminates the same way.
+     */
+    public function shouldFlush(): bool
+    {
+        return ! in_array($this->sapi, ['cli', 'phpdbg', 'embed'], true);
+    }
 
     /**
      * Announce the conversation before any model output, so the client can put
@@ -269,12 +294,7 @@ class StreamEmitter
 
         echo 'data: '.$payload."\n\n";
 
-        // Push each part out as it happens rather than at the end of the run —
-        // but only when the response is genuinely on the wire. Test harnesses
-        // call `sendContent()` without sending headers and capture the body in
-        // their own output buffer; flushing there would push our bytes straight
-        // past that buffer to stdout and hand the caller an empty response.
-        if (! headers_sent()) {
+        if (! $this->shouldFlush()) {
             return;
         }
 

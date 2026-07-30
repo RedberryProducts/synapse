@@ -12,7 +12,14 @@ import type { AssistantEntry } from '@/types/chat';
  * several, and the thread keeps them apart so the tool card sits where it
  * actually happened.
  */
-export function AssistantMessage({ entry }: { entry: AssistantEntry }) {
+export function AssistantMessage({
+    entry,
+    agentModel,
+}: {
+    entry: AssistantEntry;
+    /** The agent's configured model, so an override can be called out. */
+    agentModel?: string | null;
+}) {
     return (
         <div data-testid="message-assistant" className="text-sm">
             {(entry.reasoning !== '' || entry.reasoningStreaming) && (
@@ -36,7 +43,12 @@ export function AssistantMessage({ entry }: { entry: AssistantEntry }) {
             {entry.structured && <StructuredOutputCard data={entry.structured} />}
 
             {!entry.streaming && entry.usage && (
-                <MessageMeta usage={entry.usage} durationMs={entry.durationMs} meta={entry.meta} />
+                <MessageMeta
+                    usage={entry.usage}
+                    durationMs={entry.durationMs}
+                    meta={entry.meta}
+                    agentModel={agentModel}
+                />
             )}
         </div>
     );

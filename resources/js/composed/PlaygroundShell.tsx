@@ -65,7 +65,15 @@ export function PlaygroundShell({
                             {agent?.provider && (
                                 <span className="truncate text-xs text-muted-foreground">
                                     {agent.provider}
-                                    {agent.model && ` / ${agent.model}`}
+                                    {/*
+                                        An agent with no explicit model resolves
+                                        one from its tier attribute. Showing the
+                                        tier matches the Discovery card and beats
+                                        showing nothing at all.
+                                    */}
+                                    {agent.model
+                                        ? ` / ${agent.model}`
+                                        : agent.model_tier !== 'default' && ` / ${agent.model_tier}`}
                                 </span>
                             )}
                         </div>
@@ -112,7 +120,7 @@ export function PlaygroundShell({
                     </div>
                 </header>
 
-                <ChatThread entries={entries} />
+                <ChatThread entries={entries} agentModel={agent?.model} />
 
                 <div className="px-8 pt-2 pb-6">
                     <div className="mx-auto max-w-3xl">

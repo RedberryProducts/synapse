@@ -69,6 +69,37 @@ it('offers the agent model first, then the provider tiers', function () {
         ->and(array_column($options, 'tier'))->toContain('smartest');
 });
 
+it('names the tier model as the default for an agent with no explicit model', function () {
+    // KitchenSinkAgent carries #[UseSmartestModel] and no #[Model], so the model
+    // it will actually run on comes from the tier. Without an `agent` entry the
+    // composer's chip falls back to the first option — labelling the playground
+    // with a model the agent is not going to use, which is precisely the lie
+    // this product exists to prevent.
+    $agent = app(AgentDiscovery::class)->find('workbench.app.agents.kitchen-sink-agent');
+
+    $options = app(ModelOptions::class)->for($agent);
+
+    expect($agent->model)->toBeNull()
+        ->and($agent->modelTier)->toBe('smartest')
+        ->and($options[0]['tier'])->toBe('agent')
+        // The default and the smartest tier are the same model here, so it must
+        // appear once, labelled as the agent's own.
+        ->and(array_column($options, 'id'))->toBe(array_unique(array_column($options, 'id')));
+
+    expect($options[0]['id'])->toBe(
+        collect($options)->firstWhere('tier', 'smartest')['id'] ?? $options[0]['id']
+    );
+});
+
+it('never offers a bare provider default as a choice', function () {
+    // The provider's default is only used to resolve an agent that names neither
+    // a model nor a tier; it is not a tier the developer picked.
+    $agent = app(AgentDiscovery::class)->find('workbench.app.agents.support-agent');
+
+    expect(array_column(app(ModelOptions::class)->for($agent), 'tier'))
+        ->not->toContain('default');
+});
+
 it('appends configured extras without duplicating anything', function () {
     config(['synapse.playground.models' => ['gpt-5.6-luna', 'some-other-model']]);
 

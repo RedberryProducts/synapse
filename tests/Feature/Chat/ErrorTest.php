@@ -1,6 +1,8 @@
 <?php
 
+use GuzzleHttp\Psr7\NoSeekStream;
 use GuzzleHttp\Psr7\Response as Psr7Response;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -98,6 +100,26 @@ it('leaves the response fields empty for a failure that was not an http call', f
 
     expect($error['data']['responseStatus'])->toBeNull()
         ->and($error['data']['responseBody'])->toBeNull();
+});
+
+it('reads a streamed response body once and reports it everywhere', function () {
+    // A failure from a streaming request carries a NON-SEEKABLE body, so the
+    // first read drains it. One turn asks twice — the stored error row, then the
+    // SSE part — and before this was cached the browser got a blank provider
+    // response while the database had the real one. Found in manual e2e; no
+    // amount of unit testing with an in-memory body would have shown it,
+    // because those streams rewind.
+    $stream = new NoSeekStream(Utils::streamFor('{"error":{"message":"Unsupported MIME type."}}'));
+    $exception = new RequestException(new Response(new Psr7Response(400, [], $stream)));
+
+    fakeAgent(SupportAgent::class, [fn () => throw $exception]);
+
+    $response = sendMessage('workbench.app.agents.support-agent', 'Anything');
+
+    // Both readers see it, in whichever order they ask.
+    expect(chatPart($response, 'error')['data']['responseBody'])->toContain('Unsupported MIME type')
+        ->and(SynapseMessage::query()->where('role', 'error')->sole()->metadata['response_body'])
+        ->toContain('Unsupported MIME type');
 });
 
 it('still closes the stream cleanly when the agent fails', function () {
