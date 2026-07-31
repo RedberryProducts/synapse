@@ -126,6 +126,10 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
             handlers.onNotice?.(part.data?.message as string);
             break;
 
+        case 'data-synapse-provider':
+            handlers.onProvider?.(part.data?.provider as string);
+            break;
+
         case 'data-structured-output':
             handlers.onStructured?.(part.data ?? {});
             break;

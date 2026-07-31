@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getConversations } from '@/lib/api';
+import { onConversationsChanged } from '@/lib/conversationsChanged';
 import type {
     ConversationFilters,
     ConversationPage,
@@ -33,6 +34,11 @@ export function useConversations(filters: ConversationFilters) {
     const first = useRef(true);
 
     const refresh = useCallback(() => setRevision((value) => value + 1), []);
+
+    // A rename or delete can now come from the sidebar as well as from this
+    // table, and neither one changes the route. Without this the History page
+    // would go on showing a row the user just deleted somewhere else.
+    useEffect(() => onConversationsChanged(refresh), [refresh]);
 
     useEffect(() => {
         const controller = new AbortController();

@@ -222,6 +222,24 @@ class StreamEmitter
     }
 
     /**
+     * Name the provider this run is actually going through.
+     *
+     * A provider-native tool card carries a `provider /` prefix, and on replay
+     * that comes from the assistant message's stored meta — the provider the SDK
+     * reported, not the one the agent was configured with. Those differ after a
+     * failover, which is exactly when knowing who to blame matters, so the live
+     * stream announces the real one rather than letting the client assume the
+     * configured one. Re-announced per attempt, so a failover corrects it.
+     */
+    public function provider(string $provider): void
+    {
+        $this->part([
+            'type' => 'data-synapse-provider',
+            'data' => ['provider' => $provider],
+        ]);
+    }
+
+    /**
      * Report an informational event that is not a failure — a provider failover,
      * for instance, where the run carried on against the next provider.
      *

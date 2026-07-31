@@ -199,6 +199,42 @@ it('lists recent conversations in the sidebar with an error indicator', function
     ))->toBe(1);
 });
 
+it('renames a conversation from the sidebar menu', function () {
+    seedHistory();
+
+    $page = visit('/synapse/history');
+
+    $page->click('[aria-label="Recent conversation actions for Find me a hoodie"]');
+    $page->click('Rename');
+
+    $page->assertPresent('@rename-dialog');
+    $page->type('[aria-label="Conversation name"]', 'Renamed from the sidebar');
+    $page->click('Save');
+
+    // Both lists read the same records, so both have to show the new title —
+    // the sidebar going stale after a write is the bug this shares its
+    // implementation with History to avoid.
+    $page->assertSeeIn('@sidebar-conversations', 'Renamed from the sidebar')
+        ->assertSeeIn('@history-table', 'Renamed from the sidebar')
+        ->assertNoJavaScriptErrors();
+});
+
+it('deletes a conversation from the sidebar after confirming', function () {
+    seedHistory();
+
+    $page = visit('/synapse/history');
+
+    $page->click('[aria-label="Recent conversation actions for Weather in Tbilisi"]');
+    $page->click('Delete');
+
+    $page->assertPresent('@delete-dialog');
+    $page->click('[aria-label="Confirm delete"]');
+
+    $page->assertMissing('[data-agent="workbench.app.agents.weather-agent"]');
+
+    expect(SynapseConversation::query()->count())->toBe(2);
+});
+
 it('returns you to the conversation you were last in', function () {
     fakeAgent(SupportAgent::class, ['Answered.']);
 

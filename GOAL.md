@@ -32,6 +32,7 @@ Think of it as the missing UI for `laravel/ai`, in the same spirit as Telescope,
 - [Theming](#theming)
 - [Compatibility](#compatibility)
 - [What Synapse does not do](#what-synapse-does-not-do)
+- [Planned](#planned)
 - [Troubleshooting & FAQ](#troubleshooting--faq)
 
 ---
@@ -157,6 +158,8 @@ The **⋮ menu** in the playground header holds:
 
 - **If your agent supports conversation memory** (it implements the SDK's `Conversational` contract — most commonly via the `RemembersConversations` trait), the playground is a true multi-turn conversation. Each message is sent with the full thread, so the agent has the earlier context. Synapse supplies that history from **its own** stored messages rather than your app's conversation tables, so you don't have to call `forUser()` or `continue()` to try an agent out, and nothing you do in the playground touches your production conversation data.
 - **If your agent is stateless** (it doesn't implement `Conversational`), each message is sent to the agent on its own, with **no earlier messages attached** — exactly how it behaves in production. Synapse still keeps the messages together in one session so you can read them as a thread, and marks the agent **Stateless** so you know why it won't recall previous turns.
+
+- **One exception: structured-output agents.** An agent implementing `HasStructuredOutput` runs single-shot with no earlier messages attached, even if it is also `Conversational`. This comes from the SDK, not from a choice Synapse made: `StreamsText::stream()` rejects any agent with structured output, so these never take the streaming path, and the wrapper Synapse uses to supply conversation history can't carry the structured-output contract without breaking every other conversational agent. In practice an agent that extracts a fixed shape from one input rarely wants memory — but if yours does, it will not have it here.
 
 The point: what you see in Synapse is what you'd get in production. Synapse won't give your agent memory it doesn't actually have — if you need multi-turn behavior, that's a signal to make your agent conversational in code.
 
@@ -434,7 +437,7 @@ Synapse ships light and dark themes. A **theme switcher** sits in the sidebar's 
 
 | Package | Support | How |
 |---------|---------|-----|
-| **Laravel AI SDK** (`laravel/ai`) | First-class | Discovers your agents, chats with them, and inspects tool calls, tokens, reasoning, and citations |
+| **Laravel AI SDK** (`laravel/ai`) | First-class | Discovers your agents, chats with them, and inspects tool calls, tokens, and reasoning |
 | **Any SDK-compatible framework** | Automatic | Any framework whose agents implement the SDK's `Agent` contract works with no adapter — if it dispatches the SDK's events, Synapse records them |
 
 Synapse doesn't require you to change a single line of your agent code. It reads what's already there.
@@ -453,6 +456,26 @@ Synapse is focused on the **build/test/debug loop for text agents**. The followi
 - **No auto-generated titles.** Conversation titles come from your first message (or a name you set). Synapse never makes an extra model call just to title a chat.
 
 These may be revisited once the core loop is solid.
+
+---
+
+## Planned
+
+Not in this release, and named here so you know they're missing rather than
+hidden.
+
+**Citations.** When an agent uses provider-native web search, the SDK reports
+which sources backed which parts of the answer — `laravel/ai` models this as a
+`Citation` event carrying a URL, a title, and the character range of the answer
+that source supports. That range is the valuable part: it separates an agent that
+searched and *used* what it found from one that searched, ignored the results,
+and wrote something plausible. Both read identically in a transcript.
+
+Synapse doesn't surface them yet. Two things make it a real piece of work rather
+than a patch:
+
+- Of the SDK's gateways, only **Anthropic** and **OpenRouter** emit citations while streaming. OpenAI, Gemini and xAI parse them only on the non-streaming path, so a citations panel would sit empty for a lot of setups today.
+- The SDK's Vercel serialization keeps only the bare URL and drops the title and the character range, so getting the useful part means carrying the raw event — the same kind of workaround Synapse already applies to two other events the serializer flattens.
 
 ---
 

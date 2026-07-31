@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { Compass, History, PanelLeft } from 'lucide-react';
 import { Button } from '@/elements/Button';
 import { SidebarNavLink } from '@/elements/SidebarItem';
@@ -7,6 +7,7 @@ import { SidebarAgentList } from '@/components/SidebarAgentList';
 import { SidebarConversationList } from '@/components/SidebarConversationList';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { useAgents } from '@/hooks/useAgents';
+import { useConversationActions } from '@/hooks/useConversationActions';
 import { useRecentConversations } from '@/hooks/useRecentConversations';
 import { config } from '@/lib/config';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,11 @@ export function AppShell() {
     );
     const { agents, loading } = useAgents();
     const { conversations, loading: loadingConversations } = useRecentConversations();
+    const navigate = useNavigate();
+
+    // No refresh callback: the recents hook already re-fetches on the
+    // `conversationsChanged` broadcast these actions send.
+    const { askRename, askDelete, dialogs } = useConversationActions();
 
     useEffect(() => {
         localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
@@ -56,6 +62,13 @@ export function AppShell() {
                             <SidebarConversationList
                                 conversations={conversations}
                                 loading={loadingConversations}
+                                onOpen={(conversation) =>
+                                    navigate(
+                                        `/playground/${conversation.agent_slug}?c=${conversation.id}`,
+                                    )
+                                }
+                                onRename={askRename}
+                                onDelete={askDelete}
                             />
                         </Section>
                         <Section title="Agents">
@@ -98,6 +111,8 @@ export function AppShell() {
             <main className="flex-1 overflow-y-auto">
                 <Outlet />
             </main>
+
+            {dialogs}
         </div>
     );
 }

@@ -43,6 +43,8 @@ export interface StreamHandlers {
     onTextDelta?: (id: string, delta: string) => void;
     onError?: (error: ChatError) => void;
     onNotice?: (message: string) => void;
+    /** The provider this run actually resolved to; re-sent on a failover. */
+    onProvider?: (provider: string) => void;
     onStructured?: (data: Record<string, unknown>) => void;
     onReasoningStart?: () => void;
     onReasoningDelta?: (delta: string) => void;

@@ -1,14 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { DeleteDialog } from '@/components/DeleteDialog';
 import { HistoryFilters } from '@/components/HistoryFilters';
 import { PageHeader } from '@/components/PageHeader';
-import { RenameDialog } from '@/components/RenameDialog';
 import { HistoryTable } from '@/composed/HistoryTable';
+import { useConversationActions } from '@/hooks/useConversationActions';
 import { useConversations } from '@/hooks/useConversations';
-import { deleteConversation, renameConversation } from '@/lib/api';
-import { conversationsChanged } from '@/lib/conversationsChanged';
-import { forget } from '@/lib/lastConversation';
 import {
     activeFilterCount,
     emptyFilters,
@@ -26,8 +22,9 @@ export default function History() {
 
     const { conversations, options, meta, loading, error, refresh } = useConversations(filters);
 
-    const [renaming, setRenaming] = useState<ConversationSummary | null>(null);
-    const [deleting, setDeleting] = useState<ConversationSummary | null>(null);
+    // Shared with the sidebar's recents, which offers the same two actions on
+    // the same records.
+    const { askRename, askDelete, dialogs } = useConversationActions(refresh);
 
     const setFilters = useCallback(
         (next: ConversationFilters) => setParams(toParams(next), { replace: true }),
@@ -36,34 +33,6 @@ export default function History() {
 
     const open = (conversation: ConversationSummary) =>
         navigate(`/playground/${conversation.agent_slug}?c=${conversation.id}`);
-
-    const rename = async (title: string) => {
-        if (!renaming) {
-            return;
-        }
-
-        await renameConversation(renaming.id, title).catch(() => null);
-
-        setRenaming(null);
-        refresh();
-        conversationsChanged();
-    };
-
-    const remove = async () => {
-        if (!deleting) {
-            return;
-        }
-
-        await deleteConversation(deleting.id).catch(() => null);
-
-        // A remembered pointer to a deleted conversation would strand you on an
-        // empty playground the next time you opened that agent.
-        forget(deleting.id);
-
-        setDeleting(null);
-        refresh();
-        conversationsChanged();
-    };
 
     return (
         <div className="space-y-8 p-8">
@@ -85,25 +54,13 @@ export default function History() {
                     filtered={activeFilterCount(filters) > 0}
                     onPage={(page) => setFilters({ ...filters, page })}
                     onOpen={open}
-                    onRename={setRenaming}
-                    onDelete={setDeleting}
+                    onRename={askRename}
+                    onDelete={askDelete}
                     onClearFilters={() => setFilters(emptyFilters)}
                 />
             )}
 
-            <RenameDialog
-                open={renaming !== null}
-                title={renaming?.title ?? ''}
-                onClose={() => setRenaming(null)}
-                onSave={(title) => void rename(title)}
-            />
-
-            <DeleteDialog
-                open={deleting !== null}
-                title={deleting?.title ?? ''}
-                onClose={() => setDeleting(null)}
-                onConfirm={() => void remove()}
-            />
+            {dialogs}
         </div>
     );
 }

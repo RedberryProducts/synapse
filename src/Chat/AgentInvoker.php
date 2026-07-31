@@ -8,6 +8,7 @@ use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Events\AgentFailedOver;
 use Laravel\Ai\Events\InvokingTool;
+use Laravel\Ai\Events\StreamingAgent;
 use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Files\File;
 use Laravel\Ai\Messages\Message;
@@ -83,6 +84,7 @@ class AgentInvoker
                 throw new RuntimeException($discovered->class.' does not implement '.Agent::class.'.');
             }
 
+            $this->announceProvider($emitter);
             $this->announceFailovers($emitter);
             $this->recordToolInvocations($conversation);
 
@@ -192,7 +194,9 @@ class AgentInvoker
      * implementing `HasStructuredOutput`, so these never take the streaming
      * path. They are also invoked undecorated: the decorator cannot carry
      * `HasStructuredOutput` (it would break every conversational stream), and no
-     * agent is usefully both today. Epic 5 revisits the rendering.
+     * agent is usefully both today — so one of these gets no conversation
+     * history even when it is also `Conversational`. GOAL's memory section
+     * documents that as an exception rather than leaving it to be discovered.
      */
     protected function promptOnce(
         Agent $agent,
@@ -311,6 +315,23 @@ class AgentInvoker
                     ['provider' => $event->provider->name(), 'model' => $event->model],
                 );
             }
+        );
+    }
+
+    /**
+     * Tell the client which provider the run is actually going through.
+     *
+     * The client needs this before the first provider-native tool event, which
+     * is why it rides the stream rather than being read off the agent's
+     * configuration: `StreamingAgent` fires once the SDK has resolved the
+     * provider, and again on a failover retry, so the prefix on a live tool card
+     * names the same provider the stored message will.
+     */
+    protected function announceProvider(StreamEmitter $emitter): void
+    {
+        $this->events->listen(
+            StreamingAgent::class,
+            fn (StreamingAgent $event) => $emitter->provider($event->prompt->provider()->name()),
         );
     }
 

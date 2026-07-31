@@ -41,6 +41,9 @@ export function useConversation(slug: string | undefined, conversationId: string
      */
     const loaded = useRef<string | null>(null);
 
+    /** The provider the current run resolved to, announced by the stream. */
+    const provider = useRef<string | null>(null);
+
     // Switching agents starts over. Without this the previous agent's thread
     // stays on screen under the new agent's name — the worst thing a tool built
     // for attribution can do.
@@ -48,6 +51,7 @@ export function useConversation(slug: string | undefined, conversationId: string
         abort.current?.abort();
         setEntries([]);
         loaded.current = null;
+        provider.current = null;
     }, [slug]);
 
     // Load an existing thread when the URL names one (refresh, deep link).
@@ -184,8 +188,22 @@ export function useConversation(slug: string | undefined, conversationId: string
                                 })),
                             ),
 
+                        // Held in a ref rather than state: nothing renders it on
+                        // its own, and it is read while folding a later event.
+                        // Announced before the run's first provider-tool event,
+                        // and again on a failover — so the retry's cards name
+                        // the provider that actually served them. Cards already
+                        // on screen keep naming the attempt they belong to,
+                        // which is what a failover notice above them says
+                        // happened.
+                        onProvider: (name) => {
+                            provider.current = name;
+                        },
+
                         onProviderTool: (event) =>
-                            setEntries((current) => applyProviderTool(current, event)),
+                            setEntries((current) =>
+                                applyProviderTool(current, event, provider.current),
+                            ),
 
                         // Reasoning arrives before the answer, so the entry it
                         // belongs to may not exist yet — open one for it.
@@ -471,7 +489,11 @@ function failPendingTools(entries: ChatEntry[], message: string): ChatEntry[] {
  * The status mapping mirrors the server's: anything unrecognised stays pending
  * rather than claiming a result that never came.
  */
-function applyProviderTool(entries: ChatEntry[], event: ProviderToolPart): ChatEntry[] {
+function applyProviderTool(
+    entries: ChatEntry[],
+    event: ProviderToolPart,
+    provider: string | null,
+): ChatEntry[] {
     const status = normalizeProviderStatus(event.status);
     const known = entries.some((entry) => entry.kind === 'tool' && entry.id === event.item_id);
 
@@ -491,7 +513,10 @@ function applyProviderTool(entries: ChatEntry[], event: ProviderToolPart): ChatE
             id: event.item_id,
             type: 'provider_tool',
             name: typeof event.data?.name === 'string' ? event.data.name : event.type,
-            provider: null,
+            // Announced by the stream before the first provider-tool event, so
+            // a live card carries the same `provider /` prefix that replay
+            // builds from the stored message meta.
+            provider,
             arguments: event.data,
             result: status === 'pending' ? null : event.data,
             status,
