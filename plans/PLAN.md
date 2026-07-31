@@ -27,14 +27,19 @@ High-level roadmap: phases, epics, and sequence. Each epic has its own folder he
 | 4 | [Tool Inspection](epic-04-tool-inspection/PLAN.md) ✅ done | Inline tool cards: pending → success/error, args/results, provider tools | L | 3 |
 | 5 | [Chat Advanced](epic-05-chat-advanced/PLAN.md) ✅ done | Attachments, model selector, reasoning pane, structured output | L | 3, 4 |
 | 6 | [History](epic-06-history/PLAN.md) ✅ done | Searchable history, filters, replay, rename/delete, sidebar recents | L | 3, 4, 5 |
-| 7 | [Release](epic-07-release/PLAN.md) | Install polish, docs, `about`, perf pass, v0.1.0 | M | all |
+| 7.1 | [Runtime Matrix](epic-07.1-runtime-matrix/PLAN.md) | Prove it streams on every runtime we claim, and say where it doesn't | M | 6 |
+| 7.2 | [Cost & Correctness](epic-07.2-cost-and-correctness/PLAN.md) | Discovery/query/bundle cost, and GOAL claims reconciled with the code | M | 7.1 |
+| 7.3 | [Install, Operability & Docs](epic-07.3-install-and-docs/PLAN.md) | Package name, README, `about`, install idempotency, config reference | M | 7.1, 7.2 |
+| 7.4 | [Release](epic-07.4-release/PLAN.md) | Clean-app smoke test, manual e2e, CHANGELOG, tag v0.1.0 | S | 7.1–7.3 |
 
 ```
 0 Scaffold ✅
       │
       ├─► 1 Discovery ✅ ──► 2 Info Panel ✅
       │        │
-      │        └────────────► 3 Chat MVP ✅ ──► 4 Tool Inspection ✅ ──► 5 Chat Advanced ✅ ──► 6 History ✅ ──► 7 Release
+      │        └────────────► 3 Chat MVP ✅ ──► 4 Tool Inspection ✅ ──► 5 Chat Advanced ✅ ──► 6 History ✅
+                                                                                                   │
+                                        7.1 Runtime ──► 7.2 Cost & Correctness ──► 7.3 Docs ──► 7.4 Release
 ```
 
 ### Why this order
@@ -74,8 +79,24 @@ Attachments (upload to configured disk, `Stored*` classes, chips + dropzone, thu
 
 **Success:** find any past conversation and reopen it with every card intact.
 
-### Epic 7 — Release
-`synapse:install` UX polish, `AboutCommand` entry, README/docs pass, asset-publish-on-update guidance, bundle/query review, full manual e2e + real-install smoke test, CHANGELOG, tag v0.1.0.
+### Epic 7 — Release, in four parts
+
+Originally one epic, scoped as polish + docs + tag. Split after Epic 6, when a
+manual pass found that Synapse had **never streamed** on a real server — the
+emitter guarded its flush on `headers_sent()`, false under the stock `php.ini`,
+so time-to-first-byte equalled total time. Six epics of green tests could not see
+it, because every test tier runs Laravel in-process on the CLI SAPI.
+
+That moved the release epic's centre of gravity from polish to proof, which is
+more work than one epic should carry.
+
+**7.1 Runtime Matrix** — a committed `bin/check-streaming.sh`, measured TTFB on `artisan serve`, Herd/Valet, Sail and FrankenPHP, a visible notice on runtimes that buffer, and Octane declared unsupported for v0.1.0.
+
+**7.2 Cost & Correctness** — discovery rescan cost, query counts, bundle size, replay payload; plus triage of four reviewed gaps between GOAL.md and the code, each adopted or explicitly retracted.
+
+**7.3 Install, Operability & Docs** — reconcile the package name (`composer.json` says `redberry/synapse`, GOAL says `synapse-ai/synapse`), rewrite the README, `php artisan about`, install idempotency and the update path, full config reference.
+
+**7.4 Release** — clean-app install from Packagist, manual e2e across all six epics, CHANGELOG, tag v0.1.0.
 
 ## Conventions for epic folders
 
