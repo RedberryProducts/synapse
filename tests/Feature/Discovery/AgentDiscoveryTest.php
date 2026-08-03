@@ -109,3 +109,55 @@ it('sorts agents by name', function () {
 
     expect($names)->toBe(collect($names)->sort()->values()->all());
 });
+
+it('finds an agent written after the container booted', function () {
+    // Success Criterion #1: write a class, refresh, it's there. No cache-clear
+    // step, no restart. Discovery deliberately has no persistent cache — the
+    // scan is cheap (measured at 9ms for 250 agents, cold, in Epic 7.2) and a
+    // stale dashboard is worse than a rescan on a tool you use while editing
+    // the very classes it lists.
+    //
+    // This is the test that fails the day someone adds one.
+    $dir = dirname(__DIR__, 3).'/workbench/app/Agents/Runtime';
+
+    // A first scan populates whatever caching might exist, so the new class has
+    // something to be missing from.
+    expect(discoveredClasses(discovery()))->not->toContain('Workbench\App\Agents\Runtime\JustWrittenAgent');
+
+    // `AgentDiscovery` is a singleton and memoises for its own lifetime, which
+    // is one request. Forgetting the instance is what a refresh does — without
+    // this the test would assert against the cache it is supposed to be proving
+    // does not outlive the request.
+    app()->forgetInstance(AgentDiscovery::class);
+
+    mkdir($dir, 0777, true);
+    file_put_contents("{$dir}/JustWrittenAgent.php", <<<'AGENT'
+    <?php
+
+    namespace Workbench\App\Agents\Runtime;
+
+    use Laravel\Ai\Attributes\Provider;
+    use Laravel\Ai\Contracts\Agent;
+    use Laravel\Ai\Promptable;
+    use Stringable;
+
+    #[Provider('openai')]
+    class JustWrittenAgent implements Agent
+    {
+        use Promptable;
+
+        public function instructions(): Stringable|string
+        {
+            return 'Written while the app was already running.';
+        }
+    }
+    AGENT);
+
+    try {
+        expect(discoveredClasses(discovery()))
+            ->toContain('Workbench\App\Agents\Runtime\JustWrittenAgent');
+    } finally {
+        unlink("{$dir}/JustWrittenAgent.php");
+        rmdir($dir);
+    }
+});
