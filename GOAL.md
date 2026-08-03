@@ -43,7 +43,7 @@ Think of it as the missing UI for `laravel/ai`, in the same spirit as Telescope,
 |-------------|---------|
 | PHP | 8.3+ |
 | Laravel | 12 or 13 |
-| `laravel/ai` | 0.9.x |
+| `laravel/ai` | 0.9.x or 0.10.x |
 
 Synapse installs alongside your existing `laravel/ai` setup. It reads the agents and providers you already have — you don't configure providers or API keys in Synapse; it uses your app's `config/ai.php`.
 

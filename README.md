@@ -14,7 +14,7 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 |---|---|
 | PHP | 8.3+ |
 | Laravel | 12 or 13 |
-| `laravel/ai` | 0.9.x |
+| `laravel/ai` | 0.9.x or 0.10.x |
 
 ## Installation
 

@@ -10,7 +10,7 @@ The MVP targets **Laravel AI SDK (`laravel/ai`)** as its sole data source. By de
 
 **Package:** `redberry/synapse`
 
-**Target SDK version:** `laravel/ai` 0.9.x (PHP ^8.3, Laravel 12/13). All SDK APIs referenced below were verified against v0.9.1.
+**Target SDK version:** `laravel/ai` 0.9.x or 0.10.x (PHP ^8.3, Laravel 12/13). APIs below were verified against v0.9.1; the full suite also passes against v0.10.2, which is additive for everything Synapse touches.
 
 ### Why?
 

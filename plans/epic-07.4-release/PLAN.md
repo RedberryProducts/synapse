@@ -184,6 +184,67 @@ you would reach for first.
 
 ---
 
+## Delivered
+
+The epic found what it was written to find, on its first step.
+
+### v0.1.0 on Packagist cannot be installed
+
+The documented sequence fails in a fresh Laravel 13 app:
+
+```
+redberry/synapse v0.1.0 requires laravel/ai ^0.9 -> found laravel/ai[v0.9.0, v0.9.1]
+but it conflicts with your root composer.json require (^0.10.2).
+```
+
+`laravel/ai` released `0.10` while Synapse pinned `^0.9`. Anyone following the
+README gets a hard resolution failure.
+
+**Why no test caught it.** `composer.json` carried a **path repository** for
+`references/laravel/ai`. A path repo is canonical and outranks Packagist, so the
+package's own environment — and `bin/setup-testing-app.sh`, which wired the same
+repo into the manual-testing app — was pinned to a local checkout of `0.9.1`.
+Every gate validated against a version of the SDK the world had already moved
+past. Decision 1's "not a path repository" applied to Synapse itself, and we had
+not noticed.
+
+### The fix
+
+All 52 `laravel/ai` classes Synapse imports exist unchanged in `0.10.2`, and the
+whole suite passes against it — **194 backend tests, 67 browser tests, PHPStan
+clean**. So the constraint was stale, not the code:
+
+- `laravel/ai` widened to `^0.9|^0.10`
+- the path repository removed from `composer.json` and from the setup script, with the reason recorded where someone would be tempted to add it back
+- `README`, `GOAL` and `PRD` updated to state the supported range
+
+### Clean-app smoke test — passed
+
+A fresh `laravel new`, real Packagist resolution, no path repo for the SDK:
+
+| Check | Result |
+|---|---|
+| Installs alongside `laravel/ai` | ✅ `v0.10.2` + Synapse |
+| `synapse:install` | ✅ config, provider and 3 migrations |
+| `dist/` in the installed package | ✅ 516KB JS, 37KB CSS |
+| `/synapse` loads | ✅ 200, 555KB, assets inlined, `streaming: true` |
+| Agent written **after** install | ✅ discovered on refresh |
+| Real provider streams | ✅ TTFB **40ms** of a 9506ms run |
+| Slow tool holds `pending` | ✅ **4020ms** of amber, matching a 4s tool |
+| History replay after refresh | ✅ tool card at 4487ms, 224/32/256 tokens |
+
+### Known limitation introduced by 0.10
+
+`laravel/ai 0.10` adds tool approvals and a `tool-output-denied` stream part.
+Synapse drops it in the client's ignored `default` branch, so a denied call would
+sit as a card that never resolves. Recorded in the changelog; worth an epic of
+its own if approvals get used.
+
+### Not verified here
+
+- **AC 7** — the full manual pass across all six epics in both themes. The smoke app covered discovery, playground streaming, tool inspection, history and replay; the info panel, attachments, structured output and reasoning were last verified on `testing-laravel-project`, not on a clean install.
+- **AC 1 and 10 against Packagist** stay open until `v0.1.1` is tagged: the fix is verified locally, but the published `v0.1.0` is still broken.
+
 ## Definition of done
 
 - All 10 acceptance criteria verified

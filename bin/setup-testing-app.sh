@@ -30,8 +30,13 @@ cd "$APP_DIR"
 echo "==> Wiring path repositories"
 composer config minimum-stability dev
 composer config prefer-stable true
-composer config repositories.synapse   '{"type":"path","url":"../","options":{"symlink":true}}'
-composer config repositories.laravel-ai '{"type":"path","url":"../references/laravel/ai","options":{"symlink":true}}'
+composer config repositories.synapse '{"type":"path","url":"../","options":{"symlink":true}}'
+
+# laravel/ai is deliberately NOT wired to references/. A path repo is canonical
+# and outranks Packagist, so pointing at the local checkout silently pins the
+# SDK to whatever was cloned — which is how v0.1.0 shipped requiring ^0.9 while
+# 0.10 had already been out. Manual testing must resolve the SDK the way a user's
+# app does. `references/` stays what AGENTS.md says it is: reading material.
 
 echo "==> Requiring redberry/synapse"
 composer require redberry/synapse:@dev --no-interaction
