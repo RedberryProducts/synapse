@@ -7,10 +7,11 @@ Delivers PRD [Tech Stack & Architecture](../../PRD.md#tech-stack--architecture) 
 **Depends on:** 7.1 (a slow runtime and a buffering runtime are different problems; prove delivery first).
 **Blocks:** 7.4 (release).
 
-> **Status: correctness half done, cost half open.** A review turned up four gaps
-> between GOAL.md and the code — see [Correctness backlog](#correctness-backlog-triaged).
-> All four are now closed ahead of the epic: **A** and **C** built, **B** and
-> **D** retracted in the docs. What remains here is the cost work.
+> **Status: done.** Correctness was closed ahead of the epic — see
+> [Correctness backlog](#correctness-backlog-triaged); **A** and **C** built,
+> **B** and **D** retracted in the docs. The cost half is measured and recorded
+> in [Delivered](#delivered). **Nothing was optimised**, because nothing needed
+> it — which is the outcome the plan's own rule was written to allow.
 
 ---
 
@@ -272,6 +273,89 @@ Correctness — **all four closed ahead of the epic:**
 | GOAL.md keeps drifting from the code | 7.3's docs pass reads GOAL end to end against the shipped behaviour — this review is evidence that is worth doing |
 
 ---
+
+## Delivered
+
+Every cost question was answered with a measurement, and every answer said the
+same thing: leave it alone. That is a result, not an absence of one — the epic
+existed to find out, and guessing would have produced a discovery cache that
+broke Success Criterion #1 for no gain.
+
+### 1. Discovery — no cache, and now a test says so
+
+Generated agent classes, timed `AgentDiscovery::all()` on a **cold** container:
+
+| Agents | Cold | Per agent | Warm |
+|--------|------|-----------|------|
+| 10 | 4.6ms | — | 0.2ms |
+| 50 | 3.1ms | 0.061ms | 0.6ms |
+| 100 | 3.5ms | 0.035ms | 1.3ms |
+| 250 | **9.0ms** | 0.036ms | 3.2ms |
+
+Linear, and negligible: 250 agents — far past anything realistic — costs 9ms per
+request. The 10-agent row is dominated by one-time warm-up, not per-agent work.
+
+**Methodology note.** The first attempt reported ~0.017ms/agent by taking the
+median of five runs. That was wrong: PHP cannot unload a class, so runs 2–5 skip
+autoloading entirely, while a real request in a fresh process is always cold.
+Only the first sample is honest, and it is ~2× the warm figure.
+
+No cache added. `AgentDiscoveryTest` gains **"finds an agent written after the
+container booted"** — the test that fails the day someone adds one. It has to
+`forgetInstance()` first, because the singleton's per-request memoisation is
+intended and a refresh is a new container; without that the test would assert
+against the very cache it exists to police.
+
+### 2. Queries — constant, and asserted as constant
+
+| Endpoint | Queries |
+|----------|---------|
+| `GET /api/conversations` | 3 |
+| `GET /api/conversations` (filtered + search) | 3 |
+| `GET /api/conversations/{id}` (replay) | 3 |
+| `GET /api/agents` | 0 |
+
+`tests/Feature/History/QueryCountTest.php` asserts **shape rather than a magic
+number**: each endpoint is measured against a small dataset and a large one and
+the counts must match. A hardcoded budget passes an N+1 that happens to be small
+on the day it is written; a comparison across sizes cannot. One loose ceiling
+(≤10) sits alongside, to catch a fixed cost creeping up.
+
+Replay is three reads whether the thread is 2 messages or 30 — attachments are a
+cast on a row already loaded, not a lookup.
+
+### 3. Bundle — inlined, and that stays the right trade
+
+| | Raw | gzip -9 |
+|---|---|---|
+| `dist/app.js` | 516,685 B | **159,299 B** (30.8%) |
+| `dist/app.css` | 37,619 B | 7,158 B (19.0%) |
+| Dashboard HTML (everything inlined) | 555,179 B | ~166 KB |
+
+**`artisan serve` sends all 555KB uncompressed** — no `Content-Encoding` header,
+because PHP's built-in server does not compress. Behind nginx or Herd it is
+~166KB. On a local dev tool neither number is worth engineering away.
+
+Vite's "consider code-splitting" warning does not apply: the asset-delivery
+design inlines a single file into the layout precisely so a `composer update` can
+never leave stale assets behind (PRD → Asset Delivery). Splitting would trade a
+real guarantee for a saving nobody on localhost will notice.
+
+### 4. Replay payload — fine at every size that exists
+
+| Messages | Tool rows | JSON |
+|----------|-----------|------|
+| 10 | 40 | 17.6 KB |
+| 30 | 150 | 63.3 KB |
+| 60 | 480 | 192.8 KB |
+
+Growth is in the tool rows, as expected, and even a deliberately extreme
+conversation stays under 200KB. No lazy-loading of tool payloads on card
+expansion — the plan floated it and the numbers do not support it.
+
+**Caveat:** the seeded tool arguments and results are identical strings, so their
+gzip ratio (~4%) is unrealistically good. Real payloads vary; the raw column is
+the number to trust.
 
 ## Definition of done
 
