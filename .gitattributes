@@ -1,0 +1,41 @@
+# Keep the distributed archive to what a consuming application actually runs.
+#
+# Without this, `composer require redberry/synapse` pulls 3.2MB, of which ~1.7MB
+# is planning documents, tests and fixtures — downloaded into every project, on
+# every install, forever.
+#
+# `dist/` is deliberately NOT ignored: the compiled dashboard is inlined at
+# runtime from inside the package, so excluding it would ship a dashboard that
+# renders an HTML comment instead of an interface.
+
+/.githooks            export-ignore
+/.github              export-ignore
+/plans                export-ignore
+/docs                 export-ignore
+/tests                export-ignore
+/workbench            export-ignore
+/bin                  export-ignore
+/build                export-ignore
+
+/.gitattributes       export-ignore
+/.gitignore           export-ignore
+/phpstan.neon.dist    export-ignore
+/phpunit.xml.dist     export-ignore
+/pint.json            export-ignore
+/testbench.yaml       export-ignore
+/components.json      export-ignore
+/tsconfig.json        export-ignore
+/vite.config.ts       export-ignore
+/package.json         export-ignore
+/package-lock.json    export-ignore
+
+# Working documents for building Synapse, not for using it. README.md, GOAL.md,
+# CHANGELOG.md and LICENSE.md stay — they are what a consumer reads.
+/AGENTS.md            export-ignore
+/DEV.md               export-ignore
+/PRD.md               export-ignore
+/SCAFFOLDING.md       export-ignore
+/DESIGN_FEEDBACK.md   export-ignore
+
+# The TypeScript source that produces dist/. Not used at runtime.
+/resources/js         export-ignore

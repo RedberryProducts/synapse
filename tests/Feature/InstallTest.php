@@ -117,7 +117,7 @@ it('reports itself in php artisan about', function () {
     $about = synapseAbout();
 
     expect($about)->toHaveKeys(['version', 'enabled', 'path', 'agents_discovered', 'retention'])
-        ->and($about['version'])->toBe(Synapse::VERSION)
+        ->and($about['version'])->toBe(Synapse::version())
         ->and($about['path'])->toBe('/synapse');
 });
 
@@ -126,4 +126,14 @@ it('does not claim a streaming answer it cannot have', function () {
     // definition. Reporting it would tell every developer their dashboard
     // cannot stream — including everyone whose dashboard streams perfectly.
     expect(synapseAbout())->not->toHaveKey('streaming');
+});
+
+it('reports the version Composer actually installed', function () {
+    // A hardcoded constant drifts the moment a release is tagged without
+    // bumping it — v0.1.1 shipped reporting "0.1.0" in `about`, the sidebar
+    // footer and window.Synapse. Deriving it from Composer's runtime metadata
+    // makes that impossible; this asserts the two cannot diverge again.
+    expect(Synapse::version())->toBe(Synapse::scriptVariables()['version'])
+        ->and(synapseAbout()['version'])->toBe(Synapse::version())
+        ->and(Synapse::version())->not->toBeEmpty();
 });

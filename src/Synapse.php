@@ -3,16 +3,45 @@
 namespace Redberry\Synapse;
 
 use Closure;
+use Composer\InstalledVersions;
 use Illuminate\Http\Request;
 use Illuminate\Support\HtmlString;
+use OutOfBoundsException;
 use Redberry\Synapse\Chat\StreamEmitter;
 
 class Synapse
 {
     /**
-     * The Synapse version.
+     * Fallback version, used only when Composer cannot report one.
+     *
+     * Not the source of truth: a hardcoded constant drifts the moment a release
+     * is tagged without bumping it, which is exactly what happened between
+     * v0.1.0 and v0.1.1 — the dashboard, `php artisan about` and the sidebar
+     * footer all claimed 0.1.0 on a 0.1.1 install. For a tool whose whole
+     * premise is showing you the truth, that is worse than it sounds.
      */
-    public const VERSION = '0.1.0';
+    public const VERSION = '0.1.1';
+
+    /**
+     * The installed Synapse version.
+     *
+     * Read from Composer's runtime metadata, so it cannot disagree with what is
+     * actually installed. A source checkout reports its branch (`dev-main`),
+     * which is the honest answer there.
+     */
+    public static function version(): string
+    {
+        if (! class_exists(InstalledVersions::class)) {
+            return static::VERSION;
+        }
+
+        try {
+            return ltrim(InstalledVersions::getPrettyVersion('redberry/synapse') ?? static::VERSION, 'v');
+        } catch (OutOfBoundsException) {
+            // Not installed as a package — a source checkout run from itself.
+            return static::VERSION;
+        }
+    }
 
     /**
      * The callback that authorizes access to the dashboard in non-local environments.
@@ -77,7 +106,7 @@ class Synapse
     {
         return [
             'path' => config('synapse.ui.path', 'synapse'),
-            'version' => static::VERSION,
+            'version' => static::version(),
             'streaming' => static::streams(),
         ];
     }

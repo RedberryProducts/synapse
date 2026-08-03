@@ -5,6 +5,16 @@ All notable changes to `redberry/synapse` are documented here.
 This project follows [Semantic Versioning](https://semver.org/). While the
 version is below `1.0.0`, minor releases may contain breaking changes.
 
+## Unreleased
+
+### Fixed
+
+- **The dashboard reported the wrong version.** `Synapse::VERSION` was a hardcoded `0.1.0` that was not bumped for the `v0.1.1` release, so `php artisan about`, the sidebar footer and `window.Synapse.version` all claimed `0.1.0` on a `0.1.1` install. The version is now read from Composer's runtime metadata and cannot drift from what is installed; a test asserts the two agree.
+
+### Changed
+
+- **The published archive shrank from 2.8 MB to 0.8 MB.** Added `.gitattributes` with `export-ignore` for planning documents, tests, fixtures, tooling config and the TypeScript source — none of which a consuming application runs. `plans/` alone was 1.3 MB downloaded into every project on every install. `dist/` is deliberately kept: it is inlined at runtime from inside the package.
+
 ## v0.1.1
 
 **Fixes an install that cannot succeed.** `v0.1.0` requires `laravel/ai ^0.9`,

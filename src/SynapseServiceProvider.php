@@ -59,7 +59,7 @@ class SynapseServiceProvider extends ServiceProvider
     protected function registerAboutCommand(): void
     {
         AboutCommand::add('Synapse', fn (): array => [
-            'Version' => Synapse::VERSION,
+            'Version' => Synapse::version(),
             'Enabled' => config('synapse.enabled') ? 'true' : 'false',
             'Path' => '/'.trim((string) config('synapse.ui.path', 'synapse'), '/'),
             // Deferred: discovery instantiates every agent class, which is too
