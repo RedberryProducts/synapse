@@ -52,7 +52,7 @@ Synapse installs alongside your existing `laravel/ai` setup. It reads the agents
 ## Installation
 
 ```bash
-composer require synapse-ai/synapse --dev
+composer require redberry/synapse --dev
 php artisan synapse:install
 ```
 
@@ -63,6 +63,24 @@ php artisan synapse:install
 - Publishes a `SynapseServiceProvider` into your app (where the access gate lives — see [Access control](#access-control--environments))
 
 You never run `npm` — Synapse ships pre-built assets.
+
+**There is no asset publishing step, by design.** The compiled dashboard lives
+inside the package and is inlined into the page at request time. Nothing is
+copied into your `public/` directory, so a `composer update` can never leave you
+running last month's JavaScript against this month's API — the usual way a
+dashboard package breaks after an upgrade. There is nothing to re-publish and no
+cache to bust.
+
+**After a `composer update`:**
+
+```bash
+php artisan migrate
+```
+
+That's it — new releases may add tables, and nothing else needs doing. Re-running
+`php artisan synapse:install` is also safe: it never overwrites a
+`config/synapse.php` you have edited or a `SynapseServiceProvider` you have
+customised, so your access gate survives.
 
 Then open:
 
@@ -269,11 +287,11 @@ return [
 
     // Master switch. In production, Synapse only registers if this is
     // explicitly true (see "Access control & environments").
-    'enabled' => env('SYNAPSE_ENABLED', true),
+    'enabled' => (bool) env('SYNAPSE_ENABLED', env('APP_ENV') !== 'production'),
 
     'ui' => [
         // The dashboard is served from this path: /synapse
-        'path' => 'synapse',
+        'path' => env('SYNAPSE_PATH', 'synapse'),
 
         // Middleware applied to every Synapse route.
         'middleware' => ['web'],
@@ -324,7 +342,8 @@ return [
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SYNAPSE_ENABLED` | `true` | Master switch; required to be `true` in production |
+| `SYNAPSE_ENABLED` | `true`, except `false` in production | Master switch; must be set explicitly to run in production |
+| `SYNAPSE_PATH` | `synapse` | Path the dashboard is mounted at |
 | `SYNAPSE_DB_CONNECTION` | *(app default)* | Database connection for Synapse's tables |
 | `SYNAPSE_ATTACHMENTS_DISK` | `local` | Filesystem disk for uploaded attachments |
 | `SYNAPSE_AUTO_PRUNE` | `false` | Enable automatic daily pruning |

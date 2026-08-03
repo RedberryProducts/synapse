@@ -3,6 +3,7 @@
 namespace Redberry\Synapse;
 
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Redberry\Synapse\Discovery\AgentDiscovery;
@@ -35,7 +36,40 @@ class SynapseServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->registerPublishing();
             $this->registerCommands();
+            $this->registerAboutCommand();
         }
+    }
+
+    /**
+     * Add a Synapse section to `php artisan about`.
+     *
+     * Every Laravel developer already knows where to look, which beats a
+     * bespoke `synapse:doctor` nobody would think to run. These are the values
+     * that explain a dashboard behaving unexpectedly: whether it is enabled at
+     * all, where it is mounted, whether it found anything, and how long its
+     * records live.
+     *
+     * Streaming support is deliberately **not** reported here. `about` always
+     * runs on the CLI SAPI, where `Synapse::streams()` is false by definition —
+     * the row would tell every user their dashboard cannot stream, including
+     * the ones whose dashboard streams perfectly. The playground answers it in
+     * the web request, where the question means something, and
+     * `bin/check-streaming.sh` measures it.
+     */
+    protected function registerAboutCommand(): void
+    {
+        AboutCommand::add('Synapse', fn (): array => [
+            'Version' => Synapse::VERSION,
+            'Enabled' => config('synapse.enabled') ? 'true' : 'false',
+            'Path' => '/'.trim((string) config('synapse.ui.path', 'synapse'), '/'),
+            // Deferred: discovery instantiates every agent class, which is too
+            // much to do for an unrelated `about` call. The closure only runs
+            // when the section is rendered.
+            'Agents discovered' => fn (): string => (string) count($this->app->make(AgentDiscovery::class)->all()),
+            'Retention' => config('synapse.retention.auto_prune')
+                ? sprintf('auto-prune after %s days', config('synapse.retention.days'))
+                : 'kept until pruned manually',
+        ]);
     }
 
     /**

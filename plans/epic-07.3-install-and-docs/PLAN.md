@@ -199,6 +199,77 @@ No new keys. This epic **documents** the existing set.
 
 ---
 
+## Delivered
+
+Shipped as planned, with one row cut from `about` for being unanswerable.
+
+### The package name
+
+`redberry/synapse` won: it was already in `composer.json`, `package.json`
+(`@redberry/synapse`), README, AGENTS.md, SCAFFOLDING.md and `bin/setup-testing-app.sh`
+— eight places against two. `synapse-ai/synapse` survived only in PRD.md and
+GOAL.md, and both now match the artifact that actually gets published.
+
+### `php artisan about` — and the row that isn't there
+
+```
+Synapse ............... v0.1.0
+  Agents discovered ... 13
+  Enabled ............. true
+  Path ................ /synapse
+  Retention ........... kept until pruned manually
+```
+
+`Agents discovered` is a deferred closure — discovery instantiates every agent
+class, which is far too much work to do for an unrelated `about` call, so it only
+runs when the section is actually rendered.
+
+**Streaming was in the plan and is deliberately not reported.** The first
+implementation included it and printed `not supported on this runtime` — because
+`about` *always* runs on the CLI SAPI, where `Synapse::streams()` is false by
+definition. It would have told every developer their dashboard cannot stream,
+including everyone whose dashboard streams perfectly. The playground answers the
+question in the web request, where it means something, and
+`bin/check-streaming.sh` measures it. A test asserts the row stays absent, so
+nobody re-adds it in good faith.
+
+This changes AC 4: `about` shows version, enabled, path, agent count and
+retention. Streaming is explicitly out.
+
+### Install idempotency
+
+`vendor:publish` without `--force` already declined to overwrite, but nothing
+proved it, and the file at risk is the one holding the developer's `viewSynapse`
+gate — silently restoring the deny-everyone stub would be a security regression,
+not a papercut. `tests/Feature/InstallTest.php` customises both published files,
+re-runs the install, and asserts the edits survive.
+
+**The first version of that test was not hermetic.** Published files land in the
+Testbench skeleton under `vendor/`, which persists between runs, so a second run
+would have started with the previous run's "customised" content already in place
+and passed without publishing anything. Fixed with `beforeEach`/`afterEach`
+cleanup, and verified by running the suite twice and checking the skeleton in
+between.
+
+### Docs
+
+- **README rewritten.** It no longer calls the project an early scaffold or send a new user to PRD.md to learn how to use it. Install, a screenshot, what you get, the full config table, commands, the runtime matrix, and the security warning — with the "this invokes your real agents and spends real credits" note given its own section above the feature list rather than buried.
+- **GOAL** gained the update path (`php artisan migrate`, plus the reassurance that re-running the install is safe), and an explicit statement that assets are never published and why that matters after `composer update`.
+- **GOAL's sample config had drifted** from the shipped file: it showed `env('SYNAPSE_ENABLED', true)` where the real default is production-aware, and a hardcoded `'path' => 'synapse'` where the real key reads `SYNAPSE_PATH`. Both corrected, and `SYNAPSE_PATH` added to the env table.
+
+### The screenshot
+
+Generated from a workbench fixture through the browser driver, committed at
+`docs/screenshots/playground.png`.
+
+Two things had to be corrected before it was usable, and both are worth
+recording. The driver runs on the CLI SAPI, so the playground correctly showed
+its **"this runtime buffers responses"** notice — true of the harness, false of
+every runtime the README lists, and deeply misleading as the first image a
+prospective user sees. And the faked response carried no usage, so the token
+counters all read zero. The capture now sets the streaming flag to what a
+supported runtime reports and uses a `TextResponse` with realistic usage.
+
 ## Definition of done
 
 - All 10 acceptance criteria verified

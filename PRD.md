@@ -8,7 +8,7 @@
 
 The MVP targets **Laravel AI SDK (`laravel/ai`)** as its sole data source. By design, Synapse is compatible with **any agent framework that implements the Laravel AI SDK contracts** — if a framework dispatches SDK events, Synapse records it automatically, no adapter needed.
 
-**Package:** `synapse-ai/synapse`
+**Package:** `redberry/synapse`
 
 **Target SDK version:** `laravel/ai` 0.9.x (PHP ^8.3, Laravel 12/13). All SDK APIs referenced below were verified against v0.9.1.
 

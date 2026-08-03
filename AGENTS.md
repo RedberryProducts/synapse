@@ -128,6 +128,17 @@ Browser tests are the **only** way to verify the PHP → SSE → React boundary,
 
 **Always drive browser tests with `Agent::fake()`** — never call a real provider: no API spend, no flakiness, deterministic streams.
 
+### If the pre-commit hook fails but `composer test` passes
+
+The hook runs `composer test --quiet`, which exports `SHELL_VERBOSITY=-1`, and
+Pest emits **nothing** at that verbosity — a failure with no output. Get at it
+with `SHELL_VERBOSITY=-1 ./vendor/bin/pest --testsuite=unit,feature --log-junit /tmp/junit.xml`.
+
+The usual cause is a test asserting on console output, which Symfony suppresses
+under the same variable. Pass `'-v' => true` in the command's parameters; an
+explicit output buffer does not help, because only an input option outranks the
+environment.
+
 ### Writing browser tests
 
 **Target with `data-testid`; assert content as text.** These are different jobs and mixing them produces tests that pass while the UI is broken.
