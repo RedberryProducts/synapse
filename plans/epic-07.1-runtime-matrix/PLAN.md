@@ -296,6 +296,68 @@ None new — `SlowTool` / `SlowToolAgent` already exist.
 
 ---
 
+## Delivered
+
+Shipped as planned, with one deviation and one addition.
+
+**Deviation: the capability rides `window.Synapse`, not the agent payload.** The
+plan put `streaming` inside `capabilities` on the agent detail response. That is
+a category error — `capabilities` describes the *agent* (`conversational`,
+`has_tools`), while streaming is a property of the *deployment*. It now goes
+through `Synapse::scriptVariables()`, which is cheaper still: no request at all,
+available on every page. `Synapse::streams()` delegates to
+`StreamEmitter::flushesUnder()` so the answer shown to the user and the behaviour
+on the wire can never come from two different lists — asserted by a test.
+
+**Addition: the gate was tested against a real regression.** An untested failure
+path in a release gate is false confidence, so `flushesUnder()` was temporarily
+forced to `false` and the script re-run: it reported `FAIL — first byte took
+6971ms of a 6973ms run` and exited 1. Restored immediately.
+
+### The matrix
+
+| Runtime | SAPI | `output_buffering` | TTFB | Total | Result |
+|---------|------|--------------------|------|-------|--------|
+| `php artisan serve` | `cli-server` | 4096 | **7ms** | 7027ms | PASS |
+| nginx + PHP-FPM | `fpm-fcgi` | 4096 | **2ms** | 4021ms | PASS |
+| FrankenPHP | `frankenphp` | 4096 | **2ms** | 4012ms | PASS |
+| Laravel Sail | `fpm-fcgi` | — | — | — | Same stack as the FPM row; not run separately |
+| Laravel Octane | `cli` | — | — | — | Unsupported by decision; not run |
+
+The `artisan serve` row is the full product — real agent, real provider,
+`SlowTool` sleeping four seconds — measured with `bin/check-streaming.sh`.
+
+The FPM and FrankenPHP rows are **transport probes**: a minimal SSE script in
+Docker rather than the whole application. That is the layer under test — whether
+PHP-FPM and the proxy in front of it forward a flushed stream — and it isolates
+it from provider credentials and app boot. Both containers were configured with
+`output_buffering = 4096`, and both were confirmed to report `ob_get_level() = 1`
+before the first write, which is precisely the condition that broke the original
+implementation.
+
+**The original bug reproduces there, and only there.** Same stack, same script,
+only the guard changed:
+
+| Guard | TTFB | Total |
+|-------|------|-------|
+| `PHP_SAPI` (shipped) | 2ms | 4021ms |
+| `headers_sent()` (original) | **4019ms** | 4019ms |
+
+That is the whole epic in two rows: the fix is the cause of the improvement, not
+something incidental that happened alongside it.
+
+**A trap worth recording.** `php -r 'echo ini_get("output_buffering");'` reports
+`0` inside a container whose ini sets 4096 — the CLI SAPI hardcodes it off
+regardless of configuration. The first reading of the probe environment was
+therefore wrong, and the value had to be read back *through FPM* to be true. Any
+future check of buffering must go through the SAPI under test.
+
+### Not verified
+
+- **Laravel Sail** — nginx + PHP-FPM in Docker, which is the stack the FPM row measures. Listed as expected rather than verified.
+- **Laravel Octane** — unsupported for v0.1.0 by decision, so not stood up. The reasoning is a SAPI fact (Swoole and RoadRunner run workers under CLI) rather than a measurement, and the plan should not pretend otherwise.
+- **Apache + `mod_php`** — out of scope; adding a row is cheap when it becomes one.
+
 ## Definition of done
 
 - All 10 acceptance criteria verified

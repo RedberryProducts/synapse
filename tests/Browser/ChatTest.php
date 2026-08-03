@@ -167,6 +167,25 @@ it('renders a tool card and its answer in the order they happened', function () 
     expect($order)->toBe(['tool-card', 'message-assistant']);
 });
 
+it('says so when the runtime cannot stream', function () {
+    // The driver runs Laravel in-process on the CLI SAPI, so this harness is
+    // itself a non-streaming runtime — the same answer an Octane worker gives.
+    // That makes the notice always visible here, which is exactly the state a
+    // developer on such a runtime sees, and it is the truth: nothing on this
+    // page will arrive incrementally.
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->assertPresent('@streaming-notice')
+        ->assertSeeIn('@streaming-notice', 'replies appear all at once')
+        ->assertNoJavaScriptErrors();
+
+    $page->click('System')->click('Dark');
+
+    expect($page->script('document.documentElement.className'))->toContain('dark');
+
+    $page->assertPresent('@streaming-notice')->assertNoJavaScriptErrors();
+});
+
 it('resolves a slow tool without leaving the card behind', function () {
     // The `pending` window itself is not assertable here: the browser driver
     // runs Laravel in-process and collects the whole response with

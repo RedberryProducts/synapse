@@ -3,8 +3,10 @@ import { ChatComposer } from '@/components/ChatComposer';
 import { ConversationMenu } from '@/components/ConversationMenu';
 import { ConversationTokens } from '@/components/ConversationTokens';
 import { StatelessNotice } from '@/components/StatelessNotice';
+import { StreamingNotice } from '@/components/StreamingNotice';
 import { Badge } from '@/elements/Badge';
 import { Button } from '@/elements/Button';
+import { config } from '@/lib/config';
 import { ChatThread } from './ChatThread';
 import { InfoPanel, type InfoTab } from './InfoPanel';
 import type { AgentDetail } from '@/types/agent';
@@ -97,6 +99,13 @@ export function PlaygroundShell({
                         )}
 
                         {agent && !agent.capabilities.conversational && <StatelessNotice />}
+
+                        {/*
+                            A property of the runtime rather than of the agent,
+                            so it shows on every playground — but only here,
+                            where someone is about to watch a reply arrive.
+                        */}
+                        {!config.streaming && <StreamingNotice />}
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">

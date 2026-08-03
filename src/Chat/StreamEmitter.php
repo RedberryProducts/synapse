@@ -68,7 +68,19 @@ class StreamEmitter
      */
     public function shouldFlush(): bool
     {
-        return ! in_array($this->sapi, ['cli', 'phpdbg', 'embed'], true);
+        return static::flushesUnder($this->sapi);
+    }
+
+    /**
+     * Whether a given SAPI can push bytes to a client as they are written.
+     *
+     * Static because it is also the answer to "does this deployment stream at
+     * all", which the dashboard asks once per page load — and one list is the
+     * only way that answer and this emitter can never disagree.
+     */
+    public static function flushesUnder(string $sapi): bool
+    {
+        return ! in_array($sapi, ['cli', 'phpdbg', 'embed'], true);
     }
 
     /**

@@ -165,6 +165,18 @@ streaming: the whole conversation is buffered and painted at once, which looks
 like a hang and then a jump. That is precisely the regression
 `StreamFlushTest` exists to prevent.
 
+`bin/check-streaming.sh` wraps this — it fetches its own CSRF token, measures,
+and exits non-zero when TTFB and total converge:
+
+```bash
+bin/check-streaming.sh http://127.0.0.1:8000 app.agents.slow-tool-agent
+```
+
+**Never pipe curl into another process to inspect a stream.** A pipe
+block-buffers and makes a healthy stream look batched — this produced two false
+diagnoses while the original bug was being found. Use `-w` with the body
+discarded, or `os.read()` on the raw fd.
+
 `SlowToolAgent` / `SlowTool` are the fixtures for this. Every other tool returns
 in microseconds, so its `tool-input-available` and `tool-output-available` land
 in the same TCP segment and the card renders already green — the `pending` state

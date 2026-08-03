@@ -5,6 +5,7 @@ namespace Redberry\Synapse;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\HtmlString;
+use Redberry\Synapse\Chat\StreamEmitter;
 
 class Synapse
 {
@@ -51,6 +52,23 @@ class Synapse
     }
 
     /**
+     * Whether this deployment can stream a response as it is produced.
+     *
+     * A property of the runtime, not of any agent: PHP can only push bytes to a
+     * client as they are written when it is actually serving HTTP. Under the CLI
+     * SAPI — a test harness, or Octane, which runs its workers on CLI — the
+     * whole response is assembled first and arrives in one piece.
+     *
+     * The dashboard says so rather than letting a developer watch a blank thread
+     * and conclude it has hung. Delegated to the emitter so the answer shown to
+     * the user and the behaviour on the wire come from one rule.
+     */
+    public static function streams(): bool
+    {
+        return StreamEmitter::flushesUnder(PHP_SAPI);
+    }
+
+    /**
      * The variables exposed to the front-end via window.Synapse.
      *
      * @return array<string, mixed>
@@ -60,6 +78,7 @@ class Synapse
         return [
             'path' => config('synapse.ui.path', 'synapse'),
             'version' => static::VERSION,
+            'streaming' => static::streams(),
         ];
     }
 

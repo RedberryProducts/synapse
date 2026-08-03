@@ -442,6 +442,29 @@ Synapse ships light and dark themes. A **theme switcher** sits in the sidebar's 
 
 Synapse doesn't require you to change a single line of your agent code. It reads what's already there.
 
+### Runtimes
+
+The playground streams a reply as the model produces it, which only works when
+PHP is serving HTTP directly. Measured per runtime:
+
+| Runtime | Streaming | Notes |
+|---------|-----------|-------|
+| `php artisan serve` | ✅ Verified | First byte in ~7ms of a 7s run |
+| nginx + PHP-FPM (Herd, Valet, Forge) | ✅ Verified | First byte in ~2ms of a 4s run, with `output_buffering=4096` |
+| Laravel Sail | ✅ Expected | nginx + PHP-FPM in Docker — the same stack as the row above |
+| FrankenPHP | ✅ Verified | First byte in ~2ms of a 4s run |
+| **Laravel Octane** | ❌ **Not supported in v0.1.0** | See below |
+
+**Octane.** Swoole and RoadRunner run their workers under PHP's CLI interface,
+where `flush()` cannot push bytes to a client — so Synapse assembles the whole
+reply and sends it at once. Nothing is lost and nothing breaks; you simply wait
+for the full answer instead of watching it arrive. Synapse detects this and says
+so in the playground rather than leaving you looking at a blank thread. Octane
+isn't tested against each release yet, so it isn't claimed as supported.
+
+If you're on a runtime not listed here, `bin/check-streaming.sh` in the package
+repository measures it in one command.
+
 ---
 
 ## What Synapse does not do

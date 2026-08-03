@@ -1,6 +1,7 @@
 <?php
 
 use Redberry\Synapse\Chat\StreamEmitter;
+use Redberry\Synapse\Synapse;
 
 /*
 | Why this file exists.
@@ -43,6 +44,21 @@ it('never flushes under the CLI, where the caller owns the output buffer', funct
 it('defaults to the running SAPI', function () {
     expect((new StreamEmitter)->shouldFlush())->toBe(PHP_SAPI !== 'cli');
 });
+
+it('tells the dashboard the same thing it tells the emitter', function () {
+    // Two answers to one question is how a UI ends up claiming a run streams
+    // while the wire says otherwise. `Synapse::streams()` must be the emitter's
+    // own rule, not a second copy of the SAPI list.
+    expect(Synapse::streams())->toBe(StreamEmitter::flushesUnder(PHP_SAPI))
+        ->and(Synapse::scriptVariables()['streaming'])->toBe(Synapse::streams());
+});
+
+it('reports no streaming under the test runner', function () {
+    // The suite runs on the CLI SAPI, so this is also what an Octane worker
+    // reports — which is why the dashboard carries a notice rather than
+    // assuming every deployment streams.
+    expect(Synapse::streams())->toBeFalse();
+})->skip(PHP_SAPI !== 'cli', 'Only meaningful under the CLI SAPI.');
 
 it('still captures every part when flushing is off', function () {
     $emitter = new StreamEmitter(echo: false, sapi: 'cli');
