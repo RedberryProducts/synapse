@@ -1,0 +1,33 @@
+name: Trigger Maestro Task on Main Merge
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions: {}
+
+jobs:
+  trigger-task:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger Maestro task template
+        env:
+          CC_PRSHARE_API_TOKEN: ${{ secrets.CC_PRSHARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${CC_PRSHARE_API_TOKEN:?Set the CC_PRSHARE_API_TOKEN repository secret.}"
+
+          payload="$(jq -cn --rawfile event "$GITHUB_EVENT_PATH" '{context: {text: $event}}')"
+
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --request POST 'https://cc.maestroerror.com/api/public/v1/task-templates/01KXP556K4A5T0JEWJBZZCQ71R/trigger' \
+            --header "Authorization: Bearer $CC_PRSHARE_API_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$payload"
