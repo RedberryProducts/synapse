@@ -16,6 +16,10 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 | Laravel | 12 or 13 |
 | `laravel/ai` | 0.9.x or 0.10.x |
 
+---
+
+This package is built and maintained by [Redberry](https://redberry.international/), one of the few Official Premier Laravel Partner agencies worldwide. With 250+ Laravel projects shipped across 20+ countries, a 200-person team, and over a decade in the Laravel ecosystem, Redberry has helped startups, SMEs, and publicly traded enterprises in regulated industries build SaaS platforms, custom web applications, APIs, and more. [Learn about our AI development services](https://redberry.international/ai-agent-development/).
+
 ## Installation
 
 ```bash
