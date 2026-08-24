@@ -62,6 +62,15 @@ php artisan synapse:install
 - Runs Synapse's migrations
 - Publishes a `SynapseServiceProvider` into your app (where the access gate lives — see [Access control](#access-control--environments))
 
+The published migrations and provider do not require Synapse classes to load.
+Production can therefore remove the development dependency and still run all
+application migrations:
+
+```bash
+composer install --no-dev
+php artisan migrate --force
+```
+
 You never run `npm` — Synapse ships pre-built assets.
 
 **There is no asset publishing step, by design.** The compiled dashboard lives
@@ -81,6 +90,18 @@ That's it — new releases may add tables, and nothing else needs doing. Re-runn
 `php artisan synapse:install` is also safe: it never overwrites a
 `config/synapse.php` you have edited or a `SynapseServiceProvider` you have
 customised, so your access gate survives.
+
+**Upgrading an installation created by an older Synapse release:** refresh the
+old package-dependent migrations before removing development dependencies:
+
+```bash
+php artisan vendor:publish --tag=synapse-migrations --force
+```
+
+Update `app/Providers/SynapseServiceProvider.php` to match the current
+self-contained stub while preserving your gate, or remove its entry from
+`bootstrap/providers.php` before `composer install --no-dev`. Re-running
+`synapse:install` does not overwrite that customized provider automatically.
 
 Then open:
 

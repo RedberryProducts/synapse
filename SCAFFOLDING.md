@@ -34,7 +34,7 @@ synapse/
 │   ├── Http/
 │   │   ├── Controllers/HomeController.php  # serves the SPA shell
 │   │   └── Middleware/Authorize.php        # viewSynapse gate check
-│   ├── Migrations/SynapseMigration.php     # connection resolver (mirrors AiMigration)
+│   ├── Migrations/SynapseMigration.php     # legacy connection resolver retained for compatibility
 │   ├── Models/
 │   │   ├── SynapseConversation.php
 │   │   ├── SynapseMessage.php
@@ -137,7 +137,7 @@ The exact config block from the PRD (`enabled`, `ui`, `discovery`, `playground.m
 - **`boot()`**:
   - `registerRoutes()` — guarded by the [Authorization](PRD.md#authorization--safety) rule: skip entirely in `production` unless `SYNAPSE_ENABLED=true`; wrap in `Route::group` with prefix `config('synapse.ui.path')` + configured middleware + the `Authorize` middleware.
   - `loadViewsFrom(resources/views, 'synapse')`.
-  - `registerPublishing()` — tags: `synapse-config`, `synapse-migrations` (`database/migrations` → app `database/migrations`, Telescope-style — **publish-only, not `loadMigrationsFrom`**), `synapse-provider` (stub → `app/Providers`). Migrations run when the app migrates after `synapse:install` publishes them.
+  - `registerPublishing()` — tags: `synapse-config`, `synapse-migrations` (`database/migrations` → app `database/migrations`, Telescope-style — **publish-only, not `loadMigrationsFrom`**), `synapse-provider` (stub → `app/Providers`). Published migrations are self-contained and run when the app migrates after `synapse:install` publishes them.
   - `registerCommands()`.
   - `registerAutoPrune()` — when `config('synapse.retention.auto_prune')`, `Schedule::command('synapse:prune --days=…')->daily()` (via `$this->callAfterResolving(Schedule::class, …)`).
   - `registerRecorder()` — subscribe `SynapseRecorder` to SDK events (wired now, no-op body until the recording phase).
@@ -149,7 +149,7 @@ Static helpers, mirroring `Horizon::css()/js()`:
 - `auth()` + `check()` — stores/evaluates the auth callback (local → open; else `Gate::check('viewSynapse')`), exactly like `Telescope::auth`.
 
 ### `src/SynapseApplicationServiceProvider.php` + `stubs/SynapseServiceProvider.stub`
-Base provider defines the `viewSynapse` gate + `Synapse::auth(...)` callback; the published stub extends it (Telescope's `TelescopeApplicationServiceProvider` pattern). `synapse:install` drops the stub into `app/Providers` and registers it in `bootstrap/providers.php`.
+The published provider extends Laravel's `ServiceProvider`, defines the `viewSynapse` gate, and registers the `Synapse::auth(...)` callback only while Synapse exists. `synapse:install` drops the stub into `app/Providers` and registers it in `bootstrap/providers.php`; a pre-uninstall listener removes that registration during dev-mode package removal.
 
 ### `src/Http/Middleware/Authorize.php`
 Calls `Synapse::check($request)`; aborts 403 otherwise.
@@ -204,11 +204,11 @@ The starting-point SPA renders the **real sidebar shell** (Recent Conversations 
 
 ## Phase 2 — Persistence
 
-### `src/Migrations/SynapseMigration.php`
-Abstract base overriding `getConnection()` → `config('synapse.storage.connection', config('database.default'))` (mirrors the SDK's `AiMigration`).
+### `src/Migrations/SynapseMigration.php` (legacy compatibility)
+The old connection-aware base remains available for compatibility, but published migrations do not extend it.
 
 ### `database/migrations/*_create_synapse_tables.php`
-The three tables exactly as specified in [PRD → Database Schema](PRD.md#database-schema): `synapse_conversations`, `synapse_messages`, `synapse_tool_invocations`. `text` columns for JSON; uuid7 string PKs; indexes as specified.
+The three self-contained migrations create the tables exactly as specified in [PRD → Database Schema](PRD.md#database-schema): `synapse_conversations`, `synapse_messages`, `synapse_tool_invocations`. Each resolves the configured connection without package classes. `text` columns for JSON; uuid7 string PKs; indexes as specified.
 
 ### `src/Models/*`
 - Connection-aware (`getConnectionName()` from config), `string` non-incrementing uuid7 keys.

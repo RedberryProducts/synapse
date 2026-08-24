@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Redberry\Synapse\Synapse;
 
@@ -112,6 +113,45 @@ it('registers the provider once however many times it is run', function () {
     fn (): bool => ! file_exists(base_path('bootstrap/providers.php')),
     'The skeleton has no bootstrap/providers.php to register into.',
 );
+
+it('removes the published provider registration before uninstalling', function () {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    Event::dispatch('composer_package.redberry/synapse:pre_uninstall');
+
+    expect(File::get(base_path('bootstrap/providers.php')))
+        ->not->toContain('App\\Providers\\SynapseServiceProvider');
+})->skip(
+    fn (): bool => ! file_exists(base_path('bootstrap/providers.php')),
+    'The skeleton has no bootstrap/providers.php to unregister from.',
+);
+
+it('publishes resources that remain loadable without Synapse classes', function () {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    $migrationFiles = File::files(database_path('migrations'));
+    $publishedProvider = File::get(app_path('Providers/SynapseServiceProvider.php'));
+
+    expect($migrationFiles)->toHaveCount(3)
+        ->and($publishedProvider)->toContain('extends ServiceProvider')
+        ->and($publishedProvider)->not->toContain('extends SynapseApplicationServiceProvider');
+
+    foreach ($migrationFiles as $migrationFile) {
+        expect($migrationFile->getContents())
+            ->toContain('extends Migration')
+            ->not->toContain('Redberry\\Synapse\\Migrations');
+    }
+});
+
+it('keeps the configured connection in self-contained migrations', function () {
+    config()->set('synapse.storage.connection', 'synapse-testing');
+
+    foreach (File::files(dirname(__DIR__, 2).'/database/migrations') as $migrationFile) {
+        $migration = require $migrationFile->getPathname();
+
+        expect($migration->getConnection())->toBe('synapse-testing');
+    }
+});
 
 it('reports itself in php artisan about', function () {
     $about = synapseAbout();

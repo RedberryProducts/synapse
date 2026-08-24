@@ -92,7 +92,7 @@ Iterating on the package while the test app is running: because the package is *
 
 | Task | How |
 |------|-----|
-| Add a migration | Create `database/migrations/*_*.php` extending `SynapseMigration`; `text` columns for JSON; add a `defineDatabaseMigrations`-covered test. Migrations are publish-only — tests load them explicitly. |
+| Add a migration | Create a self-contained `database/migrations/*_*.php` extending Laravel's `Migration`; resolve `synapse.storage.connection` in the file, use `text` columns for JSON, and add a `defineDatabaseMigrations`-covered test. Migrations are publish-only and must remain loadable after Synapse is removed. |
 | Add a model | Extend `SynapseModel`; add `array` casts + `@property` docblocks; `const UPDATED_AT = null` if the table has only `created_at`. |
 | Add a command | Create in `src/Console`, register in `SynapseServiceProvider::registerCommands()`, add a Pest test asserting behavior. |
 | Add an API route | Add under the `/api` group in `routes/web.php` (before the catch-all); back it with a controller in `src/Http/Controllers`. |
