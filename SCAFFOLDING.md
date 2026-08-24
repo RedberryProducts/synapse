@@ -149,7 +149,7 @@ Static helpers, mirroring `Horizon::css()/js()`:
 - `auth()` + `check()` — stores/evaluates the auth callback (local → open; else `Gate::check('viewSynapse')`), exactly like `Telescope::auth`.
 
 ### `src/SynapseApplicationServiceProvider.php` + `stubs/SynapseServiceProvider.stub`
-Base provider defines the `viewSynapse` gate + `Synapse::auth(...)` callback; the published stub extends it (Telescope's `TelescopeApplicationServiceProvider` pattern). `synapse:install` drops the stub into `app/Providers` and registers it in `bootstrap/providers.php`.
+Base provider defines the `viewSynapse` gate + `Synapse::auth(...)` callback; the published stub extends it (Telescope's `TelescopeApplicationServiceProvider` pattern). `synapse:install` drops the stub into `app/Providers` and conditionally registers it from `AppServiceProvider` only in `local` while the package exists.
 
 ### `src/Http/Middleware/Authorize.php`
 Calls `Synapse::check($request)`; aborts 403 otherwise.
@@ -220,7 +220,7 @@ The three tables exactly as specified in [PRD → Database Schema](PRD.md#databa
 ## Phase 3 — Install command, workbench & first green test
 
 ### `src/Console/InstallCommand.php` (`synapse:install`)
-`vendor:publish` for `synapse-config`, `synapse-migrations`, `synapse-provider`; register the app provider in `bootstrap/providers.php` (`ServiceProvider::addProviderToBootstrapFile`); run `migrate`. (Telescope's `InstallCommand` is the template.)
+`vendor:publish` for `synapse-config`, `synapse-migrations`, `synapse-provider`; add an idempotent local-only, class-guarded registration to `AppServiceProvider`; remove legacy unconditional registration from `bootstrap/providers.php`; run `migrate`.
 
 ### `src/Console/PruneCommand.php` (`synapse:prune`)
 `--days=` option (default `config('synapse.retention.days')`); deletes conversations older than the threshold on `updated_at`, cascading messages + tool rows + attachment files through the repository.
@@ -286,7 +286,7 @@ composer test           # Pest against workbench
 - [x] `composer test` green — **8 passed (24 assertions)**: dashboard 200/403, commands registered, tables + uuid7 + casts, prune/clear + cascade
 - [x] In `testing-laravel-project/`: `composer require redberry/synapse:@dev` → `php artisan synapse:install` → visiting `/synapse` renders the React sidebar shell with the empty Discovery page (screenshot-verified)
 - [x] `synapse:prune` / `synapse:clear` covered by passing tests
-- [x] `viewSynapse` gate stub published to `app/Providers`; provider registered in `bootstrap/providers.php`; production route guard is config-cache safe
+- [x] `viewSynapse` gate stub published to `app/Providers`; provider registered locally and conditionally from `AppServiceProvider`; production route guard is config-cache safe
 
 ---
 

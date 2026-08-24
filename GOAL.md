@@ -61,6 +61,7 @@ php artisan synapse:install
 - Publishes `config/synapse.php`
 - Runs Synapse's migrations
 - Publishes a `SynapseServiceProvider` into your app (where the access gate lives — see [Access control](#access-control--environments))
+- Adds an idempotent registration to `AppServiceProvider` that loads the published provider only in `local` and only while the Synapse package exists
 
 You never run `npm` — Synapse ships pre-built assets.
 
@@ -70,6 +71,19 @@ copied into your `public/` directory, so a `composer update` can never leave you
 running last month's JavaScript against this month's API — the usual way a
 dashboard package breaks after an upgrade. There is nothing to re-publish and no
 cache to bust.
+
+**For production deployments:**
+
+```bash
+composer install --no-dev
+```
+
+No manual provider removal is needed. The local registration checks that the
+Synapse package class exists, so Laravel still boots after Composer removes the
+development dependency. Existing installations that contain
+`App\Providers\SynapseServiceProvider` in `bootstrap/providers.php` should run
+`php artisan synapse:install` once locally before deployment; the command moves
+registration to `AppServiceProvider` without overwriting the customized gate.
 
 **After a `composer update`:**
 
@@ -356,7 +370,7 @@ return [
 Synapse invokes your **real agents** — spending API credits and running tools that may write to your database, call external services, or trigger any side effect your tools implement. So access is guarded accordingly.
 
 - **Local:** open, no authentication. Zero-config dev experience.
-- **Any other environment:** every route (dashboard and API) is protected by a `viewSynapse` authorization gate. `synapse:install` publishes this gate into your app so you own it:
+- **Any other environment:** the standard `--dev` installation does not register the published provider. If you deliberately adapt the installation for another environment, every route (dashboard and API) is protected by the published `viewSynapse` authorization gate:
 
   ```php
   // app/Providers/SynapseServiceProvider.php
@@ -367,7 +381,7 @@ Synapse invokes your **real agents** — spending API credits and running tools 
   });
   ```
 
-- **Production:** Synapse does **not** register at all unless `SYNAPSE_ENABLED=true` is explicitly set — and even then, access still requires passing the `viewSynapse` gate. A forgotten `composer require` on a production box can never become an open agent-invocation endpoint.
+- **Production:** the supported flow removes Synapse with `composer install --no-dev`; the guarded application registration remains safe when its package classes are absent. If Synapse is installed deliberately, it still does **not** register routes unless `SYNAPSE_ENABLED=true` is explicitly set, and access requires a configured `viewSynapse` gate.
 
 Synapse is a development tool. Running it in production is possible but deliberately locked down.
 

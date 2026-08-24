@@ -2,7 +2,9 @@
 
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\ServiceProvider;
 use Redberry\Synapse\Synapse;
+use Symfony\Component\Process\Process;
 
 /*
 | `synapse:install` must be safe to run twice.
@@ -22,15 +24,14 @@ use Redberry\Synapse\Synapse;
  * a customised file already in place and the idempotency assertion would pass
  * without ever publishing anything.
  *
- * The bootstrap entry is worse than stale: `addProviderToBootstrapFile()`
- * registers `App\Providers\SynapseServiceProvider` permanently, while the class
- * file itself is deleted here — leaving the skeleton pointing at a class that
- * does not exist, for every other test in the repository.
+ * The bootstrap cleanup also isolates the legacy-registration migration test
+ * from every other test in the repository.
  */
 function forgetPublishedFiles(): void
 {
     File::delete([
         config_path('synapse.php'),
+        app_path('Providers/AppServiceProvider.php'),
         app_path('Providers/SynapseServiceProvider.php'),
     ]);
 
@@ -43,6 +44,33 @@ function forgetPublishedFiles(): void
             File::get($bootstrap),
         ));
     }
+}
+
+function createApplicationProvider(): void
+{
+    $provider = app_path('Providers/AppServiceProvider.php');
+
+    File::ensureDirectoryExists(dirname($provider));
+    File::put($provider, <<<'PHP'
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        //
+    }
+
+    public function boot(): void
+    {
+        //
+    }
+}
+PHP);
 }
 
 /**
@@ -66,7 +94,10 @@ function synapseAbout(): array
     return json_decode(Artisan::output(), true)['synapse'] ?? [];
 }
 
-beforeEach(fn () => forgetPublishedFiles());
+beforeEach(function () {
+    forgetPublishedFiles();
+    createApplicationProvider();
+});
 afterEach(fn () => forgetPublishedFiles());
 
 it('does not overwrite a customised config or an edited provider', function () {
@@ -99,19 +130,73 @@ it('does not overwrite a customised config or an edited provider', function () {
         ->and(File::get($provider))->toContain('ada@example.com');
 });
 
-it('registers the provider once however many times it is run', function () {
-    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+it('registers the provider locally once however many times it is run', function () {
     $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
 
-    $bootstrap = base_path('bootstrap/providers.php');
+    $path = app_path('Providers/AppServiceProvider.php');
+    File::put($path, str_replace('//', '// Keep this application binding.', File::get($path)));
 
-    expect(substr_count(File::get($bootstrap), 'App\\Providers\\SynapseServiceProvider'))->toBe(1);
-})->skip(
-    // A closure, because `base_path()` needs a booted app and a bare argument
-    // is evaluated while the file is still being collected.
-    fn (): bool => ! file_exists(base_path('bootstrap/providers.php')),
-    'The skeleton has no bootstrap/providers.php to register into.',
-);
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    $appServiceProvider = File::get($path);
+
+    expect(substr_count($appServiceProvider, "environment('local')"))->toBe(1)
+        ->and(substr_count($appServiceProvider, 'SynapseApplicationServiceProvider::class'))->toBe(1)
+        ->and(substr_count($appServiceProvider, '$this->app->register(SynapseServiceProvider::class)'))->toBe(1)
+        ->and($appServiceProvider)->toContain('// Keep this application binding.')
+        ->and(File::get(base_path('bootstrap/providers.php')))
+        ->not->toContain('App\\Providers\\SynapseServiceProvider');
+});
+
+it('removes the old unconditional provider registration', function () {
+    ServiceProvider::addProviderToBootstrapFile('App\\Providers\\SynapseServiceProvider');
+
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    expect(File::get(base_path('bootstrap/providers.php')))
+        ->not->toContain('App\\Providers\\SynapseServiceProvider');
+});
+
+it('boots the generated application provider without Synapse installed', function () {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    expect(File::get(app_path('Providers/AppServiceProvider.php')))
+        ->toContain('class_exists(\\Redberry\\Synapse\\SynapseApplicationServiceProvider::class)');
+
+    $provider = var_export(app_path('Providers/AppServiceProvider.php'), true);
+    $script = <<<PHP
+namespace Illuminate\Support {
+    class ServiceProvider {
+        public function __construct(protected object \$app) {}
+    }
+}
+
+namespace {
+    require {$provider};
+
+    \$app = new class {
+        public function environment(string \$environment): bool
+        {
+            return \$environment === 'local';
+        }
+
+        public function register(string \$provider): void
+        {
+            throw new RuntimeException("Unexpected provider registration: {\$provider}");
+        }
+    };
+
+    (new App\Providers\AppServiceProvider(\$app))->register();
+    echo 'booted';
+}
+PHP;
+    $process = new Process([PHP_BINARY, '-r', $script]);
+    $process->run();
+
+    expect($process->isSuccessful())->toBeTrue()
+        ->and($process->getOutput())->toBe('booted')
+        ->and($process->getErrorOutput())->toBeEmpty();
+});
 
 it('reports itself in php artisan about', function () {
     $about = synapseAbout();

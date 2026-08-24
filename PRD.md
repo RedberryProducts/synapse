@@ -674,7 +674,8 @@ Gate::define('viewSynapse', function ($user) {
 ```
 
 - **Production requires explicit opt-in.** In `production`, Synapse's routes do not register at all unless `SYNAPSE_ENABLED=true` is explicitly set — the existing `'enabled' => env('SYNAPSE_ENABLED', true)` config default applies to non-production environments only. Enabling it in production still requires passing the `viewSynapse` gate. Defense in depth: a forgotten `composer require` on a production box must not become an unauthenticated agent-invocation endpoint.
-- **`synapse:install` publishes the gate stub** so the definition lives in the app where developers can customize it, exactly like Telescope's install flow.
+- **`synapse:install` publishes the gate stub** so the definition lives in the app where developers can customize it. It registers that provider from `AppServiceProvider` only when the application is `local` and `SynapseApplicationServiceProvider` exists. This keeps the `--dev` installation local while allowing production to boot after `composer install --no-dev` removes the package.
+- **Installer registration is idempotent and migrates old installs.** Re-running the command preserves host application edits, never duplicates the guarded block, and removes the old unconditional `bootstrap/providers.php` entry.
 
 ---
 
