@@ -13,14 +13,14 @@ class SynapseServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define('viewSynapse', function ($user) {
-            return in_array($user->email, [
+            return in_array($user?->email, [
                 //
             ]);
         });
 
         if (class_exists(\Redberry\Synapse\Synapse::class)) {
             \Redberry\Synapse\Synapse::auth(function ($request) {
-                return Gate::check('viewSynapse', [$request->user()]);
+                return Gate::forUser($request->user())->check('viewSynapse');
             });
         }
     }

@@ -134,7 +134,9 @@ it('publishes resources that remain loadable without Synapse classes', function 
 
     expect($migrationFiles)->toHaveCount(3)
         ->and($publishedProvider)->toContain('extends ServiceProvider')
-        ->and($publishedProvider)->not->toContain('extends SynapseApplicationServiceProvider');
+        ->and($publishedProvider)->not->toContain('extends SynapseApplicationServiceProvider')
+        ->and($publishedProvider)->toContain('in_array($user?->email')
+        ->and($publishedProvider)->toContain("Gate::forUser(\$request->user())->check('viewSynapse')");
 
     foreach ($migrationFiles as $migrationFile) {
         expect($migrationFile->getContents())
