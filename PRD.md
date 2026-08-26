@@ -65,6 +65,8 @@ The landing page — auto-scans the project and lists all registered agent class
 | Provider / Model | e.g. `anthropic / claude-3-5-sonnet` |
 | Tools | Chips with tool names; overflow collapses to a `+N` chip with a hover popover listing all tools |
 
+Long agent names in constrained discovery/sidebar labels stay on one line, truncate with an ellipsis, and expose the full name through the label's native tooltip (`title`) on hover/focus.
+
 The FQCN and full configuration live in the Info panel (Feature 4), not on the card. Interface-derived capability data (`Conversational`, `HasStructuredOutput`, …) is **not rendered as card badges** — it remains in the discovery API payload for internal use (see Feature 4).
 
 **Actions:** Click a card → opens the Chat Playground; the card's `Info` link opens the Info panel
@@ -623,6 +625,7 @@ Synapse mirrors Horizon's proven single-page-app structure:
 
 - **Recent Conversations** — latest conversations across agents, each showing agent name, truncated title, call count, and an error indicator when the conversation contains an error; per-item context menu (Open Playground / Rename / Delete)
 - **Agents** — quick list of discovered agents for fast switching into a playground
+- **Agents** — quick list of discovered agents for fast switching into a playground; constrained labels truncate with an ellipsis and keep the full name in a native tooltip
 - **Workspace nav** — `Discovery` (the agents dashboard, Feature 1) and `History` (Feature 5). *No Settings entry* — Synapse has no runtime settings UI; configuration is file-based (see Design Sync)
 - **Footer** — package version + discovered agent count (e.g. `v1.0.0 · 8 agents`)
 - Collapsed state shrinks the sidebar to the logo; the chat playground remains fully usable

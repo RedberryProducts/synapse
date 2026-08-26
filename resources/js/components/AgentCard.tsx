@@ -16,10 +16,18 @@ export function AgentCard({ agent }: { agent: Agent }) {
 
     if (!agent.available) {
         return (
-            <Card data-testid="agent-card-unavailable">
+            <Card className="min-w-0" data-testid="agent-card-unavailable">
                 <CardBody>
                     <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-lg font-semibold text-muted-foreground">{agent.name}</h3>
+                        <div className="min-w-0 flex-1">
+                            <h3
+                                className="truncate text-lg font-semibold text-muted-foreground"
+                                title={agent.name}
+                                data-testid="agent-card-unavailable-name"
+                            >
+                                {agent.name}
+                            </h3>
+                        </div>
                         <Tooltip content={agent.error ?? 'This agent could not be instantiated.'}>
                             <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
                         </Tooltip>
@@ -41,9 +49,15 @@ export function AgentCard({ agent }: { agent: Agent }) {
     }
 
     return (
-        <Card interactive onClick={open} data-testid="agent-card">
+        <Card interactive className="min-w-0" onClick={open} data-testid="agent-card">
             <CardBody>
-                <h3 className="text-lg font-semibold">{agent.name}</h3>
+                <h3
+                    className="truncate text-lg font-semibold"
+                    title={agent.name}
+                    data-testid="agent-card-name"
+                >
+                    {agent.name}
+                </h3>
 
                 <p className="flex flex-wrap items-center gap-1.5 text-xs">
                     <span className="text-muted-foreground">{agent.provider ?? 'default'}</span>
