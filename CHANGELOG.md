@@ -9,6 +9,7 @@ version is below `1.0.0`, minor releases may contain breaking changes.
 
 ### Fixed
 
+- **Dev-only installs no longer break production boot.** `synapse:install` now registers the published application provider only in `local` and only while Synapse's package classes exist. It also removes the old unconditional `bootstrap/providers.php` entry, so applications continue to boot after `composer install --no-dev`; repeat installs remain idempotent and preserve application edits.
 - **The dashboard reported the wrong version.** `Synapse::VERSION` was a hardcoded `0.1.0` that was not bumped for the `v0.1.1` release, so `php artisan about`, the sidebar footer and `window.Synapse.version` all claimed `0.1.0` on a `0.1.1` install. The version is now read from Composer's runtime metadata and cannot drift from what is installed; a test asserts the two agree.
 
 ### Changed

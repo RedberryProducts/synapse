@@ -3,7 +3,9 @@
 namespace Redberry\Synapse\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\ServiceProvider;
+use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 
 #[AsCommand(name: 'synapse:install')]
@@ -33,11 +35,47 @@ class InstallCommand extends Command
         return self::SUCCESS;
     }
 
-    /**
-     * Register the published SynapseServiceProvider in the application.
-     */
     protected function registerSynapseServiceProvider(): void
     {
-        ServiceProvider::addProviderToBootstrapFile('App\\Providers\\SynapseServiceProvider');
+        $path = app_path('Providers/AppServiceProvider.php');
+
+        if (! File::exists($path)) {
+            throw new RuntimeException(
+                'Unable to register Synapse: app/Providers/AppServiceProvider.php was not found. Recreate it or register SynapseServiceProvider manually.'
+            );
+        }
+
+        $contents = File::get($path);
+
+        if (! str_contains($contents, '$this->app->register(SynapseServiceProvider::class)')) {
+            $eol = str_contains($contents, "\r\n") ? "\r\n" : "\n";
+
+            $updatedContents = preg_replace(
+                '/^(\s*public\s+function\s+register\s*\(\s*\)\s*(?::\s*void)?\s*(?:\{\R|\R\s*\{\R))/m',
+                '$1'.implode($eol, [
+                    "        if (\$this->app->environment('local') &&",
+                    '            class_exists(\\Redberry\\Synapse\\SynapseApplicationServiceProvider::class)) {',
+                    '            $this->app->register(SynapseServiceProvider::class);',
+                    '        }',
+                    '',
+                    '',
+                ]),
+                $contents,
+                1,
+            );
+
+            if ($updatedContents === null || $updatedContents === $contents) {
+                throw new RuntimeException(
+                    'Unable to register Synapse: App\\Providers\\AppServiceProvider::register() was not found.'
+                );
+            }
+
+            File::put($path, $updatedContents);
+        }
+
+        ServiceProvider::removeProviderFromBootstrapFile(
+            'App\\Providers\\SynapseServiceProvider',
+            strict: true,
+        );
     }
 }
