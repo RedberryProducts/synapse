@@ -9,6 +9,7 @@ version is below `1.0.0`, minor releases may contain breaking changes.
 
 ### Fixed
 
+- **The playground no longer looks stalled before the first stream event.** Sending a message now inserts an assistant-side `Loading...` row immediately, keeps it visible during slow provider startup, and clears or replaces it on the first reasoning, tool, notice, text, structured-output, or error event. Pre-stream failures remove the placeholder instead of leaving an empty assistant block behind.
 - **The dashboard reported the wrong version.** `Synapse::VERSION` was a hardcoded `0.1.0` that was not bumped for the `v0.1.1` release, so `php artisan about`, the sidebar footer and `window.Synapse.version` all claimed `0.1.0` on a `0.1.1` install. The version is now read from Composer's runtime metadata and cannot drift from what is installed; a test asserts the two agree.
 
 ### Changed

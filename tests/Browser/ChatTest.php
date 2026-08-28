@@ -45,6 +45,55 @@ it('sends a message and renders the streamed answer', function () {
         ->assertNoJavaScriptErrors();
 });
 
+it('shows a loading indicator before the first stream event arrives', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->script(<<<'JS'
+        (() => {
+            window.fetch = () => new Promise(() => {});
+        })()
+    JS);
+
+    $page->type('@composer-input', 'Hello?')->click('Send');
+
+    $page->assertSeeIn('@message-user', 'Hello?')
+        ->assertPresent('@message-assistant-loading')
+        ->assertSeeIn('@message-assistant-loading', 'Loading...')
+        ->assertNoJavaScriptErrors();
+});
+
+it('replaces the loading indicator without duplicating the assistant message', function () {
+    fakeAgent(SupportAgent::class, ['Returns are accepted within thirty days.']);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->type('@composer-input', 'What is your return policy?')
+        ->click('Send');
+
+    $page->assertSeeIn('@message-assistant', 'Returns are accepted within thirty days.')
+        ->assertMissing('@message-assistant-loading')
+        ->assertNoJavaScriptErrors();
+
+    expect($page->script("document.querySelectorAll('[data-testid=message-assistant]').length"))->toBe(1);
+});
+
+it('clears the loading indicator when the request fails before streaming starts', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+
+    $page->script(<<<'JS'
+        (() => {
+            window.fetch = () => Promise.reject(new Error('Network unavailable.'));
+        })()
+    JS);
+
+    $page->type('@composer-input', 'Hello?')->click('Send');
+
+    $page->assertPresent('@error-card')
+        ->assertSeeIn('@error-card', 'Network unavailable.')
+        ->assertMissing('@message-assistant-loading')
+        ->assertNoJavaScriptErrors();
+});
+
 it('shows per-message and conversation token counts', function () {
     fakeAgent(SupportAgent::class, [
         new TextResponse(

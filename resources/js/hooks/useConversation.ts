@@ -122,6 +122,7 @@ export function useConversation(slug: string | undefined, conversationId: string
                         url: URL.createObjectURL(file),
                     })),
                 },
+                pendingAssistant(turnId),
             ]);
 
             try {
@@ -143,10 +144,14 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onStructured: (data) =>
                             setEntries((current) =>
-                                updateLastAssistant(current, turnId, (entry) => ({
-                                    ...entry,
-                                    structured: data,
-                                })),
+                                updateLastAssistant(
+                                    openAssistant(current, turnId, `${turnId}:structured`),
+                                    turnId,
+                                    (entry) => ({
+                                        ...entry,
+                                        structured: data,
+                                    }),
+                                ),
                             ),
 
                         // Tool cards appear the moment the call is announced and
@@ -154,7 +159,7 @@ export function useConversation(slug: string | undefined, conversationId: string
                         // rather than as nothing happening at all.
                         onToolInput: (toolCallId, name, input) =>
                             setEntries((current) => [
-                                ...current,
+                                ...dropPendingAssistant(current, turnId),
                                 {
                                     kind: 'tool',
                                     id: toolCallId,
@@ -172,7 +177,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onToolOutput: (toolCallId, output) =>
                             setEntries((current) =>
-                                updateTool(current, toolCallId, (entry) => ({
+                                updateTool(dropPendingAssistant(current, turnId), toolCallId, (entry) => ({
                                     ...entry,
                                     status: 'success',
                                     result: output,
@@ -181,7 +186,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onToolError: (toolCallId, errorText) =>
                             setEntries((current) =>
-                                updateTool(current, toolCallId, (entry) => ({
+                                updateTool(dropPendingAssistant(current, turnId), toolCallId, (entry) => ({
                                     ...entry,
                                     status: 'error',
                                     error: errorText,
@@ -202,7 +207,11 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onProviderTool: (event) =>
                             setEntries((current) =>
-                                applyProviderTool(current, event, provider.current),
+                                applyProviderTool(
+                                    dropPendingAssistant(current, turnId),
+                                    event,
+                                    provider.current,
+                                ),
                             ),
 
                         // Reasoning arrives before the answer, so the entry it
@@ -228,7 +237,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onNotice: (notice) =>
                             setEntries((current) => [
-                                ...current,
+                                ...dropPendingAssistant(current, turnId),
                                 {
                                     kind: 'notice',
                                     id: `${turnId}-notice-${current.length}`,
@@ -238,7 +247,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onError: (error) =>
                             setEntries((current) => [
-                                ...failPendingTools(current, error.message),
+                                ...failPendingTools(dropPendingAssistant(current, turnId), error.message),
                                 {
                                     kind: 'error',
                                     id: error.messageId || `${turnId}-error-${current.length}`,
@@ -263,7 +272,7 @@ export function useConversation(slug: string | undefined, conversationId: string
                 // part; this is the transport failing (network, aborted, 5xx).
                 if (!controller.signal.aborted) {
                     setEntries((current) => [
-                        ...current,
+                        ...dropPendingAssistant(current, turnId),
                         {
                             kind: 'error',
                             id: `${turnId}-transport`,
@@ -321,12 +330,21 @@ function appendText(
     delta: string,
 ): ChatEntry[] {
     const id = `${turnId}:${blockId}`;
+    const pending = pendingAssistantId(turnId);
     const existing = entries.some((entry) => entry.kind === 'assistant' && entry.id === id);
 
     if (existing) {
         return entries.map((entry) =>
             entry.kind === 'assistant' && entry.id === id
                 ? { ...entry, text: entry.text + delta }
+                : entry,
+        );
+    }
+
+    if (entries.some((entry) => entry.kind === 'assistant' && entry.id === pending)) {
+        return entries.map((entry) =>
+            entry.kind === 'assistant' && entry.id === pending
+                ? { ...entry, id, pending: false, text: delta }
                 : entry,
         );
     }
@@ -342,13 +360,31 @@ function appendText(
  */
 function openReasoning(entries: ChatEntry[], turnId: string): ChatEntry[] {
     if (lastAssistantId(entries, turnId) !== null) {
-        return entries;
+        return updateLastAssistant(entries, turnId, (entry) => ({
+            ...entry,
+            pending: false,
+            reasoningStreaming: true,
+        }));
     }
 
-    return [
-        ...entries,
-        { ...emptyAssistant(turnId, `${turnId}:reasoning`), reasoningStreaming: true },
-    ];
+    return openAssistant(entries, turnId, `${turnId}:reasoning`, { reasoningStreaming: true });
+}
+
+function openAssistant(
+    entries: ChatEntry[],
+    turnId: string,
+    id: string,
+    overrides: Partial<AssistantEntry> = {},
+): ChatEntry[] {
+    const pending = pendingAssistantId(turnId);
+
+    return entries.some((entry) => entry.kind === 'assistant' && entry.id === pending)
+        ? entries.map((entry) =>
+              entry.kind === 'assistant' && entry.id === pending
+                  ? { ...entry, id, pending: false, ...overrides }
+                  : entry,
+          )
+        : [...entries, { ...emptyAssistant(turnId, id), ...overrides }];
 }
 
 function emptyAssistant(turnId: string, id: string): AssistantEntry {
@@ -357,6 +393,7 @@ function emptyAssistant(turnId: string, id: string): AssistantEntry {
         id,
         turnId,
         text: '',
+        pending: false,
         reasoning: '',
         reasoningStreaming: false,
         streaming: true,
@@ -365,6 +402,23 @@ function emptyAssistant(turnId: string, id: string): AssistantEntry {
         meta: null,
         structured: null,
     };
+}
+
+function pendingAssistant(turnId: string): AssistantEntry {
+    return {
+        ...emptyAssistant(turnId, pendingAssistantId(turnId)),
+        pending: true,
+    };
+}
+
+function pendingAssistantId(turnId: string): string {
+    return `${turnId}:pending`;
+}
+
+function dropPendingAssistant(entries: ChatEntry[], turnId: string): ChatEntry[] {
+    return entries.filter(
+        (entry) => !(entry.kind === 'assistant' && entry.id === pendingAssistantId(turnId)),
+    );
 }
 
 function updateLastAssistant(
@@ -419,12 +473,13 @@ function settleTurn(
             ? {
                   ...entry,
                   id: messageId ?? entry.id,
+                  pending: false,
                   streaming: false,
                   reasoningStreaming: false,
                   usage,
                   durationMs,
               }
-            : { ...entry, streaming: false, reasoningStreaming: false };
+            : { ...entry, pending: false, streaming: false, reasoningStreaming: false };
     });
 }
 
@@ -432,7 +487,7 @@ function stopStreaming(entries: ChatEntry[], turnId: string): ChatEntry[] {
     return entries
         .map((entry) =>
             entry.kind === 'assistant' && entry.turnId === turnId
-                ? { ...entry, streaming: false, reasoningStreaming: false }
+                ? { ...entry, pending: false, streaming: false, reasoningStreaming: false }
                 : entry,
         )
         // A turn that produced neither text nor reasoning — a failure before any
@@ -626,6 +681,7 @@ function toEntry(message: ConversationMessage): ChatEntry {
         text: message.meta?.structured ? '' : (message.content ?? ''),
         // Both were kept on `meta` precisely so a replay matches what streamed.
         reasoning: message.meta?.reasoning ?? '',
+        pending: false,
         reasoningStreaming: false,
         streaming: false,
         usage: message.usage,
