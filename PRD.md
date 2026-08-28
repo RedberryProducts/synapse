@@ -674,7 +674,8 @@ Gate::define('viewSynapse', function ($user) {
 ```
 
 - **Production requires explicit opt-in.** In `production`, Synapse's routes do not register at all unless `SYNAPSE_ENABLED=true` is explicitly set — the existing `'enabled' => env('SYNAPSE_ENABLED', true)` config default applies to non-production environments only. Enabling it in production still requires passing the `viewSynapse` gate. Defense in depth: a forgotten `composer require` on a production box must not become an unauthenticated agent-invocation endpoint.
-- **`synapse:install` publishes the gate stub** so the definition lives in the app where developers can customize it, exactly like Telescope's install flow.
+- **`synapse:install` publishes the gate stub** so the definition lives in the app where developers can customize it, exactly like Telescope's install flow. The stub extends Laravel's `ServiceProvider` directly and only calls Synapse behind a `class_exists` guard, so it remains safe to bootstrap after `composer install --no-dev` removes the package.
+- **Package removal unregisters the published provider when Composer dispatches its dev-mode pre-uninstall event.** The self-contained stub remains the fallback for `--no-dev`, where Laravel intentionally does not dispatch package-uninstall events.
 
 ---
 
@@ -685,7 +686,7 @@ Gate::define('viewSynapse', function ($user) {
 Synapse follows the exact pattern proven by Telescope and used by `laravel/ai` itself: **migrations run against the user's database by default, with a configurable connection override.**
 
 - **Default:** tables are created on the app's default connection — the same approach as the SDK's own `AiMigration` (`config('ai.conversations.connection', config('database.default'))`).
-- **Override:** `SYNAPSE_DB_CONNECTION` points Synapse at any connection defined in `config/database.php`. Synapse's migration base class and all models resolve their connection from this config, mirroring `AiMigration::getConnection()`.
+- **Override:** `SYNAPSE_DB_CONNECTION` points Synapse at any connection defined in `config/database.php`. Each self-contained published migration and all models resolve their connection from this config, mirroring `AiMigration::getConnection()` without depending on package classes after publishing.
 - **Isolation recipe (documented in README):** users who want Synapse data fully out of their app database define a dedicated connection (e.g. a sqlite file) and set one env var:
 
 ```php

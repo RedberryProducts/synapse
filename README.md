@@ -32,6 +32,16 @@ php artisan synapse:install
 
 That publishes `config/synapse.php`, runs the migrations, and installs a `SynapseServiceProvider` into your app — which is where the access gate lives. Then open `/synapse`.
 
+The published migrations and provider are self-contained, so production deployments may safely run `composer install --no-dev` followed by `php artisan migrate --force` after Composer removes Synapse.
+
+Upgrading from a release that published migrations extending `SynapseMigration` requires refreshing those files while Synapse is still installed:
+
+```bash
+php artisan vendor:publish --tag=synapse-migrations --force
+```
+
+Also update `app/Providers/SynapseServiceProvider.php` to extend `Illuminate\Support\ServiceProvider` and guard its `Redberry\Synapse\Synapse::auth(...)` call with `class_exists`, following the current published stub. Preserve your existing `viewSynapse` gate while doing so. Alternatively, remove that provider from `bootstrap/providers.php` before deploying without development dependencies.
+
 You never run `npm`. Compiled assets ship inside the package and are inlined into the dashboard, so there is no publish step and a `composer update` can never leave you on stale assets.
 
 Synapse reads your existing `config/ai.php`. You don't configure providers or API keys in Synapse; if your agents run in your app, they run here and vice versa.
@@ -86,7 +96,7 @@ Everything is optional; the defaults work.
 
 | Command | What it does |
 |---|---|
-| `synapse:install` | Publishes config, migrations and the gate provider, then migrates. Safe to re-run — it never overwrites your edits. |
+| `synapse:install` | Publishes self-contained config, migrations and the gate provider, then migrates. Safe to re-run — it never overwrites your edits. |
 | `synapse:prune` | Deletes conversations older than `--days`, with their attachments. |
 | `synapse:clear` | Deletes **all** Synapse conversations and attachments. |
 
