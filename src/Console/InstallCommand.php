@@ -38,32 +38,39 @@ class InstallCommand extends Command
     protected function registerSynapseServiceProvider(): void
     {
         $path = app_path('Providers/AppServiceProvider.php');
+
+        if (! File::exists($path)) {
+            throw new RuntimeException(
+                'Unable to register Synapse: app/Providers/AppServiceProvider.php was not found. Recreate it or register SynapseServiceProvider manually.'
+            );
+        }
+
         $contents = File::get($path);
 
         if (! str_contains($contents, '$this->app->register(SynapseServiceProvider::class)')) {
             $eol = str_contains($contents, "\r\n") ? "\r\n" : "\n";
-            $registerMethod = "    public function register(): void{$eol}    {{$eol}";
 
-            if (! str_contains($contents, $registerMethod)) {
+            $updatedContents = preg_replace(
+                '/^(\s*public\s+function\s+register\s*\(\s*\)\s*(?::\s*void)?\s*(?:\{\R|\R\s*\{\R))/m',
+                '$1'.implode($eol, [
+                    "        if (\$this->app->environment('local') &&",
+                    '            class_exists(\\Redberry\\Synapse\\SynapseApplicationServiceProvider::class)) {',
+                    '            $this->app->register(SynapseServiceProvider::class);',
+                    '        }',
+                    '',
+                    '',
+                ]),
+                $contents,
+                1,
+            );
+
+            if ($updatedContents === null || $updatedContents === $contents) {
                 throw new RuntimeException(
                     'Unable to register Synapse: App\\Providers\\AppServiceProvider::register() was not found.'
                 );
             }
 
-            $registration = implode($eol, [
-                "        if (\$this->app->environment('local') &&",
-                '            class_exists(\\Redberry\\Synapse\\SynapseApplicationServiceProvider::class)) {',
-                '            $this->app->register(SynapseServiceProvider::class);',
-                '        }',
-                '',
-                '',
-            ]);
-
-            File::put($path, str_replace(
-                $registerMethod,
-                $registerMethod.$registration,
-                $contents,
-            ));
+            File::put($path, $updatedContents);
         }
 
         ServiceProvider::removeProviderFromBootstrapFile(

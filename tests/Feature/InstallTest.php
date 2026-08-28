@@ -31,7 +31,6 @@ function forgetPublishedFiles(): void
 {
     File::delete([
         config_path('synapse.php'),
-        app_path('Providers/AppServiceProvider.php'),
         app_path('Providers/SynapseServiceProvider.php'),
     ]);
 
@@ -46,12 +45,12 @@ function forgetPublishedFiles(): void
     }
 }
 
-function createApplicationProvider(): void
+function createApplicationProvider(?string $contents = null): void
 {
     $provider = app_path('Providers/AppServiceProvider.php');
 
     File::ensureDirectoryExists(dirname($provider));
-    File::put($provider, <<<'PHP'
+    File::put($provider, $contents ?? <<<'PHP'
 <?php
 
 namespace App\Providers;
@@ -146,6 +145,40 @@ it('registers the provider locally once however many times it is run', function 
         ->and($appServiceProvider)->toContain('// Keep this application binding.')
         ->and(File::get(base_path('bootstrap/providers.php')))
         ->not->toContain('App\\Providers\\SynapseServiceProvider');
+});
+
+it('fails clearly when the application provider file is missing', function () {
+    File::delete(app_path('Providers/AppServiceProvider.php'));
+
+    expect(fn () => $this->artisan('synapse:install', ['--no-migrate' => true]))
+        ->toThrow(RuntimeException::class, 'Unable to register Synapse: app/Providers/AppServiceProvider.php was not found.');
+});
+
+it('registers the provider when the host app uses a valid register signature variant', function () {
+    createApplicationProvider(<<<'PHP'
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register() {
+        //
+    }
+
+    public function boot(): void
+    {
+        //
+    }
+}
+PHP);
+
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    expect(File::get(app_path('Providers/AppServiceProvider.php')))
+        ->toContain('$this->app->register(SynapseServiceProvider::class)');
 });
 
 it('removes the old unconditional provider registration', function () {
