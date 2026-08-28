@@ -106,7 +106,7 @@ In your local environment, that's all there is to it. The dashboard is open, you
 
 3. **Click the card.** You're in the chat playground.
 
-4. **Send a message.** The response streams back in real time. If the agent calls tools, you'll see each call appear inline as a card with its arguments and results. Token counts and timing show on every response.
+4. **Send a message.** The response streams back in real time. Synapse immediately shows a pending assistant `Loading...` indicator so the thread never looks stalled before the first stream event arrives. If the agent calls tools, you'll see each call appear inline as a card with its arguments and results. Token counts and timing show on every response.
 
 5. **Iterate.** Change your agent's prompt, tools, or config in code, refresh, and test again. Synapse always reflects your current code — there's no cache to bust.
 
@@ -156,6 +156,7 @@ The playground is a real conversation with a real agent. Messages stream token-b
 **In the response, you'll see:**
 
 - **Streaming text** — the answer as it arrives.
+- **Pending response state** — right after you send, a `Loading...` row appears where the reply will land and stays there until the first reasoning step, tool event, notice, answer text, or error arrives.
 - **Reasoning** — for models with extended thinking (Anthropic, OpenAI o-series, DeepSeek), `✦ Thinking…` appears while the model works, then collapses into a "Thinking" pane above the answer, with its own reasoning-token count in the per-message counts. Collapsed by default so it never gets in the way — and kept, so reopening the conversation later shows the same thinking you watched.
 - **Tool calls** — inline cards, in the order they happened (see [Tool inspection](#tool-inspection)).
 - **Structured output** — if your agent returns structured data, the response renders as a formatted, collapsible JSON card instead of plain text. Structured-output agents can't stream (the SDK doesn't support it), so Synapse runs them in one shot and shows the finished answer — the only visible difference is that the text arrives all at once.

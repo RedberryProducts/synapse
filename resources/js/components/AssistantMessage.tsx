@@ -22,6 +22,17 @@ export function AssistantMessage({
 }) {
     return (
         <div data-testid="message-assistant" className="text-sm">
+            {entry.pending && (
+                <p
+                    data-testid="message-assistant-loading"
+                    role="status"
+                    aria-live="polite"
+                    className="text-sm text-muted-foreground"
+                >
+                    Loading...
+                </p>
+            )}
+
             {(entry.reasoning !== '' || entry.reasoningStreaming) && (
                 <ReasoningPane text={entry.reasoning} streaming={entry.reasoningStreaming} />
             )}
@@ -31,7 +42,7 @@ export function AssistantMessage({
                 both would print the same payload twice — once unformatted.
                 The card below is the same data, readable.
             */}
-            {!entry.structured && <Markdown>{entry.text}</Markdown>}
+            {!entry.pending && !entry.structured && <Markdown>{entry.text}</Markdown>}
 
             {entry.streaming && (
                 <span
