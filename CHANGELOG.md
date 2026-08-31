@@ -11,6 +11,7 @@ version is below `1.0.0`, minor releases may contain breaking changes.
 
 - **Production migrations remain runnable after Synapse is removed.** Published migrations and the application provider no longer require package classes, while preserving `synapse.storage.connection`. Dev-mode package removal also unregisters the published provider automatically. Existing installations can force-republish migrations and update or unregister their old provider before deploying with `composer install --no-dev`.
 - **The dashboard reported the wrong version.** `Synapse::VERSION` was a hardcoded `0.1.0` that was not bumped for the `v0.1.1` release, so `php artisan about`, the sidebar footer and `window.Synapse.version` all claimed `0.1.0` on a `0.1.1` install. The version is now read from Composer's runtime metadata and cannot drift from what is installed; a test asserts the two agree.
+- **Long agent names no longer spill out of Discovery cards or the sidebar.** Constrained labels now shrink correctly, truncate to a single line with an ellipsis, and keep the full class name available through the browser's native tooltip on both Discovery cards and the sidebar agent list. Browser coverage exercises available and unavailable cards at desktop and narrow widths.
 
 ### Changed
 

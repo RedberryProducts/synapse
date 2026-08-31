@@ -9,6 +9,21 @@ beforeEach(function () {
     config(['synapse.discovery.paths' => [dirname(__DIR__, 2).'/workbench/app/Agents']]);
 });
 
+function expectNameToTruncate(object $page, string $selector, string $name): void
+{
+    $encodedSelector = json_encode($selector);
+
+    expect($page->script("document.querySelector({$encodedSelector}).getAttribute('title')"))->toBe($name);
+
+    expect($page->script(<<<JS
+        (() => {
+            const element = document.querySelector({$encodedSelector});
+
+            return element.scrollWidth > element.clientWidth;
+        })()
+    JS))->toBeTrue();
+}
+
 it('renders a card for each discovered agent', function () {
     visit('/synapse')
         ->assertSee('SupportAgent')
@@ -32,8 +47,12 @@ it('shows tool chips and collapses overflow into a +N chip', function () {
 it('explains why an agent cannot be instantiated and how to fix it', function () {
     visit('/synapse')
         ->assertPresent('@agent-card-unavailable')
-        ->assertSeeIn('@unresolvable-hint', 'an interface with no binding')
-        ->assertSeeIn('@unresolvable-hint', '$this->app->bind(');
+        ->assertSeeIn(
+            '[data-testid="agent-card-unavailable-name"][title="BrokenAgent"]',
+            'BrokenAgent',
+        )
+        ->assertSee('an interface with no binding')
+        ->assertSee('$this->app->bind(');
 });
 
 it('opens the playground when a card is clicked', function () {
@@ -45,6 +64,54 @@ it('opens the playground when a card is clicked', function () {
 
 it('lists agents in the sidebar', function () {
     visit('/synapse')->assertSeeIn('@sidebar-agents', 'KITCHENSINKAGENT');
+});
+
+it('truncates long agent names in discovery cards and the sidebar at desktop width', function () {
+    $page = visit('/synapse')->resize(1440, 1100);
+
+    expectNameToTruncate(
+        $page,
+        '[data-testid="agent-card-name"][title="ExpenditureDetailsRelatedNotesAnalyzer"]',
+        'ExpenditureDetailsRelatedNotesAnalyzer',
+    );
+
+    expectNameToTruncate(
+        $page,
+        '[data-testid="agent-card-unavailable-name"][title="IncomeProtectionRecommendationDataCollectorBrokenAgent"]',
+        'IncomeProtectionRecommendationDataCollectorBrokenAgent',
+    );
+
+    expectNameToTruncate(
+        $page,
+        '[data-testid="sidebar-agent-name"][title="ExpenditureDetailsRelatedNotesAnalyzer"]',
+        'ExpenditureDetailsRelatedNotesAnalyzer',
+    );
+
+    $page->assertNoJavaScriptErrors();
+});
+
+it('keeps long agent names clipped inside constrained mobile-width layouts', function () {
+    $page = visit('/synapse')->resize(420, 900);
+
+    expectNameToTruncate(
+        $page,
+        '[data-testid="agent-card-name"][title="ExpenditureDetailsRelatedNotesAnalyzer"]',
+        'ExpenditureDetailsRelatedNotesAnalyzer',
+    );
+
+    expectNameToTruncate(
+        $page,
+        '[data-testid="agent-card-unavailable-name"][title="IncomeProtectionRecommendationDataCollectorBrokenAgent"]',
+        'IncomeProtectionRecommendationDataCollectorBrokenAgent',
+    );
+
+    expectNameToTruncate(
+        $page,
+        '[data-testid="sidebar-agent-name"][title="ExpenditureDetailsRelatedNotesAnalyzer"]',
+        'ExpenditureDetailsRelatedNotesAnalyzer',
+    );
+
+    $page->assertNoJavaScriptErrors();
 });
 
 it('renders an empty state when no agents are found', function () {
