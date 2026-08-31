@@ -624,7 +624,6 @@ Synapse mirrors Horizon's proven single-page-app structure:
 **App shell (per Figma design)** — a persistent, collapsible left sidebar frames every page:
 
 - **Recent Conversations** — latest conversations across agents, each showing agent name, truncated title, call count, and an error indicator when the conversation contains an error; per-item context menu (Open Playground / Rename / Delete)
-- **Agents** — quick list of discovered agents for fast switching into a playground
 - **Agents** — quick list of discovered agents for fast switching into a playground; constrained labels truncate with an ellipsis and keep the full name in a native tooltip
 - **Workspace nav** — `Discovery` (the agents dashboard, Feature 1) and `History` (Feature 5). *No Settings entry* — Synapse has no runtime settings UI; configuration is file-based (see Design Sync)
 - **Footer** — package version + discovered agent count (e.g. `v1.0.0 · 8 agents`)
