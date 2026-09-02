@@ -330,7 +330,7 @@ function appendText(
     delta: string,
 ): ChatEntry[] {
     const id = `${turnId}:${blockId}`;
-    const pending = pendingAssistantId(turnId);
+    const pendingId = pendingAssistantId(turnId);
     const existing = entries.some((entry) => entry.kind === 'assistant' && entry.id === id);
 
     if (existing) {
@@ -341,9 +341,9 @@ function appendText(
         );
     }
 
-    if (entries.some((entry) => entry.kind === 'assistant' && entry.id === pending)) {
+    if (entries.some((entry) => entry.kind === 'assistant' && entry.id === pendingId)) {
         return entries.map((entry) =>
-            entry.kind === 'assistant' && entry.id === pending
+            entry.kind === 'assistant' && entry.id === pendingId
                 ? { ...entry, id, pending: false, text: delta }
                 : entry,
         );
@@ -376,11 +376,11 @@ function openAssistant(
     id: string,
     overrides: Partial<AssistantEntry> = {},
 ): ChatEntry[] {
-    const pending = pendingAssistantId(turnId);
+    const pendingId = pendingAssistantId(turnId);
 
-    return entries.some((entry) => entry.kind === 'assistant' && entry.id === pending)
+    return entries.some((entry) => entry.kind === 'assistant' && entry.id === pendingId)
         ? entries.map((entry) =>
-              entry.kind === 'assistant' && entry.id === pending
+              entry.kind === 'assistant' && entry.id === pendingId
                   ? { ...entry, id, pending: false, ...overrides }
                   : entry,
           )
