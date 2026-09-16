@@ -103,7 +103,7 @@ php artisan migrate
 That's it — new releases may add tables, and nothing else needs doing. Re-running
 `php artisan synapse:install` is also safe: it never overwrites a
 `config/synapse.php` you have edited or a `SynapseServiceProvider` you have
-customised, so your access gate survives.
+customised, so your access gate survives. Application bindings added before or after the generated registration block are preserved on repeat installs.
 
 **Upgrading an installation created by an older Synapse release:** refresh the
 old package-dependent migrations before removing development dependencies:

@@ -57,10 +57,8 @@ class InstallCommand extends Command
         $tokens = $this->codeTokens($contents);
         $bodyIndex = $this->registerBodyIndex($tokens);
         $blockTokens = $this->codeTokens('<?php '.$registration);
-        $blockStart = $bodyIndex === null ? 0 : $bodyIndex + 1;
-        $candidate = array_slice($tokens, $blockStart, count($blockTokens));
-        $hasRegistration = $bodyIndex !== null
-            && array_column($candidate, 'text') === array_column($blockTokens, 'text');
+        $candidate = $bodyIndex === null ? [] : $this->findRegistration($tokens, $bodyIndex, $blockTokens);
+        $hasRegistration = $candidate !== [];
         $remainingCode = $contents;
 
         if ($hasRegistration) {
@@ -129,5 +127,36 @@ class InstallCommand extends Command
         }
 
         return null;
+    }
+
+    /**
+     * @param  list<PhpToken>  $tokens
+     * @param  list<PhpToken>  $blockTokens
+     * @return list<PhpToken>
+     */
+    private function findRegistration(array $tokens, int $bodyIndex, array $blockTokens): array
+    {
+        $depth = 1;
+        $blockTexts = array_column($blockTokens, 'text');
+
+        for ($index = $bodyIndex + 1; $index < count($tokens) && $depth > 0; $index++) {
+            $token = $tokens[$index];
+
+            if ($depth === 1 && $token->id === T_IF) {
+                $candidate = array_slice($tokens, $index, count($blockTokens));
+
+                if (array_column($candidate, 'text') === $blockTexts) {
+                    return $candidate;
+                }
+            }
+
+            if (in_array($token->id, [ord('{'), T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES], true)) {
+                $depth++;
+            } elseif ($token->id === ord('}')) {
+                $depth--;
+            }
+        }
+
+        return [];
     }
 }

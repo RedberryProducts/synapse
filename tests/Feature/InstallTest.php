@@ -244,6 +244,27 @@ it('recognizes the generated block after whitespace formatting', function () {
     expect(File::get($path))->toBe($formatted);
 });
 
+it('preserves statements added before the generated block', function (string $statement) {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+    $path = app_path('Providers/AppServiceProvider.php');
+    $contents = str_replace("public function register(): void\n    {", "public function register(): void\n    {\n".$statement, File::get($path));
+    File::put($path, $contents);
+
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    expect(File::get($path))->toBe($contents);
+})->with([
+    'binding' => "        \$this->app->bind('example', fn () => 'value');",
+    'closure binding' => <<<'PHP'
+        $this->app->singleton('example', function () {
+            return new \stdClass;
+        });
+PHP,
+    'interpolated string' => <<<'PHP'
+        $example = "{$this->app['env']}";
+PHP,
+]);
+
 it('does not accept a generated block outside executable register code', function (string $location) {
     $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
     $path = app_path('Providers/AppServiceProvider.php');
@@ -257,6 +278,7 @@ PHP;
     $replacement = match ($location) {
         'nowdoc' => "        \$example = <<<'EXAMPLE'\n".$block."\nEXAMPLE;",
         'string' => '        $example = "'.$block.'";',
+        'closure' => "        \$example = function () {\n".$block."\n        };",
         'boot' => '',
     };
     $contents = str_replace($block, $replacement, $installed);
@@ -274,7 +296,7 @@ PHP;
 
     expect(File::get($path))->toBe($contents)
         ->and(File::get(base_path('bootstrap/providers.php')))->toBe($bootstrap);
-})->with(['nowdoc', 'string', 'boot']);
+})->with(['nowdoc', 'string', 'closure', 'boot']);
 
 it('rejects an additional unguarded registration beside the generated block', function () {
     $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
