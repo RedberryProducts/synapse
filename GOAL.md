@@ -92,7 +92,7 @@ Synapse package class exists, so Laravel still boots after Composer removes the
 development dependency. Existing installations that contain
 `App\Providers\SynapseServiceProvider` in `bootstrap/providers.php` should run
 `php artisan synapse:install` once locally before deployment; the command moves
-registration to `AppServiceProvider` without overwriting the customized gate.
+registration to `AppServiceProvider` without overwriting the customized gate. If the installer finds an existing registration it cannot verify as guarded, it asks you to remove that registration and rerun the command; it leaves your application provider and bootstrap entry unchanged.
 
 **After a `composer update`:**
 

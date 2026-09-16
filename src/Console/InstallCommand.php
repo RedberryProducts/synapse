@@ -46,20 +46,38 @@ class InstallCommand extends Command
         }
 
         $contents = File::get($path);
+        $eol = str_contains($contents, "\r\n") ? "\r\n" : "\n";
+        $registration = implode($eol, [
+            "        if (\$this->app->environment('local') &&",
+            '            class_exists(\\Redberry\\Synapse\\SynapseApplicationServiceProvider::class)) {',
+            '            $this->app->register(SynapseServiceProvider::class);',
+            '        }',
+        ]);
+        $code = '';
 
-        if (! str_contains($contents, '$this->app->register(SynapseServiceProvider::class)')) {
-            $eol = str_contains($contents, "\r\n") ? "\r\n" : "\n";
+        foreach (token_get_all($contents) as $token) {
+            if (is_array($token)) {
+                if (! in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                    $code .= $token[1];
+                }
+            } else {
+                $code .= $token;
+            }
+        }
 
+        $hasRegistration = str_contains($code, $registration);
+        $remainingCode = $hasRegistration ? str_replace($registration, '', $code) : $contents;
+
+        if (str_contains($remainingCode, '$this->app->register(SynapseServiceProvider::class)')) {
+            throw new RuntimeException(
+                'Unable to verify the existing Synapse registration. Remove the existing Synapse registration from AppServiceProvider::register() (including commented copies), then rerun synapse:install to add the local and class_exists guards.'
+            );
+        }
+
+        if (! $hasRegistration) {
             $updatedContents = preg_replace(
                 '/^(\s*public\s+function\s+register\s*\(\s*\)\s*(?::\s*void)?\s*(?:\{\R|\R\s*\{\R))/m',
-                '$1'.implode($eol, [
-                    "        if (\$this->app->environment('local') &&",
-                    '            class_exists(\\Redberry\\Synapse\\SynapseApplicationServiceProvider::class)) {',
-                    '            $this->app->register(SynapseServiceProvider::class);',
-                    '        }',
-                    '',
-                    '',
-                ]),
+                '$1'.$registration.$eol.$eol,
                 $contents,
                 1,
             );

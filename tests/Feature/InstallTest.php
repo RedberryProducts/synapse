@@ -155,6 +155,36 @@ it('registers the provider locally once however many times it is run', function 
         ->not->toContain('App\\Providers\\SynapseServiceProvider');
 });
 
+it('rejects an existing registration without the complete guards', function (string $registration) {
+    $path = app_path('Providers/AppServiceProvider.php');
+    $contents = str_replace('        //', $registration, File::get($path));
+    File::put($path, $contents);
+    ServiceProvider::addProviderToBootstrapFile('App\\Providers\\SynapseServiceProvider');
+    $bootstrap = File::get(base_path('bootstrap/providers.php'));
+
+    expect(fn () => $this->artisan('synapse:install', ['--no-migrate' => true]))
+        ->toThrow(RuntimeException::class, 'Remove the existing Synapse registration from AppServiceProvider::register()');
+
+    expect(File::get($path))->toBe($contents)
+        ->and(File::get(base_path('bootstrap/providers.php')))->toBe($bootstrap);
+})->with([
+    'unguarded call' => '        $this->app->register(SynapseServiceProvider::class);',
+    'commented call' => '        // $this->app->register(SynapseServiceProvider::class);',
+    'local guard without class check' => <<<'PHP'
+        if ($this->app->environment('local')) {
+            $this->app->register(SynapseServiceProvider::class);
+        }
+PHP,
+    'commented guarded block' => <<<'PHP'
+        /*
+        if ($this->app->environment('local') &&
+            class_exists(\Redberry\Synapse\SynapseApplicationServiceProvider::class)) {
+            $this->app->register(SynapseServiceProvider::class);
+        }
+        */
+PHP,
+]);
+
 it('fails clearly when the application provider file is missing', function () {
     File::delete(app_path('Providers/AppServiceProvider.php'));
 
