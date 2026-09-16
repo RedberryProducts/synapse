@@ -63,6 +63,15 @@ php artisan synapse:install
 - Publishes a `SynapseServiceProvider` into your app (where the access gate lives — see [Access control](#access-control--environments))
 - Adds an idempotent registration to `AppServiceProvider` that loads the published provider only in `local` and only while the Synapse package exists
 
+The published migrations and provider do not require Synapse classes to load.
+Production can therefore remove the development dependency and still run all
+application migrations:
+
+```bash
+composer install --no-dev
+php artisan migrate --force
+```
+
 You never run `npm` — Synapse ships pre-built assets.
 
 **There is no asset publishing step, by design.** The compiled dashboard lives
@@ -95,6 +104,18 @@ That's it — new releases may add tables, and nothing else needs doing. Re-runn
 `php artisan synapse:install` is also safe: it never overwrites a
 `config/synapse.php` you have edited or a `SynapseServiceProvider` you have
 customised, so your access gate survives.
+
+**Upgrading an installation created by an older Synapse release:** refresh the
+old package-dependent migrations before removing development dependencies:
+
+```bash
+php artisan vendor:publish --tag=synapse-migrations --force
+```
+
+Update `app/Providers/SynapseServiceProvider.php` to match the current
+self-contained stub while preserving your gate, or remove its entry from
+`bootstrap/providers.php` before `composer install --no-dev`. Re-running
+`synapse:install` does not overwrite that customized provider automatically.
 
 Then open:
 
@@ -133,7 +154,7 @@ That's the whole loop Synapse is built for: **discover → chat → inspect → 
 Every page sits inside a persistent, collapsible sidebar:
 
 - **Recent Conversations** — your latest chats across all agents, each with its agent name, a short title, a call count, and an error indicator if something failed. Each has a menu to open, rename, or delete it.
-- **Agents** — a quick list of discovered agents for jumping straight into a playground.
+- **Agents** — a quick list of discovered agents for jumping straight into a playground. Long names stay on one line, end with an ellipsis when space runs out, and expose the full name on hover.
 - **Workspace** — navigation between **Discovery** (the agents dashboard) and **History** (all past conversations).
 - **Footer** — the Synapse version and how many agents were discovered (e.g. `v1.0.0 · 8 agents`).
 
@@ -150,6 +171,7 @@ The Discovery page is your landing page. It scans your project on every request 
 Each **agent card** shows:
 
 - **Name** — the class short name (e.g. `SupportAgent`)
+- Long names stay within the card on one line, show an ellipsis when truncated, and expose the full class name on hover.
 - **Provider / model** — e.g. `anthropic / claude-sonnet-5`
 - **Tools** — a chip per tool; if there are many, they collapse into a `+N` chip you can hover to see the full list
 

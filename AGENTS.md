@@ -24,11 +24,11 @@ src/                          # PHP — the package
 ├── Synapse.php                       # static helpers: asset tags, script vars, auth callback
 ├── Http/{Controllers,Middleware}/    # HomeController (SPA shell), Authorize (viewSynapse gate)
 ├── Console/                          # Install / Prune / Clear commands
-├── Migrations/SynapseMigration.php   # connection resolver base
+├── Migrations/SynapseMigration.php   # legacy migration base retained for compatibility
 ├── Models/                           # SynapseModel base + Conversation/Message/ToolInvocation
 └── Repositories/                     # ConversationRepository (cascade delete lives here)
 config/synapse.php            # publishable config (enabled, ui, discovery, playground, storage, retention)
-database/migrations/          # the three synapse_* tables (publish-only)
+database/migrations/          # three self-contained synapse_* tables (publish-only)
 routes/web.php                # /api group (stubbed) + SPA catch-all
 resources/js/                 # React + TS SPA — elements/ → components/ → composed/ → pages/
                               #   (+ hooks, lib, types, styles)
@@ -56,7 +56,7 @@ Docs: [PRD.md](PRD.md), [GOAL.md](GOAL.md), [SCAFFOLDING.md](SCAFFOLDING.md), [D
 
 - **KISS** — don't over-engineer. Three similar lines beat a premature abstraction. No config options, flexibility, or helper indirection nobody asked for.
 - **DRY** — extract shared logic only once it appears in 2+ places with the same shape. Premature deduplication couples worse than duplication. (The `ConversationRepository` cascade earned extraction because prune, clear, and the future delete-endpoint all need it.)
-- **SOLID** — at package scale, the parts that matter: **single responsibility** (a controller doesn't build SQL; a command delegates to a repository/service), and **dependency inversion** (services/repositories receive collaborators via constructor injection so they're testable). Prefer composition over inheritance; the `SynapseModel`/`SynapseMigration` base classes are the deliberate exceptions (shared framework wiring).
+- **SOLID** — at package scale, the parts that matter: **single responsibility** (a controller doesn't build SQL; a command delegates to a repository/service), and **dependency inversion** (services/repositories receive collaborators via constructor injection so they're testable). Prefer composition over inheritance; `SynapseModel` is the deliberate exception for shared framework wiring.
 
 ## What NOT to do
 
@@ -260,7 +260,7 @@ PRD and GOAL move together — a behavior change usually touches both.
 |--------------|--------|
 | Add an API endpoint | `routes/web.php` (`/api` group, before the catch-all) + `src/Http/Controllers` |
 | Add business logic | a service in `src/` (e.g. `Discovery/`, `Recording/`) |
-| Add a DB table | `database/migrations/` (extend `SynapseMigration`) |
+| Add a DB table | `database/migrations/` (extend Laravel's `Migration` and keep the file independent of Synapse classes) |
 | Add a model | `src/Models/` (extend `SynapseModel`) |
 | Add a command | `src/Console/` + register in `SynapseServiceProvider` |
 | Add config | `config/synapse.php` |

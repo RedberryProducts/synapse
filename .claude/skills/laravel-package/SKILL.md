@@ -62,7 +62,7 @@ $this->publishes([__DIR__.'/../stubs/SynapseServiceProvider.stub' => app_path('P
 
 ## Migrations & models (Synapse conventions)
 
-- **Migrations** extend `Redberry\Synapse\Migrations\SynapseMigration`, whose `getConnection()` returns `config('synapse.storage.connection') ?: config('database.default')`.
+- **Published migrations are self-contained.** Each extends Laravel's `Migration` and implements `getConnection()` with `config('synapse.storage.connection') ?: config('database.default')`; never reference a Synapse class from a published migration because the file remains after `composer install --no-dev` removes the package.
 - **JSON is stored in `text` columns**, not `->json()` — sqlite has no native JSON type. Cast to `array` on the model.
 - **No DB foreign keys for cascade.** sqlite's FK pragma is off by default; cascade deletes live in `ConversationRepository`, not the schema.
 - **Models** extend `Redberry\Synapse\Models\SynapseModel`: `HasUuids` (this framework's `HasUuids` already yields uuid7 — the `HasVersion7Uuids` trait does not exist here), `$incrementing = false`, `$keyType = 'string'`, connection resolved from config. Use `const UPDATED_AT = null` when a table has only `created_at`.

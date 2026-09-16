@@ -40,6 +40,16 @@ composer install --no-dev
 
 No provider cleanup is required. Synapse is omitted, and the generated `class_exists` guard lets the application boot without it. If an older Synapse install added `App\Providers\SynapseServiceProvider` to `bootstrap/providers.php`, re-run `php artisan synapse:install` locally once before deploying; the installer removes that stale entry without overwriting your gate.
 
+The published migrations and provider are self-contained, so production deployments may safely run `composer install --no-dev` followed by `php artisan migrate --force` after Composer removes Synapse.
+
+Upgrading from a release that published migrations extending `SynapseMigration` requires refreshing those files while Synapse is still installed:
+
+```bash
+php artisan vendor:publish --tag=synapse-migrations --force
+```
+
+Also update `app/Providers/SynapseServiceProvider.php` to extend `Illuminate\Support\ServiceProvider` and guard its `Redberry\Synapse\Synapse::auth(...)` call with `class_exists`, following the current published stub. Preserve your existing `viewSynapse` gate while doing so. Alternatively, remove that provider from `bootstrap/providers.php` before deploying without development dependencies.
+
 You never run `npm`. Compiled assets ship inside the package and are inlined into the dashboard, so there is no publish step and a `composer update` can never leave you on stale assets.
 
 Synapse reads your existing `config/ai.php`. You don't configure providers or API keys in Synapse; if your agents run in your app, they run here and vice versa.
@@ -51,7 +61,7 @@ Synapse reads your existing `config/ai.php`. You don't configure providers or AP
 Two independent protections, both on by default:
 
 1. **It does not register at all in production** unless you explicitly set `SYNAPSE_ENABLED=true`.
-2. **The supported `--dev` installation registers the dashboard only in `local`.** The published provider owns the `viewSynapse` gate if you adapt the installation for another environment:
+2. **Dashboard access outside `local` requires authorization.** Routes are registered whenever `synapse.enabled` is true. The installer registers the published application provider, which defines the `viewSynapse` gate, only in `local`. To use Synapse in another environment, explicitly register that provider while the package is installed and configure its gate:
 
    ```php
    // app/Providers/SynapseServiceProvider.php
@@ -94,7 +104,7 @@ Everything is optional; the defaults work.
 
 | Command | What it does |
 |---|---|
-| `synapse:install` | Publishes config, migrations and the gate provider, registers it locally from `AppServiceProvider`, then migrates. Safe to re-run — it never overwrites your edits. |
+| `synapse:install` | Publishes self-contained config, migrations and the gate provider, registers the provider locally from `AppServiceProvider`, then migrates. Safe to re-run — it never overwrites your edits. |
 | `synapse:prune` | Deletes conversations older than `--days`, with their attachments. |
 | `synapse:clear` | Deletes **all** Synapse conversations and attachments. |
 

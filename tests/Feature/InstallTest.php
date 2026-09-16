@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\ServiceProvider;
 use Redberry\Synapse\Synapse;
@@ -33,6 +34,10 @@ function forgetPublishedFiles(): void
         config_path('synapse.php'),
         app_path('Providers/SynapseServiceProvider.php'),
     ]);
+
+    foreach (File::files(dirname(__DIR__, 2).'/database/migrations') as $migrationFile) {
+        File::delete(database_path('migrations/'.$migrationFile->getFilename()));
+    }
 
     $bootstrap = base_path('bootstrap/providers.php');
 
@@ -97,7 +102,10 @@ beforeEach(function () {
     forgetPublishedFiles();
     createApplicationProvider();
 });
-afterEach(fn () => forgetPublishedFiles());
+afterEach(function () {
+    forgetPublishedFiles();
+    createApplicationProvider();
+});
 
 it('does not overwrite a customised config or an edited provider', function () {
     $config = config_path('synapse.php');
@@ -229,6 +237,48 @@ PHP;
     expect($process->isSuccessful())->toBeTrue()
         ->and($process->getOutput())->toBe('booted')
         ->and($process->getErrorOutput())->toBeEmpty();
+});
+
+it('removes the published provider registration before uninstalling', function () {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+    ServiceProvider::addProviderToBootstrapFile('App\\Providers\\SynapseServiceProvider');
+
+    Event::dispatch('composer_package.redberry/synapse:pre_uninstall');
+
+    expect(File::get(base_path('bootstrap/providers.php')))
+        ->not->toContain('App\\Providers\\SynapseServiceProvider');
+})->skip(
+    fn (): bool => ! file_exists(base_path('bootstrap/providers.php')),
+    'The skeleton has no bootstrap/providers.php to unregister from.',
+);
+
+it('publishes resources that remain loadable without Synapse classes', function () {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    $migrationFiles = File::files(database_path('migrations'));
+    $publishedProvider = File::get(app_path('Providers/SynapseServiceProvider.php'));
+
+    expect($migrationFiles)->toHaveCount(3)
+        ->and($publishedProvider)->toContain('extends ServiceProvider')
+        ->and($publishedProvider)->not->toContain('extends SynapseApplicationServiceProvider')
+        ->and($publishedProvider)->toContain('in_array($user?->email')
+        ->and($publishedProvider)->toContain("Gate::forUser(\$request->user())->check('viewSynapse')");
+
+    foreach ($migrationFiles as $migrationFile) {
+        expect($migrationFile->getContents())
+            ->toContain('extends Migration')
+            ->not->toContain('Redberry\\Synapse\\Migrations');
+    }
+});
+
+it('keeps the configured connection in self-contained migrations', function () {
+    config()->set('synapse.storage.connection', 'synapse-testing');
+
+    foreach (File::files(dirname(__DIR__, 2).'/database/migrations') as $migrationFile) {
+        $migration = require $migrationFile->getPathname();
+
+        expect($migration->getConnection())->toBe('synapse-testing');
+    }
 });
 
 it('reports itself in php artisan about', function () {

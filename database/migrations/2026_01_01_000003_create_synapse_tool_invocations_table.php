@@ -1,11 +1,16 @@
 <?php
 
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Redberry\Synapse\Migrations\SynapseMigration;
 
-return new class extends SynapseMigration
+return new class extends Migration
 {
+    public function getConnection(): ?string
+    {
+        return config('synapse.storage.connection') ?: config('database.default');
+    }
+
     public function up(): void
     {
         Schema::create('synapse_tool_invocations', function (Blueprint $table) {
