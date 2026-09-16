@@ -417,7 +417,7 @@ function pendingAssistantId(turnId: string): string {
 
 function dropPendingAssistant(entries: ChatEntry[], turnId: string): ChatEntry[] {
     return entries.filter(
-        (entry) => !(entry.kind === 'assistant' && entry.id === pendingAssistantId(turnId)),
+        (entry) => !(entry.kind === 'assistant' && entry.turnId === turnId && entry.pending),
     );
 }
 

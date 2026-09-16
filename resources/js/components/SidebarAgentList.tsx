@@ -20,10 +20,19 @@ export function SidebarAgentList({ agents, loading }: { agents: Agent[]; loading
                     key={agent.slug}
                     to={`/playground/${agent.slug}`}
                     className={({ isActive }) =>
-                        cn(sidebarItemClass(isActive), 'py-1.5 text-xs tracking-wide uppercase')
+                        cn(
+                            sidebarItemClass(isActive),
+                            'min-w-0 py-1.5 text-xs tracking-wide uppercase',
+                        )
                     }
                 >
-                    <span className="truncate">{agent.name}</span>
+                    <span
+                        className="min-w-0 flex-1 truncate"
+                        title={agent.name}
+                        data-testid="sidebar-agent-name"
+                    >
+                        {agent.name}
+                    </span>
                 </NavLink>
             ))}
         </div>

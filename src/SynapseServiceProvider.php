@@ -27,6 +27,8 @@ class SynapseServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->registerPrePackageUninstallListener();
+
         $this->registerRoutes();
 
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'synapse');
@@ -38,6 +40,16 @@ class SynapseServiceProvider extends ServiceProvider
             $this->registerCommands();
             $this->registerAboutCommand();
         }
+    }
+
+    /**
+     * Remove the published provider from the host application before uninstalling.
+     */
+    protected function registerPrePackageUninstallListener(): void
+    {
+        $this->app['events']->listen('composer_package.redberry/synapse:pre_uninstall', function (): void {
+            ServiceProvider::removeProviderFromBootstrapFile('App\\Providers\\SynapseServiceProvider', strict: true);
+        });
     }
 
     /**

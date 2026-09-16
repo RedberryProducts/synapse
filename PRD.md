@@ -65,6 +65,8 @@ The landing page — auto-scans the project and lists all registered agent class
 | Provider / Model | e.g. `anthropic / claude-3-5-sonnet` |
 | Tools | Chips with tool names; overflow collapses to a `+N` chip with a hover popover listing all tools |
 
+Long agent names in constrained discovery/sidebar labels stay on one line, truncate with an ellipsis, and expose the full name through the label's native tooltip (`title`) on hover.
+
 The FQCN and full configuration live in the Info panel (Feature 4), not on the card. Interface-derived capability data (`Conversational`, `HasStructuredOutput`, …) is **not rendered as card badges** — it remains in the discovery API payload for internal use (see Feature 4).
 
 **Actions:** Click a card → opens the Chat Playground; the card's `Info` link opens the Info panel
@@ -193,7 +195,7 @@ This approach:
 2. Synapse stores user message in `synapse_messages`
 3. **If the target agent is `Conversational`**, Synapse wraps it in `SynapseConversationalAgent` with the full thread history; **otherwise it uses the agent as-is** (no history injection — stateless, current message only). See "Synapse's approach" above
 4. Calls `$target->stream($currentMessage, $attachments, …)` → returns `StreamableAgentResponse`
-5. The frontend immediately inserts a transient assistant placeholder so the thread shows `Loading...` before the first SSE part arrives
+5. The frontend immediately inserts a transient assistant placeholder so the thread shows `Loading...` before the first SSE part arrives; later cleanup removes only entries still marked pending and preserves any reasoning already received
 6. Synapse's controller iterates the stream and emits Vercel-protocol SSE parts itself: for each event, use `$event->toVercelProtocolArray()` when it returns non-null (text-delta / reasoning / tool-input / finish parts — `useChat()` parses these for free), and fill the SDK's two serialization gaps with additional parts: a custom `data-provider-tool` part for `ProviderToolEvent` (which has **no** Vercel serialization and is silently skipped by the SDK's serializer), and the standard `tool-output-error` part when `ToolResult->successful === false` (the SDK only ever emits `tool-output-available`, discarding `$successful` / `$error`). ~40 lines of glue; do **not** return the SDK's `Responsable` directly
 **Flushing — guard on `PHP_SAPI`, never on `headers_sent()`.** Each SSE part is pushed with `ob_flush(); flush();` as it is written, which is what makes the dashboard live. The guard on that flush must be the SAPI, exactly as Symfony's `Response::send()` and Laravel's own `eventStream()` do it. `headers_sent()` looks like the right question and is not: the stock `php.ini` sets `output_buffering = 4096`, so the first `echo` lands in PHP's own buffer and the headers are therefore *never* sent — the guard answers "no" for every part, of every run, and the whole conversation is assembled and painted at once. Measured on nginx + PHP-FPM with the two guards and nothing else different: **2ms to first byte versus 4019ms of a 4020ms run.** No test tier can catch this, because the feature suite and the browser driver both run Laravel in-process on the CLI SAPI, where flushing is deliberately off — `bin/check-streaming.sh` is the gate instead. `Synapse::streams()` exposes the same rule to the UI so a runtime that cannot stream says so rather than looking hung.
 
@@ -624,7 +626,7 @@ Synapse mirrors Horizon's proven single-page-app structure:
 **App shell (per Figma design)** — a persistent, collapsible left sidebar frames every page:
 
 - **Recent Conversations** — latest conversations across agents, each showing agent name, truncated title, call count, and an error indicator when the conversation contains an error; per-item context menu (Open Playground / Rename / Delete)
-- **Agents** — quick list of discovered agents for fast switching into a playground
+- **Agents** — quick list of discovered agents for fast switching into a playground; constrained labels truncate with an ellipsis and keep the full name in a native tooltip
 - **Workspace nav** — `Discovery` (the agents dashboard, Feature 1) and `History` (Feature 5). *No Settings entry* — Synapse has no runtime settings UI; configuration is file-based (see Design Sync)
 - **Footer** — package version + discovered agent count (e.g. `v1.0.0 · 8 agents`)
 - Collapsed state shrinks the sidebar to the logo; the chat playground remains fully usable
@@ -662,8 +664,8 @@ Synapse's exposure is **worse than Telescope's**, not equivalent: Telescope leak
 
 Synapse adopts the proven Telescope/Horizon pattern:
 
-- **Open in `local`, gated everywhere else.** In the `local` environment, the dashboard requires no authentication — zero-config dev experience, as intended.
-- **`viewSynapse` gate** — in every other environment, all Synapse routes (dashboard *and* API, including chat) pass through an authorization gate:
+- **Open in `local`, denied by default everywhere else.** In the `local` environment, the dashboard requires no authentication. Elsewhere, `Synapse::check()` returns false unless an authorization callback has been registered; the standard installer does not load the published application provider outside `local`.
+- **`viewSynapse` gate after explicit provider registration** — to use Synapse outside `local`, register the published application provider while the package is installed and configure its gate. That provider installs the authorization callback used by every Synapse route (dashboard *and* API, including chat):
 
 ```php
 // Published into the app by synapse:install (SynapseServiceProvider stub,
@@ -675,8 +677,10 @@ Gate::define('viewSynapse', function ($user) {
 });
 ```
 
-- **Production requires explicit opt-in.** In `production`, Synapse's routes do not register at all unless `SYNAPSE_ENABLED=true` is explicitly set — the existing `'enabled' => env('SYNAPSE_ENABLED', true)` config default applies to non-production environments only. Enabling it in production still requires passing the `viewSynapse` gate. Defense in depth: a forgotten `composer require` on a production box must not become an unauthenticated agent-invocation endpoint.
-- **`synapse:install` publishes the gate stub** so the definition lives in the app where developers can customize it, exactly like Telescope's install flow.
+- **Production requires explicit opt-in.** In `production`, Synapse's routes do not register at all unless `SYNAPSE_ENABLED=true` is explicitly set — the existing `'enabled' => env('SYNAPSE_ENABLED', true)` config default applies to non-production environments only. Enabling routes alone does not grant access: requests are denied until authorization is configured. With the published application provider explicitly registered, requests must pass its `viewSynapse` gate. Defense in depth: a forgotten `composer require` on a production box must not become an unauthenticated agent-invocation endpoint.
+- **`synapse:install` publishes the gate stub** so the definition lives in the app where developers can customize it. The stub extends Laravel's `ServiceProvider` directly and only calls Synapse behind a `class_exists` guard, so it remains safe to bootstrap after `composer install --no-dev` removes the package. The installer registers that provider from `AppServiceProvider` only when the application is `local` and `SynapseApplicationServiceProvider` exists. This condition controls the published gate provider; route registration is controlled separately by `synapse.enabled`.
+- **Installer registration is idempotent and migrates old installs.** Re-running the command preserves host application edits, never duplicates the guarded block, and removes the old unconditional `bootstrap/providers.php` entry only when that exact provider is present; otherwise the bootstrap file is left byte-for-byte unchanged. The installer compares PHP tokens throughout the top-level body of `register()`, preserving statements added before or after the generated block. It ignores whitespace and comments without treating strings, nowdocs, nested closures, or other methods as registration statements. Only the complete generated block in that method scope counts as an existing installation; any remaining `SynapseServiceProvider` reference (including qualified names, strings, and alias imports) causes an actionable error before the application provider or bootstrap registration is changed. This conservative check rejects ambiguous references rather than attempting to rewrite host code or resolve aliases.
+- **Package removal unregisters the published provider when Composer dispatches its dev-mode pre-uninstall event.** The self-contained stub remains the fallback for `--no-dev`, where Laravel intentionally does not dispatch package-uninstall events.
 
 ---
 
@@ -687,7 +691,7 @@ Gate::define('viewSynapse', function ($user) {
 Synapse follows the exact pattern proven by Telescope and used by `laravel/ai` itself: **migrations run against the user's database by default, with a configurable connection override.**
 
 - **Default:** tables are created on the app's default connection — the same approach as the SDK's own `AiMigration` (`config('ai.conversations.connection', config('database.default'))`).
-- **Override:** `SYNAPSE_DB_CONNECTION` points Synapse at any connection defined in `config/database.php`. Synapse's migration base class and all models resolve their connection from this config, mirroring `AiMigration::getConnection()`.
+- **Override:** `SYNAPSE_DB_CONNECTION` points Synapse at any connection defined in `config/database.php`. Each self-contained published migration and all models resolve their connection from this config, mirroring `AiMigration::getConnection()` without depending on package classes after publishing.
 - **Isolation recipe (documented in README):** users who want Synapse data fully out of their app database define a dedicated connection (e.g. a sqlite file) and set one env var:
 
 ```php

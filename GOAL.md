@@ -61,6 +61,16 @@ php artisan synapse:install
 - Publishes `config/synapse.php`
 - Runs Synapse's migrations
 - Publishes a `SynapseServiceProvider` into your app (where the access gate lives — see [Access control](#access-control--environments))
+- Adds an idempotent registration to `AppServiceProvider` that loads the published provider only in `local` and only while the Synapse package exists
+
+The published migrations and provider do not require Synapse classes to load.
+Production can therefore remove the development dependency and still run all
+application migrations:
+
+```bash
+composer install --no-dev
+php artisan migrate --force
+```
 
 You never run `npm` — Synapse ships pre-built assets.
 
@@ -71,6 +81,19 @@ running last month's JavaScript against this month's API — the usual way a
 dashboard package breaks after an upgrade. There is nothing to re-publish and no
 cache to bust.
 
+**For production deployments:**
+
+```bash
+composer install --no-dev
+```
+
+No manual provider removal is needed. The local registration checks that the
+Synapse package class exists, so Laravel still boots after Composer removes the
+development dependency. Existing installations that contain
+`App\Providers\SynapseServiceProvider` in `bootstrap/providers.php` should run
+`php artisan synapse:install` once locally before deployment; the command moves
+registration to `AppServiceProvider` without overwriting the customized gate. If no legacy entry exists, the bootstrap file is left unchanged, preserving provider order and comments. If the installer finds an existing registration it cannot verify as guarded, it asks you to remove that registration and any provider references outside the generated block (including alias imports), then rerun the command; it leaves your application provider and bootstrap entry unchanged.
+
 **After a `composer update`:**
 
 ```bash
@@ -80,7 +103,19 @@ php artisan migrate
 That's it — new releases may add tables, and nothing else needs doing. Re-running
 `php artisan synapse:install` is also safe: it never overwrites a
 `config/synapse.php` you have edited or a `SynapseServiceProvider` you have
-customised, so your access gate survives.
+customised, so your access gate survives. Application bindings added before or after the generated registration block are preserved on repeat installs.
+
+**Upgrading an installation created by an older Synapse release:** refresh the
+old package-dependent migrations before removing development dependencies:
+
+```bash
+php artisan vendor:publish --tag=synapse-migrations --force
+```
+
+Update `app/Providers/SynapseServiceProvider.php` to match the current
+self-contained stub while preserving your gate, or remove its entry from
+`bootstrap/providers.php` before `composer install --no-dev`. Re-running
+`synapse:install` does not overwrite that customized provider automatically.
 
 Then open:
 
@@ -119,7 +154,7 @@ That's the whole loop Synapse is built for: **discover → chat → inspect → 
 Every page sits inside a persistent, collapsible sidebar:
 
 - **Recent Conversations** — your latest chats across all agents, each with its agent name, a short title, a call count, and an error indicator if something failed. Each has a menu to open, rename, or delete it.
-- **Agents** — a quick list of discovered agents for jumping straight into a playground.
+- **Agents** — a quick list of discovered agents for jumping straight into a playground. Long names stay on one line, end with an ellipsis when space runs out, and expose the full name on hover.
 - **Workspace** — navigation between **Discovery** (the agents dashboard) and **History** (all past conversations).
 - **Footer** — the Synapse version and how many agents were discovered (e.g. `v1.0.0 · 8 agents`).
 
@@ -136,6 +171,7 @@ The Discovery page is your landing page. It scans your project on every request 
 Each **agent card** shows:
 
 - **Name** — the class short name (e.g. `SupportAgent`)
+- Long names stay within the card on one line, show an ellipsis when truncated, and expose the full class name on hover.
 - **Provider / model** — e.g. `anthropic / claude-sonnet-5`
 - **Tools** — a chip per tool; if there are many, they collapse into a `+N` chip you can hover to see the full list
 
@@ -156,7 +192,7 @@ The playground is a real conversation with a real agent. Messages stream token-b
 **In the response, you'll see:**
 
 - **Streaming text** — the answer as it arrives.
-- **Pending response state** — right after you send, a `Loading...` row appears where the reply will land and stays there until the first reasoning step, tool event, notice, answer text, or error arrives.
+- **Pending response state** — right after you send, a `Loading...` row appears where the reply will land and stays there until the first reasoning step, tool event, notice, answer text, or error arrives. Reasoning already received remains visible when later tools, notices, or errors arrive.
 - **Reasoning** — for models with extended thinking (Anthropic, OpenAI o-series, DeepSeek), `✦ Thinking…` appears while the model works, then collapses into a "Thinking" pane above the answer, with its own reasoning-token count in the per-message counts. Collapsed by default so it never gets in the way — and kept, so reopening the conversation later shows the same thinking you watched.
 - **Tool calls** — inline cards, in the order they happened (see [Tool inspection](#tool-inspection)).
 - **Structured output** — if your agent returns structured data, the response renders as a formatted, collapsible JSON card instead of plain text. Structured-output agents can't stream (the SDK doesn't support it), so Synapse runs them in one shot and shows the finished answer — the only visible difference is that the text arrives all at once.
@@ -357,7 +393,7 @@ return [
 Synapse invokes your **real agents** — spending API credits and running tools that may write to your database, call external services, or trigger any side effect your tools implement. So access is guarded accordingly.
 
 - **Local:** open, no authentication. Zero-config dev experience.
-- **Any other environment:** every route (dashboard and API) is protected by a `viewSynapse` authorization gate. `synapse:install` publishes this gate into your app so you own it:
+- **Any other environment:** the standard `--dev` installation does not register the published provider, so access is denied by default even when routes are enabled. To allow access, explicitly register the published provider while Synapse is installed and configure its `viewSynapse` authorization gate, which then protects every dashboard and API route:
 
   ```php
   // app/Providers/SynapseServiceProvider.php
@@ -368,7 +404,7 @@ Synapse invokes your **real agents** — spending API credits and running tools 
   });
   ```
 
-- **Production:** Synapse does **not** register at all unless `SYNAPSE_ENABLED=true` is explicitly set — and even then, access still requires passing the `viewSynapse` gate. A forgotten `composer require` on a production box can never become an open agent-invocation endpoint.
+- **Production:** the supported flow removes Synapse with `composer install --no-dev`; the guarded application registration remains safe when its package classes are absent. If Synapse is installed deliberately, it still does **not** register routes unless `SYNAPSE_ENABLED=true` is explicitly set, and access requires a configured `viewSynapse` gate.
 
 Synapse is a development tool. Running it in production is possible but deliberately locked down.
 
