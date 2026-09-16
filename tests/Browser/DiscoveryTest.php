@@ -13,13 +13,22 @@ function expectNameToTruncate(object $page, string $selector, string $name): voi
 {
     $encodedSelector = json_encode($selector);
 
-    expect($page->script("document.querySelector({$encodedSelector}).getAttribute('title')"))->toBe($name);
+    $page->assertPresent($selector);
+
+    expect($page->script("document.querySelector({$encodedSelector})?.getAttribute('title')"))->toBe($name);
 
     expect($page->script(<<<JS
         (() => {
             const element = document.querySelector({$encodedSelector});
 
-            return element.scrollWidth > element.clientWidth;
+            if (!element) return false;
+
+            const style = getComputedStyle(element);
+
+            return element.scrollWidth > element.clientWidth
+                && style.overflowX === 'hidden'
+                && style.textOverflow === 'ellipsis'
+                && style.whiteSpace === 'nowrap';
         })()
     JS))->toBeTrue();
 }

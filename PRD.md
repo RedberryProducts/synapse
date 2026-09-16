@@ -65,7 +65,7 @@ The landing page — auto-scans the project and lists all registered agent class
 | Provider / Model | e.g. `anthropic / claude-3-5-sonnet` |
 | Tools | Chips with tool names; overflow collapses to a `+N` chip with a hover popover listing all tools |
 
-Long agent names in constrained discovery/sidebar labels stay on one line, truncate with an ellipsis, and expose the full name through the label's native tooltip (`title`) on hover/focus.
+Long agent names in constrained discovery/sidebar labels stay on one line, truncate with an ellipsis, and expose the full name through the label's native tooltip (`title`) on hover.
 
 The FQCN and full configuration live in the Info panel (Feature 4), not on the card. Interface-derived capability data (`Conversational`, `HasStructuredOutput`, …) is **not rendered as card badges** — it remains in the discovery API payload for internal use (see Feature 4).
 
