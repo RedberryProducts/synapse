@@ -30,7 +30,15 @@ composer require redberry/synapse --dev
 php artisan synapse:install
 ```
 
-That publishes `config/synapse.php`, runs the migrations, and installs a `SynapseServiceProvider` into your app — which is where the access gate lives. Then open `/synapse`.
+That publishes `config/synapse.php`, runs the migrations, and publishes a `SynapseServiceProvider` into your app — which is where the access gate lives. The installer conditionally registers that provider from `AppServiceProvider` only in `local` and while the Synapse package is installed. Then open `/synapse`.
+
+For production, install dependencies without development packages as usual:
+
+```bash
+composer install --no-dev
+```
+
+No provider cleanup is required. Synapse is omitted, and the generated `class_exists` guard lets the application boot without it. If an older Synapse install added `App\Providers\SynapseServiceProvider` to `bootstrap/providers.php`, re-run `php artisan synapse:install` locally once before deploying; the installer removes that stale entry without overwriting your gate.
 
 The published migrations and provider are self-contained, so production deployments may safely run `composer install --no-dev` followed by `php artisan migrate --force` after Composer removes Synapse.
 
@@ -53,7 +61,7 @@ Synapse reads your existing `config/ai.php`. You don't configure providers or AP
 Two independent protections, both on by default:
 
 1. **It does not register at all in production** unless you explicitly set `SYNAPSE_ENABLED=true`.
-2. **Outside `local`, every route — dashboard and API — passes the `viewSynapse` gate**, which denies everyone until you say otherwise:
+2. **Dashboard access outside `local` requires authorization.** Routes are registered whenever `synapse.enabled` is true. The installer registers the published application provider, which defines the `viewSynapse` gate, only in `local`. To use Synapse in another environment, explicitly register that provider while the package is installed and configure its gate:
 
    ```php
    // app/Providers/SynapseServiceProvider.php
@@ -96,7 +104,7 @@ Everything is optional; the defaults work.
 
 | Command | What it does |
 |---|---|
-| `synapse:install` | Publishes self-contained config, migrations and the gate provider, then migrates. Safe to re-run — it never overwrites your edits. |
+| `synapse:install` | Publishes self-contained config, migrations and the gate provider, registers the provider locally from `AppServiceProvider`, then migrates. Safe to re-run — it never overwrites your edits. |
 | `synapse:prune` | Deletes conversations older than `--days`, with their attachments. |
 | `synapse:clear` | Deletes **all** Synapse conversations and attachments. |
 

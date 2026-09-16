@@ -61,6 +61,7 @@ php artisan synapse:install
 - Publishes `config/synapse.php`
 - Runs Synapse's migrations
 - Publishes a `SynapseServiceProvider` into your app (where the access gate lives — see [Access control](#access-control--environments))
+- Adds an idempotent registration to `AppServiceProvider` that loads the published provider only in `local` and only while the Synapse package exists
 
 The published migrations and provider do not require Synapse classes to load.
 Production can therefore remove the development dependency and still run all
@@ -80,6 +81,19 @@ running last month's JavaScript against this month's API — the usual way a
 dashboard package breaks after an upgrade. There is nothing to re-publish and no
 cache to bust.
 
+**For production deployments:**
+
+```bash
+composer install --no-dev
+```
+
+No manual provider removal is needed. The local registration checks that the
+Synapse package class exists, so Laravel still boots after Composer removes the
+development dependency. Existing installations that contain
+`App\Providers\SynapseServiceProvider` in `bootstrap/providers.php` should run
+`php artisan synapse:install` once locally before deployment; the command moves
+registration to `AppServiceProvider` without overwriting the customized gate. If no legacy entry exists, the bootstrap file is left unchanged, preserving provider order and comments. If the installer finds an existing registration it cannot verify as guarded, it asks you to remove that registration and any provider references outside the generated block (including alias imports), then rerun the command; it leaves your application provider and bootstrap entry unchanged.
+
 **After a `composer update`:**
 
 ```bash
@@ -89,7 +103,7 @@ php artisan migrate
 That's it — new releases may add tables, and nothing else needs doing. Re-running
 `php artisan synapse:install` is also safe: it never overwrites a
 `config/synapse.php` you have edited or a `SynapseServiceProvider` you have
-customised, so your access gate survives.
+customised, so your access gate survives. Application bindings added before or after the generated registration block are preserved on repeat installs.
 
 **Upgrading an installation created by an older Synapse release:** refresh the
 old package-dependent migrations before removing development dependencies:
@@ -378,7 +392,7 @@ return [
 Synapse invokes your **real agents** — spending API credits and running tools that may write to your database, call external services, or trigger any side effect your tools implement. So access is guarded accordingly.
 
 - **Local:** open, no authentication. Zero-config dev experience.
-- **Any other environment:** every route (dashboard and API) is protected by a `viewSynapse` authorization gate. `synapse:install` publishes this gate into your app so you own it:
+- **Any other environment:** the standard `--dev` installation does not register the published provider, so access is denied by default even when routes are enabled. To allow access, explicitly register the published provider while Synapse is installed and configure its `viewSynapse` authorization gate, which then protects every dashboard and API route:
 
   ```php
   // app/Providers/SynapseServiceProvider.php
@@ -389,7 +403,7 @@ Synapse invokes your **real agents** — spending API credits and running tools 
   });
   ```
 
-- **Production:** Synapse does **not** register at all unless `SYNAPSE_ENABLED=true` is explicitly set — and even then, access still requires passing the `viewSynapse` gate. A forgotten `composer require` on a production box can never become an open agent-invocation endpoint.
+- **Production:** the supported flow removes Synapse with `composer install --no-dev`; the guarded application registration remains safe when its package classes are absent. If Synapse is installed deliberately, it still does **not** register routes unless `SYNAPSE_ENABLED=true` is explicitly set, and access requires a configured `viewSynapse` gate.
 
 Synapse is a development tool. Running it in production is possible but deliberately locked down.
 
