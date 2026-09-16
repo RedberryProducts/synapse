@@ -5,6 +5,7 @@ namespace Redberry\Synapse\Console;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\ServiceProvider;
+use PhpToken;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 
@@ -53,20 +54,20 @@ class InstallCommand extends Command
             '            $this->app->register(SynapseServiceProvider::class);',
             '        }',
         ]);
-        $code = '';
+        $tokens = $this->codeTokens($contents);
+        $bodyIndex = $this->registerBodyIndex($tokens);
+        $blockTokens = $this->codeTokens('<?php '.$registration);
+        $blockStart = $bodyIndex === null ? 0 : $bodyIndex + 1;
+        $candidate = array_slice($tokens, $blockStart, count($blockTokens));
+        $hasRegistration = $bodyIndex !== null
+            && array_column($candidate, 'text') === array_column($blockTokens, 'text');
+        $remainingCode = $contents;
 
-        foreach (token_get_all($contents) as $token) {
-            if (is_array($token)) {
-                if (! in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
-                    $code .= $token[1];
-                }
-            } else {
-                $code .= $token;
-            }
+        if ($hasRegistration) {
+            $first = $candidate[0];
+            $last = $candidate[count($candidate) - 1];
+            $remainingCode = substr_replace($contents, '', $first->pos, $last->pos + strlen($last->text) - $first->pos);
         }
-
-        $hasRegistration = str_contains($code, $registration);
-        $remainingCode = $hasRegistration ? str_replace($registration, '', $code) : $contents;
 
         // Imports must also be rejected: an alias can hide an unguarded registration.
         if (preg_match('/\bSynapseServiceProvider\b/i', $remainingCode) === 1) {
@@ -76,25 +77,57 @@ class InstallCommand extends Command
         }
 
         if (! $hasRegistration) {
-            $updatedContents = preg_replace(
-                '/^(\s*public\s+function\s+register\s*\(\s*\)\s*(?::\s*void)?\s*(?:\{\R|\R\s*\{\R))/m',
-                '$1'.$registration.$eol.$eol,
-                $contents,
-                1,
-            );
-
-            if ($updatedContents === null || $updatedContents === $contents) {
+            if ($bodyIndex === null) {
                 throw new RuntimeException(
                     'Unable to register Synapse: App\\Providers\\AppServiceProvider::register() was not found.'
                 );
             }
 
+            $updatedContents = substr_replace($contents, $eol.$registration.$eol, $tokens[$bodyIndex]->pos + 1, 0);
+
             File::put($path, $updatedContents);
         }
 
-        ServiceProvider::removeProviderFromBootstrapFile(
-            'App\\Providers\\SynapseServiceProvider',
-            strict: true,
-        );
+        $bootstrap = $this->laravel->getBootstrapProvidersPath();
+
+        if (File::exists($bootstrap) && in_array('App\\Providers\\SynapseServiceProvider', require $bootstrap, true)) {
+            ServiceProvider::removeProviderFromBootstrapFile(
+                'App\\Providers\\SynapseServiceProvider',
+                strict: true,
+            );
+        }
+    }
+
+    /**
+     * @return list<PhpToken>
+     */
+    private function codeTokens(string $contents): array
+    {
+        return array_values(array_filter(
+            PhpToken::tokenize($contents),
+            fn (PhpToken $token): bool => ! $token->is([T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
+        ));
+    }
+
+    /**
+     * @param  list<PhpToken>  $tokens
+     */
+    private function registerBodyIndex(array $tokens): ?int
+    {
+        $texts = array_column($tokens, 'text');
+
+        foreach ($tokens as $index => $token) {
+            if ($token->id !== T_PUBLIC) {
+                continue;
+            }
+
+            foreach ([['public', 'function', 'register', '(', ')', '{'], ['public', 'function', 'register', '(', ')', ':', 'void', '{']] as $signature) {
+                if (array_slice($texts, $index, count($signature)) === $signature) {
+                    return $index + count($signature) - 1;
+                }
+            }
+        }
+
+        return null;
     }
 }

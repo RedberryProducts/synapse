@@ -92,7 +92,7 @@ Synapse package class exists, so Laravel still boots after Composer removes the
 development dependency. Existing installations that contain
 `App\Providers\SynapseServiceProvider` in `bootstrap/providers.php` should run
 `php artisan synapse:install` once locally before deployment; the command moves
-registration to `AppServiceProvider` without overwriting the customized gate. If the installer finds an existing registration it cannot verify as guarded, it asks you to remove that registration and any provider references outside the generated block (including alias imports), then rerun the command; it leaves your application provider and bootstrap entry unchanged.
+registration to `AppServiceProvider` without overwriting the customized gate. If no legacy entry exists, the bootstrap file is left unchanged, preserving provider order and comments. If the installer finds an existing registration it cannot verify as guarded, it asks you to remove that registration and any provider references outside the generated block (including alias imports), then rerun the command; it leaves your application provider and bootstrap entry unchanged.
 
 **After a `composer update`:**
 
@@ -392,7 +392,7 @@ return [
 Synapse invokes your **real agents** — spending API credits and running tools that may write to your database, call external services, or trigger any side effect your tools implement. So access is guarded accordingly.
 
 - **Local:** open, no authentication. Zero-config dev experience.
-- **Any other environment:** the standard `--dev` installation does not register the published provider. If you deliberately adapt the installation for another environment, every route (dashboard and API) is protected by the published `viewSynapse` authorization gate:
+- **Any other environment:** the standard `--dev` installation does not register the published provider, so access is denied by default even when routes are enabled. To allow access, explicitly register the published provider while Synapse is installed and configure its `viewSynapse` authorization gate, which then protects every dashboard and API route:
 
   ```php
   // app/Providers/SynapseServiceProvider.php

@@ -209,6 +209,73 @@ it('preserves unrelated provider registrations', function () {
     expect(File::get($path))->toContain($registration);
 });
 
+it('preserves the bootstrap file when no legacy provider is registered', function () {
+    $path = base_path('bootstrap/providers.php');
+    $original = File::get($path);
+    $contents = <<<'PHP'
+<?php
+
+return [
+    // Provider order is intentional.
+    App\Providers\ZebraServiceProvider::class,
+    App\Providers\AppServiceProvider::class,
+];
+PHP;
+    File::put($path, $contents);
+
+    try {
+        $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+        $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+        expect(File::get($path))->toBe($contents);
+    } finally {
+        File::put($path, $original);
+    }
+});
+
+it('recognizes the generated block after whitespace formatting', function () {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+    $path = app_path('Providers/AppServiceProvider.php');
+    $formatted = str_replace(['    ', "\n"], ["\t", "\r\n"], File::get($path));
+    File::put($path, $formatted);
+
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    expect(File::get($path))->toBe($formatted);
+});
+
+it('does not accept a generated block outside executable register code', function (string $location) {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+    $path = app_path('Providers/AppServiceProvider.php');
+    $installed = File::get($path);
+    $block = <<<'PHP'
+        if ($this->app->environment('local') &&
+            class_exists(\Redberry\Synapse\SynapseApplicationServiceProvider::class)) {
+            $this->app->register(SynapseServiceProvider::class);
+        }
+PHP;
+    $replacement = match ($location) {
+        'nowdoc' => "        \$example = <<<'EXAMPLE'\n".$block."\nEXAMPLE;",
+        'string' => '        $example = "'.$block.'";',
+        'boot' => '',
+    };
+    $contents = str_replace($block, $replacement, $installed);
+
+    if ($location === 'boot') {
+        $contents = str_replace("public function boot(): void\n    {", "public function boot(): void\n    {\n".$block, $contents);
+    }
+
+    File::put($path, $contents);
+    ServiceProvider::addProviderToBootstrapFile('App\\Providers\\SynapseServiceProvider');
+    $bootstrap = File::get(base_path('bootstrap/providers.php'));
+
+    expect(fn () => $this->artisan('synapse:install', ['--no-migrate' => true]))
+        ->toThrow(RuntimeException::class, 'Remove the existing Synapse registration');
+
+    expect(File::get($path))->toBe($contents)
+        ->and(File::get(base_path('bootstrap/providers.php')))->toBe($bootstrap);
+})->with(['nowdoc', 'string', 'boot']);
+
 it('rejects an additional unguarded registration beside the generated block', function () {
     $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
 
