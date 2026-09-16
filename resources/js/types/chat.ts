@@ -107,6 +107,7 @@ export interface AssistantEntry {
      */
     turnId: string;
     text: string;
+    pending: boolean;
     /** Extended-thinking transcript, empty when the model did none. */
     reasoning: string;
     reasoningStreaming: boolean;
