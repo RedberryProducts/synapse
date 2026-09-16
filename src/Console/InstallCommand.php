@@ -68,9 +68,10 @@ class InstallCommand extends Command
         $hasRegistration = str_contains($code, $registration);
         $remainingCode = $hasRegistration ? str_replace($registration, '', $code) : $contents;
 
-        if (str_contains($remainingCode, '$this->app->register(SynapseServiceProvider::class)')) {
+        // Imports must also be rejected: an alias can hide an unguarded registration.
+        if (preg_match('/\bSynapseServiceProvider\b/i', $remainingCode) === 1) {
             throw new RuntimeException(
-                'Unable to verify the existing Synapse registration. Remove the existing Synapse registration from AppServiceProvider::register() (including commented copies), then rerun synapse:install to add the local and class_exists guards.'
+                'Unable to verify the existing Synapse registration. Remove the existing Synapse registration from AppServiceProvider::register() and any SynapseServiceProvider references outside the generated guarded block (including imports and commented copies), then rerun synapse:install to add the local and class_exists guards.'
             );
         }
 

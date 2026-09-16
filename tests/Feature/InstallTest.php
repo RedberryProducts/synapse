@@ -155,9 +155,10 @@ it('registers the provider locally once however many times it is run', function 
         ->not->toContain('App\\Providers\\SynapseServiceProvider');
 });
 
-it('rejects an existing registration without the complete guards', function (string $registration) {
+it('rejects an existing registration without the complete guards', function (string $registration, string $imports = '') {
     $path = app_path('Providers/AppServiceProvider.php');
     $contents = str_replace('        //', $registration, File::get($path));
+    $contents = str_replace('namespace App\\Providers;', 'namespace App\\Providers;'.$imports, $contents);
     File::put($path, $contents);
     ServiceProvider::addProviderToBootstrapFile('App\\Providers\\SynapseServiceProvider');
     $bootstrap = File::get(base_path('bootstrap/providers.php'));
@@ -170,6 +171,18 @@ it('rejects an existing registration without the complete guards', function (str
 })->with([
     'unguarded call' => '        $this->app->register(SynapseServiceProvider::class);',
     'commented call' => '        // $this->app->register(SynapseServiceProvider::class);',
+    'fully qualified class' => '        $this->app->register(\\App\\Providers\\SynapseServiceProvider::class);',
+    'whitespace around the call' => '        $this -> app -> register ( SynapseServiceProvider :: class );',
+    'case-insensitive class name' => '        $this->app->register(\\App\\Providers\\synapseserviceprovider::class);',
+    'class name string' => "        \$this->app->register('App\\\\Providers\\\\SynapseServiceProvider');",
+    'imported alias' => [
+        '        $this->app->register(DashboardProvider::class);',
+        "\nuse App\\Providers\\SynapseServiceProvider as DashboardProvider;\n",
+    ],
+    'grouped import alias' => [
+        '        $this->app->register(DashboardProvider::class);',
+        "\nuse App\\Providers\\{SynapseServiceProvider as DashboardProvider};\n",
+    ],
     'local guard without class check' => <<<'PHP'
         if ($this->app->environment('local')) {
             $this->app->register(SynapseServiceProvider::class);
@@ -184,6 +197,30 @@ PHP,
         */
 PHP,
 ]);
+
+it('preserves unrelated provider registrations', function () {
+    $path = app_path('Providers/AppServiceProvider.php');
+    $registration = '        $this->app->register(\\App\\Providers\\BillingServiceProvider::class);';
+    File::put($path, str_replace('        //', $registration, File::get($path)));
+
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    expect(File::get($path))->toContain($registration);
+});
+
+it('rejects an additional unguarded registration beside the generated block', function () {
+    $this->artisan('synapse:install', ['--no-migrate' => true])->assertSuccessful();
+
+    $path = app_path('Providers/AppServiceProvider.php');
+    $contents = str_replace('        //', '        $this->app->register(\\App\\Providers\\SynapseServiceProvider::class);', File::get($path));
+    File::put($path, $contents);
+
+    expect(fn () => $this->artisan('synapse:install', ['--no-migrate' => true]))
+        ->toThrow(RuntimeException::class, 'Remove the existing Synapse registration');
+
+    expect(File::get($path))->toBe($contents);
+});
 
 it('fails clearly when the application provider file is missing', function () {
     File::delete(app_path('Providers/AppServiceProvider.php'));
