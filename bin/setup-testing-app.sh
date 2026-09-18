@@ -31,6 +31,7 @@ echo "==> Wiring path repositories"
 composer config minimum-stability dev
 composer config prefer-stable true
 composer config repositories.synapse '{"type":"path","url":"../","options":{"symlink":true}}'
+composer config --unset repositories.laravel-ai
 
 # laravel/ai is deliberately NOT wired to references/. A path repo is canonical
 # and outranks Packagist, so pointing at the local checkout silently pins the
@@ -39,7 +40,8 @@ composer config repositories.synapse '{"type":"path","url":"../","options":{"sym
 # app does. `references/` stays what AGENTS.md says it is: reading material.
 
 echo "==> Requiring redberry/synapse"
-composer require redberry/synapse:@dev --no-interaction
+# Refresh dependencies too, so an existing lock cannot retain the local SDK.
+composer require redberry/synapse:@dev --with-all-dependencies --no-interaction
 
 echo "==> Installing Synapse"
 php artisan synapse:install

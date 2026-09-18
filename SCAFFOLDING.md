@@ -256,8 +256,8 @@ A **real Laravel app** to exercise the actual `composer require` + `synapse:inst
 Helper: **`bin/setup-testing-app.sh`** (built) that:
 1. Builds the Synapse assets (`npm install && npm run build`)
 2. `composer create-project laravel/laravel testing-laravel-project` (if absent)
-3. Adds a path repository for Synapse (`../`) to `testing-laravel-project/composer.json`, with symlinking enabled, plus `minimum-stability: dev` and `prefer-stable: true`
-4. `composer require redberry/synapse:@dev`
+3. Adds a path repository for Synapse (`../`) to `testing-laravel-project/composer.json`, with symlinking enabled, plus `minimum-stability: dev` and `prefer-stable: true`; removes the legacy `laravel-ai` path repository if present
+4. `composer require redberry/synapse:@dev --with-all-dependencies` — refreshes the SDK even when the existing lockfile points to a local checkout
 5. `php artisan synapse:install`
 6. Seeds the four sample agents into `testing-laravel-project/app/Agents/` (namespace rewritten `Workbench\App` → `App`)
 

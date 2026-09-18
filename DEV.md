@@ -88,6 +88,8 @@ The script builds assets, creates a fresh Laravel app, wires a path repository f
 
 Iterating on the package while the test app is running: because the package is **symlinked** into the app's `vendor/`, both PHP *and* frontend changes are live — run `npm run watch` in the package and just refresh the browser. Assets are inlined from `dist/`, so there is no publish step.
 
+When refreshing an existing app, the script removes the legacy `laravel-ai` path repository and updates Synapse's dependencies so the lockfile no longer points to the local SDK.
+
 `testing-laravel-project/` is gitignored; recreate it anytime with the setup script.
 
 ## Common tasks
