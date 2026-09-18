@@ -7,6 +7,12 @@ version is below `1.0.0`, minor releases may contain breaking changes.
 
 ## Unreleased
 
+## Unreleased
+
+### Fixed
+
+- Allow Laravel AI SDK 0.11 alongside 0.9 and 0.10, fixing Composer conflicts in applications already using SDK 0.11. Future SDK minor versions remain subject to compatibility testing.
+
 ## v0.1.3
 
 ### Fixed

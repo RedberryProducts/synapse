@@ -67,7 +67,7 @@ synapse/
   "require": {
     "php": "^8.3",
     "laravel/framework": "^12.0|^13.0",
-    "laravel/ai": "^0.9|^0.10"
+    "laravel/ai": "^0.9|^0.10|^0.11"
   },
   "require-dev": {
     "orchestra/testbench": "^10.0|^11.0",

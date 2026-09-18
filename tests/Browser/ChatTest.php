@@ -444,6 +444,11 @@ it('accepts a file dropped onto the composer', function () {
 });
 
 it('offers the agent model plus its provider tiers', function () {
+    config([
+        'ai.providers.openai.models.text.cheapest' => 'test-cheapest-model',
+        'ai.providers.openai.models.text.smartest' => 'test-smartest-model',
+    ]);
+
     $page = visit('/synapse/playground/workbench.app.agents.support-agent');
 
     $page->assertSeeIn('@model-selector', 'gpt-5.6-luna');
