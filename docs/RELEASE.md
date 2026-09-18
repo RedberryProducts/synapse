@@ -5,7 +5,16 @@ succeed — the SDK constraint was stale and nothing in the suite could tell,
 since the package's own environment was pinned to a local checkout. Steps 4 and
 6 are the ones that would have caught it.
 
-## 1. Gates
+## 1. Assets
+
+```bash
+npm run build && git status --short dist/
+```
+
+`dist/` is committed and inlined at runtime. If the build produces a diff, commit
+it — a stale bundle ships a broken UI with a green suite.
+
+## 2. Gates
 
 ```bash
 composer check
@@ -15,16 +24,10 @@ composer check
 composer test:e2e
 ```
 
-Both green. Build current assets before browser testing. There is currently no automated test-matrix workflow, so run these release gates locally.
-
-## 2. Assets
-
-```bash
-npm run build && git status --short dist/
-```
-
-`dist/` is committed and inlined at runtime. If the build produces a diff, commit
-it — a stale bundle ships a broken UI with a green suite.
+Both must pass, with no skipped browser tests. The browser harness skips tests
+when assets are missing; a skipped suite does not satisfy the release gate.
+There is currently no automated test-matrix workflow, so run these release gates
+locally after building the assets in step 1.
 
 ## 3. Streaming
 
