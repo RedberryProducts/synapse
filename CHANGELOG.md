@@ -5,9 +5,7 @@ All notable changes to `redberry/synapse` are documented here.
 This project follows [Semantic Versioning](https://semver.org/). While the
 version is below `1.0.0`, minor releases may contain breaking changes.
 
-## Unreleased
-
-## Unreleased
+## v0.1.4
 
 ### Fixed
 
