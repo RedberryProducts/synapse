@@ -15,8 +15,7 @@ composer check
 composer test:e2e
 ```
 
-Both green. `composer test:e2e` is excluded from CI (it needs Playwright and
-current assets), so it only runs if you run it.
+Both green. Build current assets before browser testing. There is currently no automated test-matrix workflow, so run these release gates locally.
 
 ## 2. Assets
 
@@ -87,11 +86,12 @@ All six feature epics, in both themes: discovery, info panel, chat, tool
 inspection, attachments/structured/reasoning, history. Epic 6's manual pass
 found three bugs in code that had been green for weeks.
 
-## 8. Tag
+## 8. Publish from GitHub
 
-```bash
-git tag vX.Y.Z && git push origin vX.Y.Z
-```
+Merge the release-preparation PR, then open GitHub → Releases → Draft a new release.
+Create the planned `vX.Y.Z` tag against the merged `main` commit, use the title from
+`docs/releases/vX.Y.Z.md`, and paste that file's release notes into the description.
+Publish when ready. Do not tag the preparation branch before it is merged.
 
 Then install the tag in a fresh app one more time and repeat step 6's first two
 checks. Packagist picks the tag up automatically via the GitHub hook.

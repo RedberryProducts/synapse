@@ -72,8 +72,8 @@ $this->publishes([__DIR__.'/../stubs/SynapseServiceProvider.stub' => app_path('P
 
 Telescope/Horizon pattern, used by Synapse:
 
-- Open in `local`; gated by a `viewSynapse` Gate everywhere else; in `production` the routes don't even register unless explicitly enabled.
-- The gate lives in a **published application service provider stub** (`stubs/SynapseServiceProvider.stub` → `app/Providers`) so users own it. A base `SynapseApplicationServiceProvider` + `Synapse::auth(callback)` + an `Authorize` middleware wire it together.
+- Open in `local`; denied by default elsewhere. Explicitly registering the published application provider installs the `viewSynapse` gate callback. In `production`, routes do not register unless explicitly enabled.
+- The gate lives in a **published application service provider stub** (`stubs/SynapseServiceProvider.stub` → `app/Providers`) so users own it. The published stub extends Laravel's `ServiceProvider` and guards its `Synapse::auth(callback)` call with `class_exists`. The installer registers it locally from `AppServiceProvider`; `Authorize` enforces access.
 
 ## Testing (Orchestra Testbench + Pest)
 
@@ -117,7 +117,7 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
 
 ## SDK dependency note
 
-`laravel/ai` is pulled from the local `references/laravel/ai` via a Composer **path repository** (pinned `version: 0.9.1`) until it's on Packagist. The package-level path repo is harmlessly ignored when the path is absent (external installs). See DEV.md.
+`laravel/ai` resolves from Packagist using `composer.json` constraints. Do not wire `references/laravel/ai` as a canonical path repository for installation QA: that would test a local SDK checkout instead of the published dependency. See DEV.md.
 
 ## See also
 

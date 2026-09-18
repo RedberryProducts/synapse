@@ -20,7 +20,7 @@ class Synapse
      * footer all claimed 0.1.0 on a 0.1.1 install. For a tool whose whole
      * premise is showing you the truth, that is worse than it sounds.
      */
-    public const VERSION = '0.1.1';
+    public const VERSION = '0.1.3';
 
     /**
      * The installed Synapse version.

@@ -9,7 +9,7 @@ How to build, test, and verify Synapse locally. For architecture and standards s
 - Node **20+** and npm
 - Playwright + Chromium — only for browser e2e tests (`npm install && npx playwright install chromium`)
 
-`laravel/ai` is not yet on Packagist, so it is resolved from the local `references/laravel/ai` copy via a Composer **path repository** declared in `composer.json`. Keep that reference copy in place (it's gitignored). When the SDK is published, the path repo is ignored automatically and Packagist is used instead.
+`laravel/ai` resolves from Packagist using the constraints in `composer.json`. The optional `references/laravel/ai` checkout is read-only reference material, not an installation dependency.
 
 ## First-time setup
 
@@ -34,7 +34,7 @@ composer check       # all three in sequence (lint:test → analyse → test)
 
 Expected clean output:
 
-- `composer test` → `Tests: 8 passed`
+- `composer test` → all unit and feature tests pass
 - `composer lint:test` → `{"tool":"pint","result":"passed"}`
 - `composer analyse` → `[OK] No errors`
 
@@ -70,6 +70,8 @@ npm run build        # one-off production build → dist/
 npm run watch        # rebuild dist/ on change while iterating
 ```
 
+`react-router-dom` is pinned to the QA-tested 7.18.2 patch; a 7.18.4 trial failed fresh-thread navigation. Re-test that flow before upgrading the pin.
+
 `dist/` is **committed** — rebuild and commit it whenever `resources/js` changes. `Synapse::css()/js()` read `dist/app.css` and `dist/app.js` directly and inline them into the layout, so there is nothing to publish: a running app picks up a rebuild on the next page load. If `dist/` is missing they emit a harmless comment (never fatal).
 
 ## Manual install test (real Laravel app)
@@ -82,7 +84,7 @@ cd testing-laravel-project
 php artisan serve                   # then open http://127.0.0.1:8000/synapse
 ```
 
-The script builds assets, creates a fresh Laravel app, wires path repositories for the package and the SDK, requires `redberry/synapse:@dev`, runs `synapse:install`, and seeds the four sample agents into `app/Agents`.
+The script builds assets, creates a fresh Laravel app, wires a path repository for Synapse and resolves the SDK from Packagist, requires `redberry/synapse:@dev`, runs `synapse:install`, and seeds the four sample agents into `app/Agents`.
 
 Iterating on the package while the test app is running: because the package is **symlinked** into the app's `vendor/`, both PHP *and* frontend changes are live — run `npm run watch` in the package and just refresh the browser. Assets are inlined from `dist/`, so there is no publish step.
 
@@ -119,13 +121,6 @@ Mostly automated by the hook (`composer hooks`):
 
 ## CI
 
-CI runs the fast gates only, on a matrix of PHP 8.3/8.4 × Laravel 12/13:
+The repository currently has no automated test-matrix workflow; the existing GitHub workflow triggers an external task. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`.
 
-```bash
-composer install --no-interaction --prefer-dist
-composer check
-```
-
-**Browser e2e is intentionally out of CI** — no Playwright, no browser binaries, no build step in the pipeline. It's a manual pre-release gate (`composer test:e2e`).
-
-Note: CI needs `laravel/ai` resolvable. Until it's on Packagist, either commit the reference copy for CI or add a CI-only path/VCS repository for it.
+Compatibility should be checked on both supported Laravel majors (12 and 13), including a fresh install and production boot after `composer install --no-dev`. Browser e2e requires Playwright, Chromium, and current compiled assets.
