@@ -3,8 +3,8 @@
 # Creates (or refreshes) testing-laravel-project — a real, gitignored Laravel
 # app used to exercise the actual `composer require` + `synapse:install` flow.
 #
-# The Synapse package and the local Laravel AI SDK copy are linked via Composer
-# path repositories (symlinked), so edits to the package reflect immediately.
+# Synapse is symlinked via a Composer path repository, so package edits reflect
+# immediately. The Laravel AI SDK resolves from Packagist.
 #
 # Usage:  ./bin/setup-testing-app.sh
 #
