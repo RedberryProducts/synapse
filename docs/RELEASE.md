@@ -5,7 +5,16 @@ succeed — the SDK constraint was stale and nothing in the suite could tell,
 since the package's own environment was pinned to a local checkout. Steps 4 and
 6 are the ones that would have caught it.
 
-## 1. Gates
+## 1. Assets
+
+```bash
+npm run build && git status --short dist/
+```
+
+`dist/` is committed and inlined at runtime. If the build produces a diff, commit
+it — a stale bundle ships a broken UI with a green suite.
+
+## 2. Gates
 
 ```bash
 composer check
@@ -15,17 +24,10 @@ composer check
 composer test:e2e
 ```
 
-Both green. `composer test:e2e` is excluded from CI (it needs Playwright and
-current assets), so it only runs if you run it.
-
-## 2. Assets
-
-```bash
-npm run build && git status --short dist/
-```
-
-`dist/` is committed and inlined at runtime. If the build produces a diff, commit
-it — a stale bundle ships a broken UI with a green suite.
+Both must pass, with no skipped browser tests. The browser harness skips tests
+when assets are missing; a skipped suite does not satisfy the release gate.
+There is currently no automated test-matrix workflow, so run these release gates
+locally after building the assets in step 1.
 
 ## 3. Streaming
 
@@ -87,11 +89,12 @@ All six feature epics, in both themes: discovery, info panel, chat, tool
 inspection, attachments/structured/reasoning, history. Epic 6's manual pass
 found three bugs in code that had been green for weeks.
 
-## 8. Tag
+## 8. Publish from GitHub
 
-```bash
-git tag vX.Y.Z && git push origin vX.Y.Z
-```
+Merge the release-preparation PR, then open GitHub → Releases → Draft a new release.
+Create the planned `vX.Y.Z` tag against the merged `main` commit, use the title from
+`docs/releases/vX.Y.Z.md`, and paste that file's release notes into the description.
+Publish when ready. Do not tag the preparation branch before it is merged.
 
 Then install the tag in a fresh app one more time and repeat step 6's first two
 checks. Packagist picks the tag up automatically via the GitHub hook.

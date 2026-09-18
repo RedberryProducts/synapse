@@ -67,7 +67,7 @@ synapse/
   "require": {
     "php": "^8.3",
     "laravel/framework": "^12.0|^13.0",
-    "laravel/ai": "^0.9"
+    "laravel/ai": "^0.9|^0.10"
   },
   "require-dev": {
     "orchestra/testbench": "^10.0|^11.0",
@@ -99,7 +99,7 @@ synapse/
 
 Notes / decisions (flag if you disagree):
 - **`laravel/framework` as the dependency** (not individual `illuminate/*`), matching Telescope/Horizon — Synapse is an app-level tool, not a framework-agnostic library.
-- **`minimum-stability: dev` + `prefer-stable`** — required because `laravel/ai` is a 0.x dev package (same as the SDK's own composer.json).
+- **`minimum-stability: dev` + `prefer-stable`** — permits development versions while preferring stable releases. Published `laravel/ai` releases resolve from Packagist; the SDK does not require a local checkout or dev stability.
 - **`larastan`** for PHPStan (Laravel-aware), level 5 to start.
 
 ### PHP tooling
@@ -256,14 +256,14 @@ A **real Laravel app** to exercise the actual `composer require` + `synapse:inst
 Helper: **`bin/setup-testing-app.sh`** (built) that:
 1. Builds the Synapse assets (`npm install && npm run build`)
 2. `composer create-project laravel/laravel testing-laravel-project` (if absent)
-3. Adds two path repositories to `testing-laravel-project/composer.json` — the package (`../`) and the local SDK copy (`../references/laravel/ai`) — plus `minimum-stability: dev`
-4. `composer require redberry/synapse:@dev`
+3. Adds a path repository for Synapse (`../`) to `testing-laravel-project/composer.json`, with symlinking enabled, plus `minimum-stability: dev` and `prefer-stable: true`; removes the legacy `laravel-ai` path repository if present
+4. `composer require redberry/synapse:@dev --with-all-dependencies` — refreshes the SDK even when the existing lockfile points to a local checkout
 5. `php artisan synapse:install`
 6. Seeds the four sample agents into `testing-laravel-project/app/Agents/` (namespace rewritten `Workbench\App` → `App`)
 
 `.gitignore` excludes `/testing-laravel-project`. Frontend dev loop: `npm run watch` (rebuilds `dist/`) and refresh the browser — assets are inlined from the symlinked package, so there is no publish step.
 
-**SDK sourcing note:** `laravel/ai` is not yet on Packagist, so both the package's own `composer.json` and the test app pull it from the local `references/laravel/ai` copy via a path repository (version pinned to `0.9.1`). The package-level path repo is harmlessly ignored when the path is absent (external users), falling back to Packagist once the SDK is published.
+**SDK sourcing note:** Both the package and the test app resolve `laravel/ai` from Packagist using the constraints in Synapse's `composer.json`. The optional `references/laravel/ai` checkout is read-only reference material. Do not add it as a path repository: that would override Packagist resolution and hide dependency problems during install testing.
 
 ---
 
