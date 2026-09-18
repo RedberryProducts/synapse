@@ -60,6 +60,11 @@ it('records the model that actually ran', function () {
 });
 
 it('offers the agent model first, then the provider tiers', function () {
+    config([
+        'ai.providers.openai.models.text.cheapest' => 'test-cheapest-model',
+        'ai.providers.openai.models.text.smartest' => 'test-smartest-model',
+    ]);
+
     $agent = app(AgentDiscovery::class)->find('workbench.app.agents.support-agent');
 
     $options = app(ModelOptions::class)->for($agent);
