@@ -5,6 +5,7 @@ How to build, test, and verify Synapse locally. For architecture and standards s
 ## Prerequisites
 
 - PHP **8.3+** (developed on 8.4)
+- GD for the image-upload test fixtures, plus the normal Laravel/Pest extensions and SQLite
 - Composer 2
 - Node **20+** and npm
 - Playwright + Chromium — only for browser e2e tests (`npm install && npx playwright install chromium`)
@@ -116,10 +117,13 @@ Mostly automated by the hook (`composer hooks`):
 ## Release checklist
 
 1. `composer check` — lint, static analysis, unit + feature tests
-2. `npm run build` and commit `dist/` if the frontend changed
-3. **`composer test:e2e`** — the manual browser gate (not run in CI)
-4. Smoke-test the real install flow: `./bin/setup-testing-app.sh` → open `/synapse`
-5. Tag the release
+2. `npx tsc --noEmit` and `npm run build`; include current `dist/` in the release commit
+3. **`composer test:e2e`** — the manual browser gate (not run in CI); do not overlap it with feature tests in the same checkout
+4. Verify both supported Laravel majors on actual PHP 8.3 and 8.4, at the declared framework/SDK minimums and latest allowed stable resolutions
+5. Smoke-test fresh installation, repeated installation, configured storage, and production boot/migrations after removing dev dependencies
+6. Measure real HTTP streaming with output buffering enabled and a deterministic slow tool
+7. Review [UPGRADE.md](UPGRADE.md), [CHANGELOG.md](CHANGELOG.md), and the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md); complete separately scheduled real-provider checks
+8. Commit/tag/publish only when explicitly requested
 
 ## CI
 
@@ -129,22 +133,24 @@ Compatibility should be checked on both supported Laravel majors (12 and 13), in
 
 ## Laravel AI 1.3 storage reset
 
-The migration branch is an intermediate implementation, not a release. Once the full migration passes its release gates, existing installations must follow this order:
+The migration branch is not a published release. [UPGRADE.md](UPGRADE.md) is the release-facing guide. Existing installations must follow this order:
 
 1. Back up any Synapse history you need and stop requests/jobs that can write to Synapse. Keep traffic stopped until the upgrade is complete.
 2. On the existing installation, with its existing storage configuration, run `php artisan synapse:clear`. This explicitly deletes Synapse conversations, messages, tool observations, and uploaded attachments. It does not delete SDK conversation data.
 3. Upgrade Synapse and its Composer dependencies.
-4. Run `php artisan vendor:publish --tag=synapse-migrations` to publish the new follow-up migration, then `php artisan migrate`.
+4. Run `php artisan vendor:publish --tag=synapse-migrations` to publish the new follow-up migrations, then `php artisan migrate`.
 5. Verify the upgraded dashboard before resuming traffic.
 
 The migration refuses nonempty Synapse storage and leaves it untouched. It also refuses a rollback with data. There is no historical-data backfill or old-format reader. If a damaged installation contains orphan message/tool rows after `synapse:clear`, back up and explicitly remove those orphan Synapse rows on the configured connection before retrying. Never use `migrate:fresh` on the host application for this upgrade.
 
-Fresh installations run all four published migrations. The host application's own Laravel AI conversation migration is separate; follow the [SDK upgrade guide](https://github.com/laravel/ai/blob/v1.3.0/UPGRADE.md) for that data.
+Fresh installations run all five published migrations. The host application's own Laravel AI conversation migration is separate; follow the [SDK upgrade guide](https://github.com/laravel/ai/blob/v1.3.0/UPGRADE.md) for that data.
 
-For the steps 1–3 milestone, run the focused tests with:
+For the steps 1–7 milestone, run the focused tests with:
 
 ```bash
-./vendor/bin/pest tests/Feature/AiStorageMigrationTest.php tests/Feature/ModelTest.php tests/Feature/RetentionTest.php tests/Feature/Chat/SdkBoundaryTest.php tests/Feature/Chat/DecoratorTest.php
+./vendor/bin/pest tests/Feature/AiStorageMigrationTest.php tests/Feature/ModelTest.php tests/Feature/RetentionTest.php tests/Feature/Chat/SdkBoundaryTest.php tests/Feature/Chat/DecoratorTest.php tests/Feature/Chat/TurnRecordingTest.php tests/Feature/Chat/StepHistoryTest.php tests/Feature/Chat/StreamContractTest.php tests/Feature/Discovery/Sdk13DiscoveryTest.php
 ```
 
-This does not replace `composer check` or `composer test:e2e`. Their known intermediate failures are recorded in [PROGRESS.md](plans/laravel-ai-1.3-migration/PROGRESS.md) and must all be resolved before release.
+This does not replace `composer check` or `composer test:e2e`. Current results and the earlier intermediate failures are recorded in [PROGRESS.md](plans/laravel-ai-1.3-migration/PROGRESS.md) alongside the remaining release qualification work.
+
+The separate fresh-install preview is in `build/laravel-ai13-dx` (gitignored). Its [installation walkthrough](plans/laravel-ai-1.3-migration/INSTALLATION-WALKTHROUGH.md) records every setup step, sample agent, production `--no-dev` check, and restart command. The [closed-issue audit](plans/laravel-ai-1.3-migration/REGRESSION-AUDIT.md) maps production fixes to retained coverage.

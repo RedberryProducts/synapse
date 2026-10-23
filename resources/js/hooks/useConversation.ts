@@ -5,6 +5,7 @@ import type {
     AssistantEntry,
     ChatEntry,
     Conversation,
+    CompletedTurn,
     ConversationMessage,
     ConversationToolInvocation,
     ProviderToolPart,
@@ -162,7 +163,7 @@ export function useConversation(slug: string | undefined, conversationId: string
                                 ...dropPendingAssistant(current, turnId),
                                 {
                                     kind: 'tool',
-                                    id: toolCallId,
+                                    id: `${turnId}:${toolCallId}`,
                                     type: 'tool',
                                     name,
                                     provider: null,
@@ -177,7 +178,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onToolOutput: (toolCallId, output) =>
                             setEntries((current) =>
-                                updateTool(dropPendingAssistant(current, turnId), toolCallId, (entry) => ({
+                                updateTool(dropPendingAssistant(current, turnId), `${turnId}:${toolCallId}`, (entry) => ({
                                     ...entry,
                                     status: 'success',
                                     result: output,
@@ -186,7 +187,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onToolError: (toolCallId, errorText) =>
                             setEntries((current) =>
-                                updateTool(dropPendingAssistant(current, turnId), toolCallId, (entry) => ({
+                                updateTool(dropPendingAssistant(current, turnId), `${turnId}:${toolCallId}`, (entry) => ({
                                     ...entry,
                                     status: 'error',
                                     error: errorText,
@@ -210,7 +211,8 @@ export function useConversation(slug: string | undefined, conversationId: string
                                 applyProviderTool(
                                     dropPendingAssistant(current, turnId),
                                     event,
-                                    provider.current,
+                                    event.provider ?? provider.current,
+                                    turnId,
                                 ),
                             ),
 
@@ -260,9 +262,9 @@ export function useConversation(slug: string | undefined, conversationId: string
                                 },
                             ]),
 
-                        onFinish: (assistantMessageId, usage, durationMs) =>
+                        onFinish: (assistantMessageId, usage, durationMs, turn) =>
                             setEntries((current) =>
-                                settleTurn(current, turnId, assistantMessageId, usage, durationMs),
+                                turn ? completeTurn(current, turnId, turn) : settleTurn(current, turnId, assistantMessageId, usage, durationMs),
                             ),
                     },
                     controller.signal,
@@ -513,21 +515,7 @@ function updateTool(
     );
 }
 
-/**
- * Close out any tool card still showing as running.
- *
- * The SDK has no failed-tool-result path: a tool that throws exits the whole
- * run, so `tool-output-error` never arrives for it and the card would sit
- * pending forever. This mirrors what the server does to the stored rows — every
- * still-pending invocation for a run that died becomes an error — and it is
- * accurate either way, because nothing pending when the stream ends will ever
- * complete.
- *
- * The live card is keyed on the provider's tool-call id while the stored row is
- * keyed on the SDK's own invocation uuid, so there is no id to match on here.
- * There doesn't need to be: "everything still running has stopped" is the whole
- * truth of the situation.
- */
+/** Mark unfinished cards as failed when the transport or invocation stops. */
 function failPendingTools(entries: ChatEntry[], message: string): ChatEntry[] {
     return entries.map((entry) =>
         entry.kind === 'tool' && entry.status === 'pending'
@@ -548,12 +536,14 @@ function applyProviderTool(
     entries: ChatEntry[],
     event: ProviderToolPart,
     provider: string | null,
+    turnId: string,
 ): ChatEntry[] {
+    const id = `${turnId}:${provider}:${event.item_id}`;
     const status = normalizeProviderStatus(event.status);
-    const known = entries.some((entry) => entry.kind === 'tool' && entry.id === event.item_id);
+    const known = entries.some((entry) => entry.kind === 'tool' && entry.id === id);
 
     if (known) {
-        return updateTool(entries, event.item_id, (entry) => ({
+        return updateTool(entries, id, (entry) => ({
             ...entry,
             status,
             providerStatus: event.status,
@@ -565,12 +555,9 @@ function applyProviderTool(
         ...entries,
         {
             kind: 'tool',
-            id: event.item_id,
+            id,
             type: 'provider_tool',
             name: typeof event.data?.name === 'string' ? event.data.name : event.type,
-            // Announced by the stream before the first provider-tool event, so
-            // a live card carries the same `provider /` prefix that replay
-            // builds from the stored message meta.
             provider,
             arguments: event.data,
             result: status === 'pending' ? null : event.data,
@@ -601,51 +588,61 @@ function normalizeProviderStatus(status: string): ToolStatus {
 
 /* ── Replay ───────────────────────────────────────────────────────────────── */
 
-/**
- * Rebuild a stored conversation as thread entries, in the order things happened.
- *
- * Messages and tool invocations live in different tables but share one clock:
- * both use uuid7 primary keys, which embed a millisecond timestamp and sort
- * lexicographically in creation order. Sorting the merged list by id therefore
- * gives true chronology across both tables — a tool row written when the call
- * started lands before the assistant message written when the turn closed, and
- * before the error row written when it failed.
- *
- * Grouping cards under their `message_id` instead would strand the interesting
- * case: a tool that threw has no assistant message to attach to, and its card
- * would drift to the end of the thread — below the error card explaining a
- * failure that happened after it.
- */
 function replay(conversation: Conversation): ChatEntry[] {
-    return [
-        ...conversation.messages.map(toEntry),
-        ...conversation.tool_invocations.map((invocation) =>
-            toToolEntry(invocation, conversation.messages),
-        ),
-    ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const tools = new Map(conversation.tool_invocations.map((tool) => [tool.id, tool]));
+    return conversation.messages.flatMap((message) => replayMessage(message, tools));
 }
 
-function toToolEntry(
-    invocation: ConversationToolInvocation,
-    messages: ConversationMessage[],
-): ToolEntry {
+function replayMessage(message: ConversationMessage, tools: Map<string, ConversationToolInvocation>): ChatEntry[] {
+    if (message.role !== 'assistant') return [toEntry(message)];
+    const entries: ChatEntry[] = [];
+    for (const part of message.parts) {
+        const id = `${message.id}:${part.id}`;
+        if (part.type === 'tool') {
+            const tool = tools.get(part.tool_invocation_id);
+            if (tool) entries.push(toToolEntry(tool));
+        } else if (part.type === 'notice') {
+            entries.push({ kind: 'notice', id, message: part.message });
+        } else {
+            const last = entries.at(-1);
+            if (part.type === 'text' && last?.kind === 'assistant' && last.text === '') {
+                last.text = message.meta?.structured ? '' : part.text;
+            } else {
+                entries.push({
+                    ...emptyAssistant(message.id, id), streaming: false,
+                    text: part.type === 'text' && !message.meta?.structured ? part.text : '',
+                    reasoning: part.type === 'reasoning' ? part.text : '',
+                });
+            }
+        }
+    }
+    // A tool-only turn can still have billable usage and needs one metadata row.
+    if (!entries.some((entry) => entry.kind === 'assistant') && (message.usage || message.meta?.structured || message.content)) {
+        entries.push({ ...emptyAssistant(message.id, message.id), text: message.meta?.structured ? '' : (message.content ?? ''), streaming: false });
+    }
+    return updateLastAssistant(entries, message.id, (entry) => ({
+        ...entry, usage: message.usage, durationMs: message.duration_ms,
+        meta: message.meta, structured: message.meta?.structured ?? null,
+    }));
+}
+
+function completeTurn(entries: ChatEntry[], turnId: string, turn: CompletedTurn): ChatEntry[] {
+    const user = entries.findIndex((entry) => entry.id === `${turnId}-user`);
+    if (user < 0) return entries;
+    const tools = new Map(turn.tool_invocations.map((tool) => [tool.id, tool]));
+    return [
+        ...entries.slice(0, user + 1),
+        ...replayMessage(turn.message, tools),
+        ...entries.slice(user + 1).filter((entry) => entry.kind === 'error'),
+    ];
+}
+
+function toToolEntry(invocation: ConversationToolInvocation): ToolEntry {
     return {
-        kind: 'tool',
-        id: invocation.id,
-        type: invocation.type,
-        name: invocation.name,
-        // The provider isn't stored on the row — it's a property of the turn.
-        provider:
-            invocation.type === 'provider_tool'
-                ? (messages.find((message) => message.id === invocation.message_id)?.meta
-                      ?.provider ?? null)
-                : null,
-        arguments: invocation.arguments,
-        result: invocation.result,
-        status: invocation.status,
-        providerStatus: invocation.provider_status,
-        error: invocation.error,
-        durationMs: invocation.duration_ms,
+        kind: 'tool', id: invocation.id, type: invocation.type, name: invocation.name,
+        provider: invocation.provider, arguments: invocation.arguments,
+        result: invocation.result, status: invocation.status, providerStatus: invocation.provider_status,
+        error: invocation.error, durationMs: invocation.duration_ms,
     };
 }
 
@@ -700,8 +697,8 @@ function totalsOf(entries: ChatEntry[]) {
             }
 
             return {
-                prompt: totals.prompt + entry.usage.prompt_tokens,
-                completion: totals.completion + entry.usage.completion_tokens,
+                prompt: totals.prompt + entry.usage.input_tokens,
+                completion: totals.completion + entry.usage.output_tokens,
             };
         },
         { prompt: 0, completion: 0 },

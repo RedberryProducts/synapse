@@ -29,8 +29,8 @@ class ConversationQuery
             ->withCount('toolInvocations')
             // Aliases must not shadow a column on synapse_conversations; these
             // live on synapse_messages, so they are safe here.
-            ->withSum('messages as prompt_tokens', 'prompt_tokens')
-            ->withSum('messages as completion_tokens', 'completion_tokens')
+            ->withSum('messages as input_tokens', 'input_tokens')
+            ->withSum('messages as output_tokens', 'output_tokens')
             // One query instead of N+1 for the status column.
             ->withExists(['messages as has_error' => fn (Builder $q) => $q->where('role', 'error')]);
 
@@ -155,8 +155,8 @@ class ConversationQuery
     {
         $slug = AgentSlug::make($conversation->agent_class);
 
-        $prompt = (int) ($conversation->getAttribute('prompt_tokens') ?? 0);
-        $completion = (int) ($conversation->getAttribute('completion_tokens') ?? 0);
+        $prompt = (int) ($conversation->getAttribute('input_tokens') ?? 0);
+        $completion = (int) ($conversation->getAttribute('output_tokens') ?? 0);
 
         return [
             'id' => $conversation->id,
@@ -172,8 +172,8 @@ class ConversationQuery
             // colouring those red would teach you to ignore the column.
             'status' => $conversation->getAttribute('has_error') ? 'error' : 'success',
             'tool_calls' => (int) ($conversation->getAttribute('tool_invocations_count') ?? 0),
-            'prompt_tokens' => $prompt,
-            'completion_tokens' => $completion,
+            'input_tokens' => $prompt,
+            'output_tokens' => $completion,
             'total_tokens' => $prompt + $completion,
             'created_at' => $conversation->created_at?->toIso8601String(),
             'updated_at' => $conversation->updated_at?->toIso8601String(),

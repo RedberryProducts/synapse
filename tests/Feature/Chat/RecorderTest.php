@@ -121,14 +121,14 @@ it('orders a failed tool call before the error that ended the run', function () 
 
     $conversation = test()->getJson("/synapse/api/conversations/{$id}")->json();
 
-    // Both tables use uuid7 keys, so merging them by id is true chronology:
-    // the call was recorded when it started, the error when the run died.
-    // The client sorts on exactly this, so the ids have to line up.
+    // The failed assistant turn retains the tool reference before its error row.
     expect($conversation['tool_invocations'][0]['id'])
         ->toBeGreaterThan($conversation['messages'][0]['id'])
         ->toBeLessThan($conversation['messages'][1]['id']);
 
-    expect($conversation['messages'][1]['role'])->toBe('error');
+    expect($conversation['messages'][1]['role'])->toBe('assistant')
+        ->and($conversation['messages'][1]['parts'][0]['tool_invocation_id'])->toBe($conversation['tool_invocations'][0]['id'])
+        ->and($conversation['messages'][2]['role'])->toBe('error');
 });
 
 it('replays a real tool turn from the message row, not the tool table', function () {
@@ -142,7 +142,7 @@ it('replays a real tool turn from the message row, not the tool table', function
     $history = app(MessageHistory::class)->for($id);
 
     // One assistant row expands into the SDK's own assistant → tool-result →
-    // assistant sequence, rebuilt from its stored tool_calls/tool_results JSON.
+    // assistant sequence, rebuilt from its stored SDK steps.
     // The `synapse_tool_invocations` row is a Synapse observation and plays no
     // part in what the agent sees.
     expect($history)->toHaveCount(4)

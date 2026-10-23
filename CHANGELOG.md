@@ -5,6 +5,29 @@ All notable changes to `redberry/synapse` are documented here.
 This project follows [Semantic Versioning](https://semver.org/). While the
 version is below `1.0.0`, minor releases may contain breaking changes.
 
+## Unreleased — planned 0.2.0
+
+Breaking migration to Laravel AI **^1.3**, requiring PHP **8.3+** and Laravel **12.62+ / 13.15+**. Use current patched framework versions for deployment. Existing installations must clear Synapse history and attachments **before upgrading**; follow [UPGRADE.md](UPGRADE.md).
+
+### Changed
+
+- Use SDK 1.3's agent execution, middleware, cache settings, skills, and step responses.
+- Record each turn with ordered text, reasoning, tool observations, usage, and partial failures. Saved conversations preserve the order shown during streaming.
+- Report inclusive input/output token totals without double-counting cache or reasoning subsets; preserve unavailable breakdowns as null.
+- Keep the public conversation API and stream completion on the same display projection. SDK replay data remains private.
+- Discover skill loaders, wrapped sub-agents/MCP tools, failover provider/model maps, and provider-specific options using SDK semantics.
+- Show an explicit paused state for approval requests without approving or executing them. Approval controls remain outside this migration.
+
+### Retained
+
+- Existing chat, history, attachments, info panel, model selection, theme, and navigation behavior.
+- Production fixes for long-name truncation (#7), initial loading (#8), provider registration after `--no-dev` (#9), and published migrations after package removal (#10).
+- Structured output remains single-shot; no structured streaming or approval-resume support is claimed.
+
+### Qualification
+
+See [the release qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) for actual PHP/Laravel combinations, test counts, installation/deployment evidence, and remaining real-provider checks. No release or tag has been created.
+
 ## v0.1.4
 
 ### Fixed

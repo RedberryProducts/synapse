@@ -2,22 +2,21 @@
  * The chat wire format and the shapes the thread is built from.
  *
  * Parts use the Vercel AI SDK UI message protocol — the same names the Laravel
- * AI SDK's own `toVercelProtocolArray()` produces — plus the `data-synapse-*`
- * and `data-provider-tool` parts Synapse adds for what that serialization drops.
+ * AI SDK's Vercel protocol uses — plus Synapse's completion and diagnostic parts.
  */
 
 export interface Usage {
-    prompt_tokens: number;
-    completion_tokens: number;
-    cache_write_input_tokens: number;
-    cache_read_input_tokens: number;
-    reasoning_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_write_input_tokens: number | null;
+    cache_read_input_tokens: number | null;
+    reasoning_tokens: number | null;
 }
 
 export interface MessageMetaData {
     provider: string | null;
     model: string | null;
-    /** Kept because the SDK's response drops both — see AgentInvoker. */
+    /** Persisted response details. */
     reasoning?: string | null;
     structured?: Record<string, unknown> | null;
 }
@@ -31,6 +30,7 @@ export interface StreamPart {
     messageId?: string;
     delta?: string;
     errorText?: string;
+    preliminary?: boolean;
     toolCallId?: string;
     toolName?: string;
     input?: unknown;
@@ -53,7 +53,7 @@ export interface StreamHandlers {
     onToolOutput?: (toolCallId: string, output: unknown) => void;
     onToolError?: (toolCallId: string, errorText: string) => void;
     onProviderTool?: (event: ProviderToolPart) => void;
-    onFinish?: (assistantMessageId: string | null, usage: Usage | null, durationMs: number | null) => void;
+    onFinish?: (assistantMessageId: string | null, usage: Usage | null, durationMs: number | null, turn: CompletedTurn | null) => void;
     /** Anything a later epic adds; ignored rather than treated as an error. */
     onPart?: (part: StreamPart) => void;
 }
@@ -63,6 +63,7 @@ export interface StreamHandlers {
  * serializer drops it entirely.
  */
 export interface ProviderToolPart {
+    provider: string;
     item_id: string;
     type: string;
     status: string;
@@ -135,7 +136,7 @@ export interface NoticeEntry {
     message: string;
 }
 
-export type ToolStatus = 'pending' | 'success' | 'error';
+export type ToolStatus = 'pending' | 'paused' | 'success' | 'error';
 
 export interface ToolEntry {
     kind: 'tool';
@@ -161,6 +162,8 @@ export type ChatEntry = UserEntry | AssistantEntry | ErrorEntry | NoticeEntry | 
 export interface ConversationMessage {
     id: string;
     role: 'user' | 'assistant' | 'error';
+    status: 'completed' | 'paused' | 'failed';
+    parts: DisplayPart[];
     content: string | null;
     attachments: MessageAttachment[];
     usage: Usage | null;
@@ -173,7 +176,8 @@ export interface ConversationMessage {
 export interface ConversationToolInvocation {
     id: string;
     message_id: string | null;
-    tool_call_id: string;
+    tool_call_id: string | null;
+    provider: string | null;
     type: 'tool' | 'provider_tool';
     name: string;
     arguments: unknown;
@@ -193,10 +197,20 @@ export interface Conversation {
     title: string;
     created_at: string | null;
     totals: {
-        prompt_tokens: number;
-        completion_tokens: number;
+        input_tokens: number;
+        output_tokens: number;
         total_tokens: number;
     };
     messages: ConversationMessage[];
+    tool_invocations: ConversationToolInvocation[];
+}
+
+export type DisplayPart =
+    | { id: string; type: 'text' | 'reasoning'; text: string }
+    | { id: string; type: 'tool'; tool_invocation_id: string }
+    | { id: string; type: 'notice'; message: string };
+
+export interface CompletedTurn {
+    message: ConversationMessage;
     tool_invocations: ConversationToolInvocation[];
 }

@@ -62,8 +62,8 @@ it('reports the agent, tokens and tool count per row', function () {
         ->and($row['agent_slug'])->toBe('workbench.app.agents.support-agent')
         ->and($row['agent_available'])->toBeTrue()
         ->and($row['tool_calls'])->toBe(1)
-        ->and($row['prompt_tokens'])->toBe(200)
-        ->and($row['completion_tokens'])->toBe(50)
+        ->and($row['input_tokens'])->toBe(200)
+        ->and($row['output_tokens'])->toBe(50)
         ->and($row['total_tokens'])->toBe(250)
         ->and($row['status'])->toBe('success');
 });
@@ -97,12 +97,12 @@ it('still calls a recovered tool failure a success', function () {
 
     $conversation->messages()->create([
         'role' => 'user', 'content' => 'Find me a hoodie', 'attachments' => [],
-        'tool_calls' => [], 'tool_results' => [], 'usage' => [], 'meta' => [], 'metadata' => [],
+        'steps' => [], 'parts' => [], 'usage' => [], 'meta' => [], 'metadata' => [],
     ]);
 
     $conversation->messages()->create([
         'role' => 'assistant', 'content' => 'Found it anyway.', 'attachments' => [],
-        'tool_calls' => [], 'tool_results' => [], 'usage' => [], 'meta' => [], 'metadata' => [],
+        'steps' => [], 'parts' => [], 'usage' => [], 'meta' => [], 'metadata' => [],
     ]);
 
     $conversation->toolInvocations()->create([

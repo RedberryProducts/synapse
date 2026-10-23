@@ -8,11 +8,15 @@
 | flakiness, and the assertions are about Synapse rather than about a model.
 */
 
+use Laravel\Ai\Gateway\StepResponse;
+use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
+use Redberry\Synapse\Tests\Fixtures\ApprovalSearchTool;
+use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SlowToolAgent;
@@ -146,8 +150,8 @@ it('shows per-message and conversation token counts', function () {
 
     $page->type('@composer-input', 'Count my tokens')->click('Send');
 
-    $page->assertSeeIn('@message-meta', 'Prompt: 142')
-        ->assertSeeIn('@message-meta', 'Completion: 89')
+    $page->assertSeeIn('@message-meta', 'Input: 142')
+        ->assertSeeIn('@message-meta', 'Output: 89')
         ->assertSeeIn('@message-meta', 'Total: 231')
         ->assertSeeIn('@conversation-tokens', 'Total 231');
 });
@@ -542,16 +546,16 @@ it('renders the conversation in both themes', function () {
 });
 
 it('preserves interleaved text and tool steps after reloading the thread', function () {
-    fakeAgent(SupportAgent::class, [
-        (new TextResponse('First I search hoodies.', new TextUsage, new Meta))
-            ->withToolCallsAndResults(collect([new ToolCall('hoodie', 'SearchProductsTool', ['query' => 'hoodie'])]), collect()),
-        (new TextResponse('Now I search scarves.', new TextUsage, new Meta))
-            ->withToolCallsAndResults(collect([new ToolCall('scarf', 'SearchProductsTool', ['query' => 'scarf'])]), collect()),
-        'Both items are available.',
-    ]);
+    fakeAgent(SupportAgent::class);
+    app()->instance(SupportAgent::class, new StepSequenceAgent([
+        new StepResponse('First I search hoodies.', [new ToolCall('hoodie', 'SearchProductsTool', ['query' => 'hoodie'])], FinishReason::ToolCalls, new TextUsage(100, 20, cacheReadInputTokens: 30, reasoningTokens: 5), new Meta('openai', 'test')),
+        new StepResponse('Now I search scarves.', [new ToolCall('scarf', 'SearchProductsTool', ['query' => 'scarf'])], FinishReason::ToolCalls, new TextUsage(100, 20, cacheReadInputTokens: 30, reasoningTokens: 5), new Meta('openai', 'test')),
+        new StepResponse('Both items are available.', [], FinishReason::Stop, new TextUsage(100, 20, cacheReadInputTokens: 30, reasoningTokens: 5), new Meta('openai', 'test')),
+    ]));
     $page = visit('/synapse/playground/workbench.app.agents.support-agent');
     $page->type('@composer-input', 'Find a hoodie and a scarf')->click('Send');
-    $page->assertSee('Both items are available.');
+    $page->assertSee('Both items are available.')->assertSeeIn('@conversation-tokens', 'Total 360');
+    expect($page->script("document.querySelectorAll('[data-testid=message-meta]').length"))->toBe(1);
 
     $expected = ['First I search hoodies.', 'SearchProductsTool', 'Now I search scarves.', 'SearchProductsTool', 'Both items are available.'];
     $types = <<<'JS'
@@ -568,4 +572,57 @@ it('preserves interleaved text and tool steps after reloading the thread', funct
         ->assertSee('First I search hoodies.')->assertSee('Now I search scarves.')
         ->assertNoJavaScriptErrors();
     expect($reopened->script($types))->toBe($expected);
+    $reopened->assertSeeIn('@message-meta', 'Input: 300')->assertSeeIn('@message-meta', 'Output: 60')
+        ->assertSeeIn('@message-meta', 'Reasoning: 15')->assertSeeIn('@conversation-tokens', 'Total 360');
+    expect($reopened->script("document.querySelectorAll('[data-testid=message-meta]').length"))->toBe(1);
 });
+
+it('shows an approval pause without leaving the composer loading', function () {
+    app()->instance(SupportAgent::class, (new SupportAgent)->withTools([new ApprovalSearchTool]));
+    fakeAgent(SupportAgent::class, [new ToolCall('approval', 'ApprovalSearchTool', ['query' => 'hoodie'])]);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Search')->click('Send');
+    $page->assertPresent('[data-tool-status=paused]')
+        ->assertSee('Synapse does not support approvals yet')
+        ->assertMissing('@message-assistant-loading')
+        ->click('[aria-label="ApprovalSearchTool tool call"]')
+        ->assertSeeIn('@tool-card', 'This tool has not run');
+    $page->type('@composer-input', 'Another question');
+    expect($page->script("document.querySelector('[aria-label=\"Send message\"]').disabled"))->toBeFalse();
+    $id = SynapseConversation::sole()->id;
+    visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}")
+        ->assertPresent('[data-tool-status=paused]')
+        ->assertSee('Synapse does not support approvals yet')
+        ->assertNoJavaScriptErrors();
+});
+
+it('reports an incomplete transport stream instead of silently completing', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->script(<<<'JS'
+        (() => {
+            window.fetch = async () => new Response('data: {"type":"text-start","id":"one"}\n\ndata: {"type":"text-delta","id":"one","delta":"Partial transport answer."}\n\n', {headers: {'Content-Type': 'text/event-stream'}});
+        })()
+    JS);
+    $page->type('@composer-input', 'Hello')->click('Send');
+    $page->assertPresent('@error-card')
+        ->assertSeeIn('@error-card', 'The stream ended before the response was saved.')
+        ->assertSeeIn('@message-assistant', 'Partial transport answer.')
+        ->assertMissing('@message-assistant-loading')
+        ->assertNoJavaScriptErrors();
+});
+
+it('distinguishes unknown token breakdowns from reported zero', function (?int $count) {
+    fakeAgent(SupportAgent::class, [new TextResponse('Counted.', new TextUsage(inputTokens: 100, outputTokens: 20, cacheReadInputTokens: $count, reasoningTokens: $count), new Meta('openai', 'test'))]);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Count')->click('Send');
+    $page->assertPresent('@message-meta')->assertSeeIn('@message-meta', 'Total: 120');
+    $title = $page->script("document.querySelector('[data-testid=message-meta]').title");
+    if ($count === null) {
+        expect($title)->not->toContain('Cache read:');
+        $page->assertDontSee('Reasoning:');
+    } else {
+        expect($title)->toContain('Cache read: 0');
+        $page->assertSeeIn('@message-meta', 'Reasoning: 0');
+    }
+    $page->assertNoJavaScriptErrors();
+})->with([null, 0]);

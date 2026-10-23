@@ -42,14 +42,14 @@ it('promotes token counts and keeps the full usage breakdown', function () {
     $assistant = SynapseMessage::query()->where('role', 'assistant')->sole();
 
     // Promoted columns exist for cheap SQL aggregates...
-    expect($assistant->prompt_tokens)->toBe(142)
-        ->and($assistant->completion_tokens)->toBe(89)
+    expect($assistant->input_tokens)->toBe(142)
+        ->and($assistant->output_tokens)->toBe(89)
         // ...while the JSON column keeps everything Usage carries.
         ->and($assistant->usage)->toBe([
-            'prompt_tokens' => 142,
-            'completion_tokens' => 89,
-            'cache_write_input_tokens' => 0,
-            'cache_read_input_tokens' => 0,
+            'input_tokens' => 142,
+            'output_tokens' => 89,
+            'cache_read_input_tokens' => null,
+            'cache_write_input_tokens' => null,
             'reasoning_tokens' => 7,
         ]);
 });
@@ -81,8 +81,8 @@ it('reports the usage on the closing part', function () {
 
     $end = chatPart(sendMessage('workbench.app.agents.support-agent', 'Finish up'), 'data-synapse-end');
 
-    expect($end['data']['usage']['prompt_tokens'])->toBe(10)
-        ->and($end['data']['usage']['completion_tokens'])->toBe(4)
+    expect($end['data']['usage']['input_tokens'])->toBe(10)
+        ->and($end['data']['usage']['output_tokens'])->toBe(4)
         ->and($end['data']['assistantMessageId'])->not->toBeEmpty();
 });
 

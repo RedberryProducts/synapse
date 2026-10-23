@@ -12,7 +12,7 @@ The MVP targets **Laravel AI SDK (`laravel/ai`)** as its sole data source. By de
 
 **Target SDK version:** `laravel/ai ^1.3` (PHP ^8.3, Laravel ^12.62 or ^13.15). The integration boundary is verified against SDK v1.3.0.
 
-**Migration status:** steps 1–3 establish the dependency, wrapper fidelity, regression coverage, and storage contract. The feature chapters remain the acceptance contract for the ongoing rewrite; legacy writer/history/streaming implementations are intentionally awaiting steps 4–6. This branch is not releasable. See [the implementation progress](plans/laravel-ai-1.3-migration/PROGRESS.md).
+**Migration status:** steps 1–8 implement the SDK boundary, scoped recording, ordered history, SSE mapping, API/UI replay, and discovery. Deterministic qualification passes on PHP 8.3/8.4 with Laravel 12/13. Real-provider testing is deferred; no release is tagged or published. See [qualification](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and [upgrade instructions](UPGRADE.md).
 
 The conversational wrapper forwards skills and runtime tool replacements. Cache attributes are forwarded before application step middleware using public SDK value objects, preserving each step's current options and released tool choice. Application middleware receives `PendingStep` once per generation step.
 
@@ -66,8 +66,8 @@ The landing page — auto-scans the project and lists all registered agent class
 | Field | Source |
 |-------|--------|
 | Agent name | Class short name (e.g. `SupportAgent`) |
-| Provider / Model | e.g. `anthropic / claude-3-5-sonnet` |
-| Tools | Chips with tool names; overflow collapses to a `+N` chip with a hover popover listing all tools |
+| Provider / Model | Read `provider()` / `model()` methods before `#[Provider]` / `#[Model]` attributes. Normalize providers with `Provider::formatProviderAndModelList()`, showing the first provider/model pair. Provider arrays use their mapped models or provider defaults and ignore the separate model declaration, matching the SDK. When no model is specified, retain the cheapest/smartest/default tier. Discovery does not construct optional provider gateways. |
+| Tools | `AgentTools` reads `HasTools::tools()` and applies `LoadSkill::mergeInto()` for `HasSkills`, including skills-only agents and deduplicating an explicit loader. Classify provider tools, raw or SDK-wrapped sub-agents, and raw or SDK-wrapped MCP tools before generic tools; preserve names, schemas, descriptions, and sub-agent links. |
 
 Long agent names in constrained discovery/sidebar labels stay on one line, truncate with an ellipsis, and expose the full name through the label's native tooltip (`title`) on hover.
 
@@ -88,8 +88,8 @@ The FQCN and full configuration live in the Info panel (Feature 4), not on the c
 **Metadata extraction** — For each discovered agent class, instantiate via the Laravel container (`app($class)`) and read. Note: `make()` lives on the `Promptable` trait, not the `Agent` contract — a framework-authored agent implementing only the contract won't have it, so Synapse must not rely on it:
 | Data | How |
 |------|-----|
-| Provider / Model | Call `provider()` / `model()` methods if they exist, **else** read `#[Provider]` / `#[Model]` attributes via `ReflectionClass::getAttributes()` (methods take precedence — same resolution order as `Promptable::getProvidersAndModels()`). When neither is set, fall back to `#[UseCheapestModel]` / `#[UseSmartestModel]` and surface the chosen tier in the UI badge (e.g. "smartest" / "cheapest" pill) |
-| Tools | Check if agent `instanceof HasTools`, call `$agent->tools()` → returns `array<Tool\|ProviderTool>`, and entries may also be `Agent` instances (sub-agents as tools) or raw MCP tool references. Mirror the gateway's `resolveTool()` match logic to classify each entry (see Feature 4) — calling `description()` / `schema()` blindly fatals on `ProviderTool` |
+| Provider / Model | Read `provider()` / `model()` methods before `#[Provider]` / `#[Model]` attributes. Normalize providers with `Provider::formatProviderAndModelList()`, showing the first provider/model pair. Provider arrays use their mapped models or provider defaults and ignore the separate model declaration, matching the SDK. When no model is specified, retain the cheapest/smartest/default tier. Discovery does not construct optional provider gateways. |
+| Tools | `AgentTools` reads `HasTools::tools()` and applies `LoadSkill::mergeInto()` for `HasSkills`, including skills-only agents and deduplicating an explicit loader. Classify provider tools, raw or SDK-wrapped sub-agents, and raw or SDK-wrapped MCP tools before generic tools; preserve names, schemas, descriptions, and sub-agent links. |
 | Capabilities | Check `instanceof Conversational`, `instanceof RemembersConversations`, `instanceof HasTools`, `instanceof HasStructuredOutput`, `instanceof HasMiddleware`, `instanceof CanActAsTool` — used internally and exposed in the API payload; not rendered as UI badges (see Feature 4) |
 | Generation options | Call `TextGenerationOptions::forAgent($agent)` (public static) → resolves `maxSteps`, `maxTokens`, `temperature`, `topP`, `toolChoice` with the SDK's own attribute/method precedence — never hand-roll this reflection |
 | Timeout | `timeout()` method if it exists, else `#[Timeout]` attribute, else default `60` (methods take precedence over attributes) |
@@ -109,9 +109,9 @@ The core experience — select an agent and have a real conversation.
 - Model selector in the composer (per Figma design) — a dropdown to override the agent's provider/model for subsequent sends, defaulting to the agent's configured model. Passed through as `stream($prompt, $attachments, provider: $override, model: $override)` (native SDK parameters — no agent modification). The actually-used provider/model is recorded per message in `meta`, so replays always show what really ran. **Dropdown contents:** the agent's own configured model (default selection) + its provider's cheapest and smartest tiers (resolved via the SDK's `cheapestTextModel()` / `smartestTextModel()`) + any additional models listed in `config('synapse.playground.models')`
 - Messages stream in real-time (if agent supports streaming)
 - The playground shows an assistant-side pending response indicator immediately after send, and clears or replaces it on the first meaningful stream event so slow provider startup never looks stalled
-- Streams speak the Vercel AI SDK UI message protocol, but Synapse owns **both ends**: it emits the SSE itself rather than returning the SDK's built-in `usingVercelDataProtocol()` response (the built-in serializer silently drops `ProviderToolEvent`s and tool error state — see Feature 3), and the React app consumes it with its own ~120-line reader rather than `useChat()` from the `ai` package. Keeping the SDK's own part names (`toVercelProtocolArray()`) means the wire format stays the SDK's; skipping the dependency keeps it out of the bundle that is inlined into every dashboard page load
+- Synapse owns its SSE wire format and React reader. `StreamEmitter` explicitly maps SDK 1.3 event classes to the established Vercel-style text/reasoning/tool parts and Synapse-specific provider, notice, error, and completion parts. It does not call removed event serialization methods or return the SDK response directly.
 - Reasoning blocks (Anthropic extended thinking, OpenAI o-series, DeepSeek) rendered inline as a collapsible "Thinking…" pane separate from the final answer; reasoning token count shown alongside prompt/completion tokens
-- Structured-output agents (`HasStructuredOutput`) return a `StructuredAgentResponse` — the playground renders `$response->structured` as a syntax-highlighted JSON card instead of assuming plain text. **These agents cannot stream:** `StreamsText::stream()` throws `InvalidArgumentException('Streaming structured output is not currently supported.')` for any agent implementing the contract, so Synapse detects it and invokes `prompt()` instead, emitting the completed response as a single part. The same limitation is why the history decorator below must **not** implement `HasStructuredOutput`
+- Structured-output agents (`HasStructuredOutput`) retain Synapse’s existing undecorated `prompt()` path with no prior history. Their completed `StructuredAgentResponse::structured` renders as a JSON card. The installed SDK 1.3.0 still rejects `HasStructuredOutput` in `StreamsText::stream()`; extending this Synapse path is outside this migration.
 - Conversation persists across page refreshes (stored in Synapse DB)
 - Conversation memory mirrors the agent: multi-turn for `Conversational` agents, independent request/response per message for stateless agents (with a "Stateless" badge) — see Technical Implementation
 
@@ -200,10 +200,14 @@ This approach:
 3. **If the target agent is `Conversational`**, Synapse wraps it in `SynapseConversationalAgent` with the full thread history; **otherwise it uses the agent as-is** (no history injection — stateless, current message only). See "Synapse's approach" above
 4. Calls `$target->stream($currentMessage, $attachments, …)` → returns `StreamableAgentResponse`
 5. The frontend immediately inserts a transient assistant placeholder so the thread shows `Loading...` before the first SSE part arrives; later cleanup removes only entries still marked pending and preserves any reasoning already received
-6. Synapse's controller iterates the stream and emits Vercel-protocol SSE parts itself: for each event, use `$event->toVercelProtocolArray()` when it returns non-null (text-delta / reasoning / tool-input / finish parts — `useChat()` parses these for free), and fill the SDK's two serialization gaps with additional parts: a custom `data-provider-tool` part for `ProviderToolEvent` (which has **no** Vercel serialization and is silently skipped by the SDK's serializer), and the standard `tool-output-error` part when `ToolResult->successful === false` (the SDK only ever emits `tool-output-available`, discarding `$successful` / `$error`). ~40 lines of glue; do **not** return the SDK's `Responsable` directly
-**Flushing — guard on `PHP_SAPI`, never on `headers_sent()`.** Each SSE part is pushed with `ob_flush(); flush();` as it is written, which is what makes the dashboard live. The guard on that flush must be the SAPI, exactly as Symfony's `Response::send()` and Laravel's own `eventStream()` do it. `headers_sent()` looks like the right question and is not: the stock `php.ini` sets `output_buffering = 4096`, so the first `echo` lands in PHP's own buffer and the headers are therefore *never* sent — the guard answers "no" for every part, of every run, and the whole conversation is assembled and painted at once. Measured on nginx + PHP-FPM with the two guards and nothing else different: **2ms to first byte versus 4019ms of a 4020ms run.** No test tier can catch this, because the feature suite and the browser driver both run Laravel in-process on the CLI SAPI, where flushing is deliberately off — `bin/check-streaming.sh` is the gate instead. `Synapse::streams()` exposes the same rule to the UI so a runtime that cannot stream says so rather than looking hung.
+6. `AgentInvoker` iterates events through the scoped recorder and explicit `StreamEmitter` mapper. Preliminary tool results never settle cards; failed or denied results emit `tool-output-error`. Invalid UTF-8 is substituted. SDK step endings are held until persistence finishes. The stream has one start, one `data-synapse-end`, and one `[DONE]`; successful/paused turns also emit one `finish`. Completion carries the saved public turn projection, so live completion and reload use identical parts/tool observations. A premature browser transport EOF becomes an inline error. An SDK response with no completion reason is retained as failed partial output.
 
-7. Persistence is registered with `->then(fn (StreamedAgentResponse $r) => ...)` — the SDK invokes the callback once the stream closes, providing `$text`, `$usage`, `$toolCalls`, `$toolResults`, `$events` (including `ReasoningEnd`, `Citation`, `ProviderToolEvent`, stream `Error`) → stored in `synapse_messages`. Since Synapse iterates the stream itself (step 6), events can also be persisted inline as they pass, with `then()` as the completion hook. `->withinConversation($synapseConversationId)` tags the response so the recorder can correlate stream events to the right Synapse conversation.
+7. `AgentInvoker` owns completion and failure. Its `then()` callback only captures the successful SDK response; persistence happens after stream consumption. `SynapseRecorder` accumulates ordered text/reasoning/tool/notice parts and canonical SDK steps. A completed or paused response is written once through `ConversationWriter`; a failure retains useful partial output and completed steps before one rich error row. A failure before any output creates no assistant row. Unknown usage on an incomplete first step stays null, not zero.
+8. `MessageHistory` reads the prior thread **before** storing the new user message, preventing duplication of the current prompt. It expands each stored SDK step into assistant text/calls followed by matching tool results, then the next step. Failed unanswered calls receive explicit interrupted-result placeholders; error cards and notices never become model context. Tool-call deserialization preserves provider fields such as Gemini thought signatures. Paused unanswered calls and raw replay blocks are excluded from new prompts. Closed turns discard raw blocks; a new prompt expires blocks retained on an earlier paused turn.
+9. `RecordingScope` is container-scoped and active only inside `during()`, with `finally` restoration. Class listeners are registered once; they do not accumulate closures or remove application listeners. Prompt identity and parent/invocation IDs isolate the root run. No global SDK store binding, conversation participant, or SDK conversation ID is used. Structured agents retain the existing undecorated, single-shot exception.
+
+
+**Flushing — guard on `PHP_SAPI`, never on `headers_sent()`.** Each SSE part is pushed with `ob_flush(); flush();` as it is written, which is what makes the dashboard live. The guard on that flush must be the SAPI, exactly as Symfony's `Response::send()` and Laravel's own `eventStream()` do it. `headers_sent()` looks like the right question and is not: the stock `php.ini` sets `output_buffering = 4096`, so the first `echo` lands in PHP's own buffer and the headers are therefore *never* sent — the guard answers "no" for every part, of every run, and the whole conversation is assembled and painted at once. Measured on nginx + PHP-FPM with the two guards and nothing else different: **2ms to first byte versus 4019ms of a 4020ms run.** No test tier can catch this, because the feature suite and the browser driver both run Laravel in-process on the CLI SAPI, where flushing is deliberately off — `bin/check-streaming.sh` is the gate instead. `Synapse::streams()` exposes the same rule to the UI so a runtime that cannot stream says so rather than looking hung.
 
 **Attachments** — the SDK does nearly all the work; Synapse's job is upload plumbing:
 
@@ -214,16 +218,18 @@ This approach:
 5. No MIME allowlist — pass anything the developer uploads and let the provider reject what it can't handle; the error card is the point of the tool. Unsupported-type errors surface exactly like production would
 6. `synapse:clear` deletes the stored files along with the rows
 
-**Event capture** — Synapse subscribes to SDK events for metadata:
-| Event | Data Captured |
-|-------|---------------|
-| `PromptingAgent` / `StreamingAgent` | `$invocationId`, start timestamp |
-| `AgentPrompted` / `AgentStreamed` | `$response->usage` (tokens incl. `reasoningTokens`, `cacheReadInputTokens`, `cacheWriteInputTokens`), `$response->meta` (provider, model) |
-| `InvokingTool` | Tool name, arguments, start timestamp |
-| `ToolInvoked` | Tool result, compute duration |
-| `AgentFailedOver` / `ProviderFailedOver` | Rendered as informational notice, not error |
+**Event capture** — SDK events are observed only inside the active recording scope:
 
-Events are dispatched by the SDK automatically — Synapse just listens.
+| Event | Data captured |
+|-------|---------------|
+| `PromptingAgent` / `StreamingAgent` | Root invocation and resolved provider/model; start a provider attempt |
+| `StartingStep` / `StepCompleted` | Step boundaries and completed model output, usage, reasoning, calls, and metadata |
+| `InvokingTool` | Exact execution ID, name, arguments, provider, start time |
+| `ToolInvoked` / `ToolFailed` | Exact execution outcome and SDK duration |
+| `AgentFailed` | Completed steps and results before failure |
+| `AgentFailedOver` | Informational notice; successful fallback does not create an error row |
+
+Failure snapshots use the SDK's `AgentPrompt::runContext()->recordedResponse()` to retain successful results when a later tool in the same step throws before the stream yields them. This is a narrow dependency on an SDK-internal accessor, covered by same-step failure tests; recheck it on SDK upgrades. Steps are cloned before annotating failures so Synapse does not mutate SDK response objects.
 
 ---
 
@@ -265,17 +271,16 @@ Tool calls are shown as expandable cards within the chat flow.
 
 #### Technical Implementation
 
-**Data source** — Tool call data comes from two SDK events:
+**Data source** — Tool execution data comes from SDK lifecycle events:
 
 ```php
 // SDK dispatches these automatically during prompt() / stream()
 InvokingTool($invocationId, $toolInvocationId, $agent, $tool, $arguments)
-ToolInvoked($invocationId, $toolInvocationId, $agent, $tool, $arguments, $result)
+ToolInvoked($invocationId, $toolInvocationId, $agent, $tool, $arguments, $result, $time)
+ToolFailed($invocationId, $toolInvocationId, $agent, $tool, $arguments, $exception, $time)
 ```
 
-**`SynapseRecorder`** listens to both events:
-1. On `InvokingTool` — inserts a `synapse_tool_invocations` row (`status = pending`) with `name`, `arguments`, `tool_invocation_id`, `invocation_id`, `started_at` — the UI gets in-flight tool cards for free
-2. On `ToolInvoked` — updates that row by `tool_invocation_id`: `result`, `status = success`, `duration_ms`, `finished_at`. Note `ToolInvoked` fires **only on success** — the SDK's `executeTool()` runs the "invoked" callback after `handle()` returns, so a throwing tool never reaches this event. Its `pending` row is instead flipped to `error` by the invocation-level catch-all (Feature 6, step 2)
+**`SynapseRecorder`** inserts an observation on `InvokingTool` and updates it by the exact execution ID on `ToolInvoked` or `ToolFailed`, using SDK duration in milliseconds. Model `tool_call_id` and execution `tool_invocation_id` are separate identities. Association is restricted to one invocation attempt/step and matches name, arguments, and settled result. Repeated identical successful calls are paired in SDK execution order. An ambiguous failed execution stays unpaired, with separate model-call observations; no result is guessed. Rejected, skipped, and approval calls may have no execution ID. Preliminary sub-agent results never complete a row or contribute extra usage.
 
 **For streaming** — `StreamableAgentResponse` yields `ToolCall` and `ToolResult` stream events. Synapse pushes these to the browser as they happen (before the final text response). The payload is wrapped in nested data objects rather than flat fields:
 
@@ -284,7 +289,7 @@ ToolInvoked($invocationId, $toolInvocationId, $agent, $tool, $arguments, $result
 | `Streaming\Events\ToolCall` | `$event->toolCall->id`, `$event->toolCall->name`, `$event->toolCall->arguments`, `$event->toolCall->reasoningId` |
 | `Streaming\Events\ToolResult` | `$event->toolResult->id`, `$event->toolResult->name`, `$event->toolResult->result`, `$event->successful`, `$event->error` |
 
-**Vercel-protocol gap** — the SDK's own `ToolResult::toVercelProtocolArray()` emits only `tool-output-available` with the output, discarding `$successful` and `$error`. In 0.9.1 the stream always sets `successful: true`, so today the live tool-failure path is the invocation-level catch-all (Feature 6), not this event. Synapse's SSE emitter (Feature 2, step 5) still emits the standard `tool-output-error` Vercel part whenever `$successful === false` — a defensive, forward-compatible hook for when/if the SDK adds a failed-tool-result path.
+**Tool result mapping** — Synapse explicitly maps SDK `ToolResult` events. `preliminary` child output is ignored until the parent settles; `denied` or unsuccessful results become `tool-output-error`, while successful final results become `tool-output-available`. Handler exceptions use the invocation catch-all. Approval pauses emit an unsupported-approval notice and persist `paused` tool observations with no execution ID or result. The SDK’s stateless `ApprovalNotResumableException` gets the same paused presentation. No approve/resume endpoint is provided.
 
 **Provider-native tool events** — the Anthropic, OpenAI and xAI gateways yield `Streaming\Events\ProviderToolEvent` for built-in tools like web search, web fetch, file search, and code interpreter (no `InvokingTool` / `ToolInvoked` Laravel events fire for these — they only appear in the stream). Synapse renders them as tool cards visually distinguished from user-defined tools (⚡ `provider / tool_name`) with `$event->type`, `$event->data`, and `$event->status`.
 
@@ -295,11 +300,11 @@ ToolInvoked($invocationId, $toolInvocationId, $agent, $tool, $arguments, $result
 | Anthropic | the raw content-block type: `server_tool_use`, or `*_tool_result` (e.g. `web_search_tool_result`) | `started` · `result_received` · `completed` |
 | OpenAI / xAI | the item type ending in `_call`: `web_search_call`, `file_search_call`, `code_interpreter_call` | `completed`, plus the third segment of `response.<x>_call.<status>` — an **open** set (`in_progress`, `searching`, …) |
 
-Two consequences: the tool's real name is **not** in `type` for Anthropic (`server_tool_use` is generic; the name is at `$data['name']`), so the card resolves `$data['name'] ?? $type` and takes the provider prefix from the turn's `meta.provider`. And the status is mapped into Synapse's own `pending` / `success` / `error`, defaulting **unknown values to `pending`** so a new provider status shows an in-flight card rather than a wrong terminal one — with the raw string retained alongside. See [plans/epic-04-tool-inspection](plans/epic-04-tool-inspection/PLAN.md#3-provider-tool-events-are-messier-than-the-prd-says). The recorder persists them as `synapse_tool_invocations` rows with `type = provider_tool`, keyed by `$event->itemId` (upserted as status transitions arrive in the stream). Correlation is best-effort: Anthropic keys the start block on `content_block.id` and the result block on `tool_use_id ?? id`, which match only when the provider sends `tool_use_id` — a miss produces a second card rather than welding the wrong result onto the first. **Important:** `ProviderToolEvent` has no `toVercelProtocolArray()` override — the SDK's built-in Vercel serializer silently drops it. Synapse's own SSE emitter forwards it as a custom `data-provider-tool` part (the Vercel UI message protocol supports arbitrary `data-*` parts). These tools are also *declarable* — `tools()` can return `ProviderTool` instances (`WebSearch`, `WebFetch`, `FileSearch`), so they appear in the Agent Info Panel too, not just as stream artifacts.
+Two consequences: the tool's real name is **not** in `type` for Anthropic (`server_tool_use` is generic; the name is at `$data['name']`), so the card resolves `$data['name'] ?? $type` and takes provider identity from each observation's `provider`. And the status is mapped into Synapse's own `pending` / `success` / `error`, defaulting **unknown values to `pending`** so a new provider status shows an in-flight card rather than a wrong terminal one — with the raw string retained alongside. See [plans/epic-04-tool-inspection](plans/epic-04-tool-inspection/PLAN.md#3-provider-tool-events-are-messier-than-the-prd-says). The recorder persists them as `synapse_tool_invocations` rows with `type = provider_tool`, keyed by conversation, root invocation, provider, and `$event->itemId` (upserted as status transitions arrive in the stream). Correlation is best-effort: Anthropic keys the start block on `content_block.id` and the result block on `tool_use_id ?? id`, which match only when the provider sends `tool_use_id` — a miss produces a second card rather than welding the wrong result onto the first. Synapse forwards provider identity and the event payload as a custom `data-provider-tool` part. These tools are also *declarable* — `tools()` can return `ProviderTool` instances (`WebSearch`, `WebFetch`, `FileSearch`), so they appear in the Agent Info Panel too, not just as stream artifacts.
 
-**Mid-stream errors** — `Streaming\Events\Error` events arrive inside the stream when a provider reports an error mid-generation (rate limits hit during streaming, content-filter blocks, etc.). The recorder captures these the same way as thrown exceptions, storing them as a `synapse_messages` row with `role = error`. The event carries a `recoverable` bool — render recoverable errors (e.g. a rate-limit the provider retries through) as a softer informational card, and fatal ones as full error cards.
+**Mid-stream errors** — recoverable events become notice parts. A terminal event is consumed through the SDK's exception path, then the invocation catch-all writes one error row; the event and its `StreamErrorException` must never create duplicate errors. Provider type/metadata remain in error metadata. Unfinished observations are closed as errors when the run terminates, except genuinely paused calls.
 
-**Error capture** — A tool that throws does so *out of* the SDK (no `catch` in `executeTool()`), so its failure is recorded by the invocation-level catch-all (Feature 6): the dangling `pending` row is flipped to `status = error` with the exception message in the `error` column, and the card renders that error in place of the result. If a future SDK instead reports `ToolResult->successful === false`, the recorder stores the `$error` the same way — either path lands on the same `synapse_tool_invocations` row.
+**Error capture** — throwing handlers dispatch `ToolFailed` and propagate to the invocation catch-all. Successful tool work before a failure remains available in the stored steps. A sub-agent's handled failure remains the parent's ordinary result, matching SDK behavior.
 
 ---
 
@@ -322,7 +327,7 @@ A side panel (or dedicated tab) showing the selected agent's full configuration.
 `tools()` entries come in four kinds, each rendered distinctly:
 - **User tools** (`Tool`) — name, description, parameter schema (rendered as a readable table or JSON)
 - **Provider tools** (`ProviderTool`: `WebSearch`, `WebFetch`, `FileSearch`) — "⚡ Provider tool" badge + class name + provider options (they have **no** `description()` / `schema()` — calling those fatals)
-- **Sub-agents** (`Agent` instances, auto-wrapped in `AgentTool` by the SDK) — "Agent tool" badge, linking to that agent's own Synapse page
+- **Sub-agents** (raw `Agent` instances or SDK `AgentTool` wrappers) — "Agent tool" badge, linking to that agent's own Synapse page
 - **MCP tools** — wrap in `McpTool` / `McpServerTool` (both implement `Tool`, so name/description/schema come for free), badged "MCP"
 
 #### 4d. Middleware
@@ -336,14 +341,14 @@ A side panel (or dedicated tab) showing the selected agent's full configuration.
 
 | Section | SDK Source |
 |---------|-----------|
-| Provider / Model | `provider()` / `model()` methods if they exist, **else** `#[Provider]` / `#[Model]` attributes via `ReflectionClass` (methods take precedence). If model is not explicitly provided, also read `#[UseCheapestModel]` / `#[UseSmartestModel]` and display the tier (resolved model is determined at invocation time by the SDK) |
+| Provider / Model | Read `provider()` / `model()` methods before `#[Provider]` / `#[Model]` attributes. Normalize providers with `Provider::formatProviderAndModelList()`, showing the first provider/model pair. Provider arrays use their mapped models or provider defaults and ignore the separate model declaration, matching the SDK. When no model is specified, retain the cheapest/smartest/default tier. Discovery does not construct optional provider gateways. |
 | Temperature / Max Tokens / Max Steps / Top P / Tool Choice | `TextGenerationOptions::forAgent($agent)` — public static, resolves all five with the SDK's own attribute/method precedence. Tool choice shows mode (`auto` / `none` / `required` / forced tool name) — invaluable when debugging "why won't my agent call the tool" |
 | Strict mode | `#[Strict]` attribute (OpenAI strict structured output) — shown as a small badge |
 | Timeout | `timeout()` method, or `#[Timeout]` attribute, or default `60` (method takes precedence) |
 | System Prompt | `$agent->instructions()` → `string` |
-| Tools | `$agent instanceof HasTools ? $agent->tools() : []` → classify each entry per the gateway's `resolveTool()` logic: `Tool` as-is, `Agent` → `AgentTool`, MCP references → `McpTool` / `McpServerTool`, `ProviderTool` as-is (see 4c) |
+| Tools | `AgentTools` reads `HasTools::tools()` and applies `LoadSkill::mergeInto()` for `HasSkills`, including skills-only agents and deduplicating an explicit loader. Classify provider tools, raw or SDK-wrapped sub-agents, and raw or SDK-wrapped MCP tools before generic tools; preserve names, schemas, descriptions, and sub-agent links. |
 | Middleware | `$agent instanceof HasMiddleware ? $agent->middleware() : []` |
-| Provider Options | `$agent instanceof HasProviderOptions ? $agent->providerOptions($provider) : []` |
+| Provider Options | `HasProviderOptions::providerOptions(Lab::tryFrom($provider) ?? $provider)` — standard providers receive the SDK enum; custom names remain strings. |
 | Structured Output | `$agent instanceof HasStructuredOutput ? $agent->schema(new JsonSchemaTypeFactory) : null` — rendered as an **Output schema** section inside the Tools tab (no fourth tab), reusing the parameter rows |
 
 **Tool schema rendering** — Each tool's `schema(JsonSchema $schema)` returns `array<string, Type>` (using `illuminate/json-schema`). **Serialize it through the SDK's public `ObjectSchema`**, not per-`Type`:
@@ -404,8 +409,8 @@ Simple list of past conversations with this agent (or across all agents).
 // List all conversations with aggregates
 SynapseConversation::query()
     ->withCount(['messages', 'toolInvocations'])
-    ->withSum('messages as total_prompt_tokens', 'prompt_tokens')
-    ->withSum('messages as total_completion_tokens', 'completion_tokens')
+    ->withSum('messages as total_input_tokens', 'input_tokens')
+    ->withSum('messages as total_output_tokens', 'output_tokens')
     ->latest('updated_at')
     ->paginate(25);
 ```
@@ -444,44 +449,9 @@ SynapseConversation::query()
 
 #### Technical Implementation
 
-**One catch-all is the backbone.** The SDK lets exceptions propagate — it does **not** swallow errors thrown inside a tool. Verified in `Gateway\Concerns\InvokesTools::executeTool()`: it runs `$tool->handle()` inside a `try/finally` with **no `catch`**, so a throwing tool handler bubbles straight out of `stream()` / `prompt()`. Likewise the streaming `ToolResult` event is currently always constructed `successful: true, error: null` in `TextGenerationLoop` — the SDK has no "failed tool result" path in 0.9.1. Therefore a single `try/catch (\Throwable)` around the **entire invocation pipeline** (agent resolution → decorator build → `stream()` → stream iteration → persistence) is what makes error handling comprehensive:
+**One catch-all is the backbone.** `AgentInvoker` catches failures from agent resolution, decoration, SDK invocation, stream iteration, and persistence. `ConversationWriter` retains partial assistant output when there is any, then writes one error row with exception class, message, stack trace, and available provider response details. `ToolFailed` records the exact failed execution; final cleanup closes unfinished root observations without touching nested or unrelated runs.
 
-```php
-try {
-    $target = $agent instanceof Conversational
-        ? new SynapseConversationalAgent($agent, $history)
-        : $agent;
-
-    $response = $target->stream($currentMessage, $attachments, $provider, $model);
-    // ... iterate + emit SSE + persist
-} catch (\Throwable $e) {
-    // 1. Store an agent-level error row
-    SynapseMessage::create([
-        'conversation_id' => $conversationId,
-        'role' => 'error',
-        'content' => $e->getMessage(),
-        'metadata' => [
-            'exception_class' => get_class($e),
-            'stack_trace' => $e->getTraceAsString(),
-        ],
-    ]);
-
-    // 2. Resolve any tool cards left hanging: a tool that threw fired
-    //    InvokingTool (pending row) but never ToolInvoked. Mark them failed.
-    SynapseToolInvocation::where('invocation_id', $invocationId)
-        ->where('status', 'pending')
-        ->update(['status' => 'error', 'error' => $e->getMessage(), 'finished_at' => now()]);
-
-    // 3. Emit an error part on the SSE stream so the UI renders it inline
-}
-```
-
-**Error sources, and how each lands:**
-
-1. **Provider / LLM errors** — rate limits, auth failures, timeouts, invalid requests thrown during `stream()`. `Promptable::withModelFailover()` catches only `FailoverableException` (for failover); everything else propagates to the catch-all → agent-level error card.
-2. **Tool errors (developer code)** — an exception in a tool's `handle()` propagates out of the SDK (it is *not* turned into a tool result). The catch-all stores the error row **and** flips that tool's dangling `pending` invocation row to `error` (step 2 above), so the tool card shows failed *and* an error card explains why. Synapse still handles a `ToolResult` with `successful === false` defensively (emitting `tool-output-error`, Feature 3) for forward-compatibility if a future SDK adds that path.
-3. **Failover events** — `AgentFailedOver` / `ProviderFailedOver` fire when the SDK falls back to the next provider. Rendered as an informational notice (not an error), so the developer sees a fallback occurred.
-4. **Mid-stream errors** — `Streaming\Events\Error` inside the stream (Feature 3); stored as a `role = error` row, styled by its `recoverable` flag.
+Provider failover and recoverable stream events become informational notices. Terminal stream errors and their wrapping exceptions share the same error path. SDK-reported failed tool results remain failed observations without inventing handler executions. A sub-agent that catches its own failure can still return an ordinary parent tool result. New prompts replay only message context, never these diagnostic notices or error cards.
 
 **Error display** — every caught error becomes a `synapse_messages` row with `role = error` (exception class + message + collapsible stack trace in `metadata`), rendered as an error card at the position in the thread where it occurred. Because the same catch-all runs for every invocation, there is no code path where an agent failure escapes to a generic Laravel error page.
 
@@ -491,37 +461,37 @@ try {
 
 Subtle but essential for prompt engineering.
 
-- Each assistant response shows: `↑ 340 tokens · ↓ 128 tokens` (prompt in, completion out)
+- Each assistant response shows: `↑ 340 tokens · ↓ 128 tokens` (inclusive input and output)
 - Running total at top of conversation: `Total: ↑ 1,240 · ↓ 512 `
 - Helps developers spot bloated prompts and optimize token usage
 
 #### Technical Implementation
 
-**Data source** — The SDK's `Usage` class (available on every response):
+**Data source** — The SDK's `TextUsage` class (available on every response):
 
 ```php
 // From AgentResponse / StreamedAgentResponse
-$response->usage->promptTokens
-$response->usage->completionTokens
+$response->usage->inputTokens
+$response->usage->outputTokens
 $response->usage->cacheWriteInputTokens
 $response->usage->cacheReadInputTokens
 $response->usage->reasoningTokens
 ```
 
-For streaming, `StreamEnd` events carry per-step `Usage` objects. `StreamEnd::combineUsage()` aggregates them.
+Usage is aggregated from recorded SDK steps once per assistant turn, including completed work before a failure. The client assigns aggregate usage to one assistant display entry only; multiple blocks do not multiply counts.
 
-**Storage** — Each `synapse_messages` row with `role = assistant` stores `prompt_tokens` and `completion_tokens` as promoted integer columns (for cheap SQL aggregates), with the full `Usage::toArray()` breakdown — including cache and reasoning tokens — in the `usage` JSON column (see Database Schema).
+**Storage** — Each `synapse_messages` row with `role = assistant` stores `input_tokens` and `output_tokens` as promoted integer columns (for cheap SQL aggregates), with the full `TextUsage::toArray()` breakdown — including cache and reasoning tokens — in the `usage` JSON column (see Database Schema).
 
 **Conversation totals** — Summed on the fly:
 ```php
 $conversation->messages()
-    ->whereNotNull('prompt_tokens')
-    ->selectRaw('SUM(prompt_tokens) as total_in, SUM(completion_tokens) as total_out')
+    ->whereNotNull('input_tokens')
+    ->selectRaw('SUM(input_tokens) as total_in, SUM(output_tokens) as total_out')
     ->first();
 ```
 
 **Extended token breakdown** (optional detail on hover/expand):
-- Cache write tokens, cache read tokens, reasoning tokens — all available from `Usage`
+- Cache write/read tokens are subsets of input; reasoning is a subset of output. Never add them again. Null means unknown and is hidden; reported zero stays visible. Input plus output is the total.
 - Useful for developers optimizing prompt caching on Anthropic or reasoning usage on OpenAI o-series
 
 ---
@@ -716,13 +686,13 @@ No bundled/hidden database: a package-registered secret connection would be invi
 
 ### Design principle: store replay data in the SDK's own serialization shapes
 
-The `steps` column stores ordered `Responses\Data\Step::toArray()` serializations, including calls/results, finish reason, usage, provider/model, reasoning, replay blocks, and provider tool calls. This is the public response shape, not the SDK database store's compact format. SDK replay data stays private; never return `steps` wholesale in an API response. Step 4 will rebuild provider history in step order with public SDK message constructors and call/result deserializers.
+The `steps` column stores ordered `Responses\Data\Step::toArray()` serializations, including calls/results, finish reason, usage, provider/model, reasoning, replay blocks, and provider tool calls. This is the public response shape, not the SDK database store's compact format. SDK replay data stays private; never return `steps` wholesale in an API response. Provider history is rebuilt in step order with public SDK message constructors and call/result deserializers.
 
-The `parts` column holds the display sequence in array order. Each block has a stable per-turn `id` and `type`: `text`/`reasoning` blocks carry `text`; `tool` blocks carry the Synapse observation row's `tool_invocation_id` (the row primary key, not the SDK execution ID); notice/error blocks carry the existing safe display payload. Tool status, duration, and result remain owned by `synapse_tool_invocations`. The sequence is a compact transcript, not a raw stream-event log. Steps 4–6 will write and project it.
+The `parts` column holds the display sequence in array order. Each block has a stable per-turn `id` and `type`: `text`/`reasoning` blocks carry `text`; `tool` blocks carry the Synapse observation row's `tool_invocation_id` (the row primary key, not the SDK execution ID); notice/error blocks carry the existing safe display payload. Tool status, duration, and result remain owned by `synapse_tool_invocations`. The sequence is a compact transcript, not a raw stream-event log. The recorder writes this sequence. `ConversationPresenter` supplies the same explicit public projection to conversation reload and stream completion; private steps, replay blocks, and provider call fields are never part of that projection.
 
 `status` is `completed`, `paused`, or `failed`; the database defaults to `completed`. `input_tokens` and `output_tokens` promote the inclusive counts in `TextUsage::toArray()`. Cache counts and reasoning counts are optional subsets; totals must not add them again. Existing content, attachments, usage, meta, metadata, duration, timestamps, and indexes remain.
 
-A fourth, self-contained migration transforms empty legacy storage. It refuses any rows in any Synapse table before altering schema, on both upgrade and rollback. It never clears data or accesses SDK tables. Existing installations must stop Synapse traffic and explicitly clear their history/attachments first; see [the reset procedure](DEV.md#laravel-ai-13-storage-reset). The first three published migrations remain unchanged.
+A fourth, self-contained migration transforms empty legacy storage. It refuses any rows in any Synapse table before altering schema, on both upgrade and rollback. It never clears data or accesses SDK tables. Existing installations must stop Synapse traffic and explicitly clear their history/attachments first; see [the reset procedure](DEV.md#laravel-ai-13-storage-reset). A fifth self-contained migration adds nullable model-call and provider fields to observations and makes execution IDs nullable. It refuses rollback while observations exist. The first three published migrations remain unchanged.
 
 ### Tables
 
@@ -761,7 +731,9 @@ Schema::create('synapse_tool_invocations', function (Blueprint $table) {
     $table->string('conversation_id', 36)->index();
     $table->string('message_id', 36)->nullable(); // linked to assistant row once the turn completes
     $table->string('invocation_id');              // agent invocation uuid from SDK events
-    $table->string('tool_invocation_id')->index(); // from InvokingTool/ToolInvoked; matches stream event ids
+    $table->string('tool_invocation_id')->nullable()->index(); // SDK execution event ID
+    $table->string('tool_call_id')->nullable();   // model/provider call ID, separate from execution
+    $table->string('provider')->nullable();       // provider that performed this call
     $table->string('type', 25);                   // tool | provider_tool
     $table->string('name');                       // tool name, or provider tool type (anthropic.web_search)
     $table->text('arguments');                    // JSON
@@ -778,20 +750,20 @@ Schema::create('synapse_tool_invocations', function (Blueprint $table) {
 
 **Why `synapse_tool_invocations` is its own table:**
 
-1. **The decorator reads only `synapse_messages`** and mirrors SDK rehydration verbatim — no bespoke re-aggregation of tool-call rows back into the SDK's message sequence (fiddly with multi-step tool loops).
+1. **The decorator reads only `synapse_messages`** and rebuilds each SDK step in order — no bespoke re-aggregation of tool-call rows back into the SDK's message sequence (fiddly with multi-step tool loops).
 2. **Provider tool events fit naturally** — they never fire Laravel events and never become messages, but they're first-class rows here via the `type` discriminator.
 3. **SDK churn is absorbed where it belongs** — messages JSON follows SDK shapes automatically; invocation columns are Synapse's own observations.
 4. Feature 5's tool-call count becomes a trivial `withCount('toolInvocations')`.
 
 **Row lifecycle & management** — the recorder (`SynapseRecorder`) owns these rows end to end:
 
-1. **Insert** — `InvokingTool` creates a `status = pending` row (`type = tool`) tagged with both `invocation_id` (the agent run) and `tool_invocation_id` (the specific call). Provider-native tools have no Laravel events, so they're upserted from the stream keyed by `ProviderToolEvent->itemId` (`type = provider_tool`) as their `in_progress → completed / failed` transitions arrive.
+1. **Insert** — `InvokingTool` creates a `status = pending` row (`type = tool`) tagged with both `invocation_id` (the agent run) and `tool_invocation_id` (the specific call). Provider-native tools have no Laravel events, so they're upserted from the stream keyed by conversation, root invocation, provider, and `ProviderToolEvent->itemId` (`type = provider_tool`) as their `in_progress → completed / failed` transitions arrive.
 2. **Complete** — `ToolInvoked` updates the row to `success` with `result`, `duration_ms`, `finished_at` (fires on success only — see Feature 3).
-3. **Fail** — a thrown tool leaves its row `pending`; the invocation-level catch-all flips every still-`pending` row for that `invocation_id` to `error` (Feature 6).
-4. **Link** — when the assistant turn persists at stream close, the recorder stamps `message_id` onto that invocation's rows, associating each tool card with its assistant message; unlinked rows (e.g. a run that errored before any assistant message) still render, ordered by `started_at`.
+3. **Fail** — `ToolFailed` settles the exact execution as `error`; final cleanup closes unfinished observations for the root run (Feature 6).
+4. **Link** — when the assistant turn persists, the recorder stamps its `message_id` onto the root observations. Ordered `parts` reference these row IDs. Useful partial turns are persisted on failure before the separate error message.
 5. **Delete** — rows are removed with their conversation. Cascade is handled in the repository layer (a `SynapseConversation` deletes its `messages` and `toolInvocations`), **not** via DB foreign keys — sqlite's FK pragma is off by default, so Synapse never relies on it (Telescope prunes the same way). `synapse:clear` / `synapse:prune` go through the same repository path.
 
-Inline tool cards are interleaved into the chat thread by `started_at` against message timestamps, giving the UI in-flight (`pending`) cards for free.
+Live cards follow stream order. Completion replaces the live turn with its persisted display sequence. Reload uses the same `parts` ordering and observation IDs; it never merges messages/tools by UUID or timestamp. Tool provider labels come from each observation.
 
 ---
 

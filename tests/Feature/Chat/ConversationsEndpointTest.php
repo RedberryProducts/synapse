@@ -55,8 +55,8 @@ it('totals the tokens across the thread', function () {
     sendMessage('workbench.app.agents.support-agent', 'Second', $id);
 
     test()->getJson("/synapse/api/conversations/{$id}")
-        ->assertJsonPath('totals.prompt_tokens', 142)
-        ->assertJsonPath('totals.completion_tokens', 29)
+        ->assertJsonPath('totals.input_tokens', 142)
+        ->assertJsonPath('totals.output_tokens', 29)
         ->assertJsonPath('totals.total_tokens', 171);
 });
 
@@ -82,8 +82,8 @@ it('carries per-message usage and duration', function () {
 
     $assistant = test()->getJson("/synapse/api/conversations/{$id}")->json('messages.1');
 
-    expect($assistant['usage']['prompt_tokens'])->toBe(11)
-        ->and($assistant['usage']['completion_tokens'])->toBe(3)
+    expect($assistant['usage']['input_tokens'])->toBe(11)
+        ->and($assistant['usage']['output_tokens'])->toBe(3)
         ->and($assistant['duration_ms'])->toBeInt()
         ->and($assistant['meta']['model'])->toBe('gpt-5.6-luna');
 });

@@ -3,8 +3,10 @@
 namespace Redberry\Synapse\Chat;
 
 use Illuminate\Support\Str;
+use Laravel\Ai\Exceptions\StreamErrorException;
 use Laravel\Ai\Responses\AgentResponse;
-use Laravel\Ai\Streaming\Events\Error;
+use Laravel\Ai\Responses\Data\FinishReason;
+use Laravel\Ai\Responses\Data\Step;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
 use Throwable;
@@ -51,40 +53,52 @@ class ConversationWriter
         string $content,
         array $attachments = [],
     ): SynapseMessage {
+        $conversation->messages()->where('role', 'assistant')->where('status', 'paused')
+            ->get()->each(function (SynapseMessage $message): void {
+                $message->forceFill(['steps' => array_map(
+                    fn (array $step): array => [...$step, 'replay_blocks' => []],
+                    $message->steps ?? [],
+                )])->save();
+            });
+
         return $this->store($conversation, 'user', content: $content, attachments: $attachments);
     }
 
     /**
-     * Store a completed assistant turn.
+     * Store an assistant turn, including useful output from a failed run.
      *
-     * Tool calls and results are persisted in the SDK's own `toArray()` shapes
-     * so `MessageHistory` can rehydrate them with the SDK's own `fromArray()`.
+     * Steps retain the SDK's public response serialization. Raw provider blocks
+     * survive only while a turn is paused; closed turns replay generically.
      */
     public function storeAssistantMessage(
         SynapseConversation $conversation,
         AgentResponse $response,
         int $durationMs,
-        ?string $reasoning = null,
+        array $parts = [],
+        string $status = 'completed',
         ?array $structured = null,
     ): SynapseMessage {
+        $hasUsage = $status !== 'failed' || $response->steps->contains(
+            fn (Step $step): bool => $step->finishReason !== FinishReason::Unknown,
+        );
+
         return $this->store(
             $conversation,
             'assistant',
             content: $response->text,
-            toolCalls: $response->toolCalls->map->toArray()->values()->all(),
-            toolResults: $response->toolResults->map->toArray()->values()->all(),
-            usage: $response->usage->toArray(),
-            promptTokens: $response->usage->promptTokens,
-            completionTokens: $response->usage->completionTokens,
+            steps: $response->steps->map(fn (Step $step): array => [
+                ...$step->toArray(),
+                'replay_blocks' => $status === 'paused' ? $step->replayBlocks : [],
+            ])->values()->all(),
+            parts: $parts,
+            status: $status,
+            usage: $hasUsage ? $response->usage->toArray() : [],
+            inputTokens: $hasUsage ? $response->usage->inputTokens : null,
+            outputTokens: $hasUsage ? $response->usage->outputTokens : null,
             durationMs: $durationMs,
-            // Reasoning and structured output live only in the stream — the
-            // SDK's `text` is `TextDelta::combine()`, which excludes reasoning,
-            // and `structured` is not persisted anywhere. Without keeping them
-            // here a replayed conversation would quietly differ from the one
-            // the developer watched.
             meta: array_filter([
                 ...$response->meta->toArray(),
-                'reasoning' => $reasoning,
+                'reasoning' => $response->reasoning !== '' ? $response->reasoning : null,
                 'structured' => $structured,
             ], fn (mixed $value): bool => $value !== null),
         );
@@ -100,24 +114,14 @@ class ConversationWriter
     {
         $detail = ProviderErrorDetail::for($e);
 
-        return $this->store($conversation, 'error', content: $e->getMessage(), metadata: [
+        return $this->store($conversation, 'error', content: $e->getMessage(), status: 'failed', metadata: [
             'exception_class' => $e::class,
             'stack_trace' => $e->getTraceAsString(),
             // What the provider actually said. `getMessage()` on an HTTP failure
             // is just "returned status code 400"; the reason is in the body.
             'response_status' => $detail['status'] ?? null,
             'response_body' => $detail['body'] ?? null,
-        ]);
-    }
-
-    /**
-     * Store a mid-stream error event, which carries no exception of its own.
-     */
-    public function storeStreamError(SynapseConversation $conversation, string $message, bool $recoverable): SynapseMessage
-    {
-        return $this->store($conversation, 'error', content: $message, metadata: [
-            'exception_class' => Error::class,
-            'recoverable' => $recoverable,
+            ...($e instanceof StreamErrorException && $e->error !== null ? ['stream_error' => $e->error->toArray()] : []),
         ]);
     }
 
@@ -125,8 +129,8 @@ class ConversationWriter
      * Insert a message row and mark the conversation as active.
      *
      * @param  array<int, mixed>  $attachments
-     * @param  array<int, mixed>  $toolCalls
-     * @param  array<int, mixed>  $toolResults
+     * @param  array<int, mixed>  $steps
+     * @param  array<int, mixed>  $parts
      * @param  array<string, mixed>  $usage
      * @param  array<string, mixed>  $meta
      * @param  array<string, mixed>  $metadata
@@ -136,11 +140,12 @@ class ConversationWriter
         string $role,
         ?string $content = null,
         array $attachments = [],
-        array $toolCalls = [],
-        array $toolResults = [],
+        array $steps = [],
+        array $parts = [],
+        string $status = 'completed',
         array $usage = [],
-        ?int $promptTokens = null,
-        ?int $completionTokens = null,
+        ?int $inputTokens = null,
+        ?int $outputTokens = null,
         ?int $durationMs = null,
         array $meta = [],
         array $metadata = [],
@@ -150,11 +155,12 @@ class ConversationWriter
             'role' => $role,
             'content' => $content,
             'attachments' => $attachments,
-            'tool_calls' => $toolCalls,
-            'tool_results' => $toolResults,
+            'steps' => $steps,
+            'parts' => $parts,
+            'status' => $status,
             'usage' => $usage,
-            'prompt_tokens' => $promptTokens,
-            'completion_tokens' => $completionTokens,
+            'input_tokens' => $inputTokens,
+            'output_tokens' => $outputTokens,
             'duration_ms' => $durationMs,
             'meta' => $meta,
             'metadata' => $metadata,

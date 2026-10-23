@@ -7,6 +7,7 @@ Guidance for any agent or contributor writing code in this repository. Read this
 - **Plan before coding.** For a non-trivial task, state a short plan (steps → how you'll verify each) and work through it.
 - **Run the gates before reporting done:** `composer check` (lint + analyse + test). All green, every time. A pre-commit hook enforces this — enable it once with `composer hooks`.
 - **Run `composer test:e2e`** when you touch the frontend or the chat/stream surface. It's excluded from `composer check` and from CI (needs Playwright + built assets); it is a required gate before a release.
+- **Sequence feature and browser runs within a checkout.** Installation tests publish/remove Testbench's temporary migrations; simultaneous suites can race. Use separate copies for concurrent compatibility checks.
 - **Rebuild `dist/`** (`npm run build`) whenever `resources/js` changes — it's committed, and the hook checks it.
 - **Never `git commit` without being asked.**
 - **PRD.md / GOAL.md are the spec.** If code and spec disagree, stop and reconcile — don't invent behavior.
@@ -158,6 +159,7 @@ Gotchas worth knowing:
 - **No browser test can observe a mid-stream state.** That same buffer means every SSE part reaches the page in one chunk, however long the run takes — a `pending` tool card is already `success` by the time the DOM exists. Assert the *end* state in a browser test and the streaming itself against a real server (below).
 - **The harness cannot upload a file.** It parses only `application/x-www-form-urlencoded` bodies and passes an empty files array to `Request::create()` (a `@TODO` in pest-plugin-browser). Browser tests can drive the composer as far as the chip; everything past it belongs in a feature test with a real multipart request.
 - **All conversational agents share one fake gateway** (the decorator's), so calling `fakeAgent()` twice with different responses replaces the first. A test needing two agents to behave differently passes one closure keyed on the prompt.
+- **SDK 1.3 fakes discard tool calls attached to a `TextResponse`.** For a response containing both narration and tool calls, use `StepSequenceAgent` middleware fixtures with public `StepResponse` objects. They exercise the SDK loop without provider I/O; keep `fakeAgent()` registered as the network guard.
 - **Faked responses given as a list don't advance past a throwing entry.** The SDK's fake increments its cursor with `tap()` *after* marshalling, so an entry that throws is returned forever. Use a closure keyed on the prompt when a test needs a failure followed by a success.
 
 ### Verifying that it actually streams

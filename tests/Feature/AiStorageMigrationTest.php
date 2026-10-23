@@ -11,6 +11,7 @@ use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
 use Redberry\Synapse\Models\SynapseConversation;
+use Redberry\Synapse\Models\SynapseToolInvocation;
 use Symfony\Component\Process\Process;
 
 function aiStorageMigration(): Migration
@@ -184,4 +185,25 @@ it('executes published migrations without autoloading Synapse or the SDK', funct
     $process = new Process([PHP_BINARY, '-r', $script, $root]);
     $process->mustRun();
     expect($process->getOutput())->toBe('migrated and rolled back');
+});
+
+it('keeps execution IDs distinct from model call IDs in tool storage', function () {
+    $row = SynapseToolInvocation::create([
+        'conversation_id' => 'conversation', 'invocation_id' => 'run', 'tool_call_id' => 'model-call',
+        'provider' => 'openai', 'type' => 'tool', 'name' => 'Search', 'arguments' => [], 'status' => 'pending',
+    ])->fresh();
+    expect($row->tool_invocation_id)->toBeNull()
+        ->and($row->tool_call_id)->toBe('model-call')
+        ->and($row->provider)->toBe('openai');
+});
+
+it('refuses a tool correlation rollback with observations still present', function () {
+    DB::table('synapse_tool_invocations')->insert([
+        'id' => 'observation', 'conversation_id' => 'conversation', 'invocation_id' => 'run',
+        'tool_call_id' => 'model-call', 'type' => 'tool', 'name' => 'Search', 'arguments' => '{}', 'status' => 'pending', 'created_at' => now(),
+    ]);
+    $migration = require dirname(__DIR__, 2).'/database/migrations/2026_10_23_000005_add_synapse_tool_correlation.php';
+    expect(fn () => $migration->down())->toThrow(RuntimeException::class, 'php artisan synapse:clear')
+        ->and(Schema::hasColumn('synapse_tool_invocations', 'tool_call_id'))->toBeTrue()
+        ->and(DB::table('synapse_tool_invocations')->count())->toBe(1);
 });

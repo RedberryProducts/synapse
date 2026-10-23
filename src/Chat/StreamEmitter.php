@@ -2,35 +2,28 @@
 
 namespace Redberry\Synapse\Chat;
 
-use Laravel\Ai\Streaming\Events\Error;
+use Laravel\Ai\Responses\Data\UrlCitation;
+use Laravel\Ai\Streaming\Events\Citation;
 use Laravel\Ai\Streaming\Events\ProviderToolEvent;
+use Laravel\Ai\Streaming\Events\ReasoningDelta;
+use Laravel\Ai\Streaming\Events\ReasoningEnd;
+use Laravel\Ai\Streaming\Events\ReasoningStart;
 use Laravel\Ai\Streaming\Events\StreamEnd;
 use Laravel\Ai\Streaming\Events\StreamEvent;
 use Laravel\Ai\Streaming\Events\StreamStart;
+use Laravel\Ai\Streaming\Events\TextDelta;
+use Laravel\Ai\Streaming\Events\TextEnd;
+use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall;
 use Laravel\Ai\Streaming\Events\ToolResult;
 use Throwable;
 
-/**
- * Writes the SSE stream the dashboard consumes, in the Vercel AI SDK UI message
- * protocol.
- *
- * Part names come from the SDK's own `toVercelProtocolArray()`, so the wire
- * format stays the SDK's. Synapse emits it rather than returning the SDK's
- * `usingVercelDataProtocol()` response because that serializer drops two things
- * a debugging tool cannot lose:
- *
- * 1. `ProviderToolEvent` has no Vercel mapping at all and is silently skipped.
- * 2. `ToolResult` is always serialized as `tool-output-available`, discarding
- *    `successful` / `error`.
- *
- * Everything else mirrors `Responses\Concerns\CanStreamUsingVercelProtocol`:
- * one `start` part, tool results without a preceding call are dropped, and the
- * `finish` part is held back until the very end.
- */
+/** Maps SDK events to Synapse's SSE contract, with completion after persistence. */
 class StreamEmitter
 {
     protected bool $started = false;
+
+    protected bool $finished = false;
 
     /** @var array<string, true> */
     protected array $toolCalls = [];
@@ -103,63 +96,51 @@ class StreamEmitter
      */
     public function event(StreamEvent $event): void
     {
-        // The gateway emits a StreamStart per step; the protocol wants one.
-        if ($event instanceof StreamStart) {
-            if ($this->started) {
-                return;
-            }
-
-            $this->started = true;
-        }
-
-        if ($event instanceof ToolCall) {
-            $this->toolCalls[$event->toolCall->id] = true;
-        }
-
-        // A result with no matching call would confuse the client's part state.
-        if ($event instanceof ToolResult && ! isset($this->toolCalls[$event->toolResult->id])) {
-            return;
-        }
-
-        // Gap 2: the SDK always reports success. Preserve the failure.
-        if ($event instanceof ToolResult && ! $event->successful) {
-            $this->part([
-                'type' => 'tool-output-error',
-                'toolCallId' => $event->toolResult->id,
-                'errorText' => $event->error ?? 'The tool failed.',
-            ]);
-
-            return;
-        }
-
-        // Gap 1: no Vercel serialization exists, so carry the raw event.
-        if ($event instanceof ProviderToolEvent) {
-            $this->part([
-                'type' => 'data-provider-tool',
-                'data' => $event->toArray(),
-            ]);
-
-            return;
-        }
-
-        // Held back so `finish` is always the last model part.
         if ($event instanceof StreamEnd) {
             $this->streamEnd = $event;
 
             return;
         }
-
-        $part = $event->toVercelProtocolArray();
-
-        if (filled($part)) {
-            $this->part($part);
+        if ($event instanceof ToolResult && ($event->preliminary || ! isset($this->toolCalls[$event->toolResult->id]))) {
+            return;
         }
+        if ($event instanceof ToolCall) {
+            $this->toolCalls[$event->toolCall->id] = true;
+        }
+        if ($event instanceof StreamStart && $this->started) {
+            return;
+        }
+
+        $part = match (true) {
+            $event instanceof StreamStart => ['type' => 'start', 'messageId' => $event->invocationId],
+            $event instanceof TextStart => ['type' => 'text-start', 'id' => $event->messageId],
+            $event instanceof TextDelta => ['type' => 'text-delta', 'id' => $event->messageId, 'delta' => $event->delta],
+            $event instanceof TextEnd => ['type' => 'text-end', 'id' => $event->messageId],
+            $event instanceof ReasoningStart => ['type' => 'reasoning-start', 'id' => $event->reasoningId],
+            $event instanceof ReasoningDelta => ['type' => 'reasoning-delta', 'id' => $event->reasoningId, 'delta' => $event->delta],
+            $event instanceof ReasoningEnd => ['type' => 'reasoning-end', 'id' => $event->reasoningId],
+            $event instanceof ToolCall => ['type' => 'tool-input-available', 'toolCallId' => $event->toolCall->id, 'toolName' => $event->toolCall->name, 'input' => $event->toolCall->arguments],
+            $event instanceof ToolResult => $event->denied || ! $event->successful
+                ? ['type' => 'tool-output-error', 'toolCallId' => $event->toolResult->id, 'errorText' => $event->error ?? ($event->denied ? 'The tool call was denied.' : 'The tool failed.')]
+                : ['type' => 'tool-output-available', 'toolCallId' => $event->toolResult->id, 'output' => $event->toolResult->result],
+            $event instanceof ProviderToolEvent => ['type' => 'data-provider-tool', 'data' => $event->toArray()],
+            $event instanceof Citation && $event->citation instanceof UrlCitation => ['type' => 'source-url', 'sourceId' => $event->citation->url, 'url' => $event->citation->url, 'title' => $event->citation->title],
+            default => null,
+        };
+        if ($part === null) {
+            return;
+        }
+        if (! $this->started && $part['type'] !== 'start') {
+            $this->part(['type' => 'start', 'messageId' => $event->invocationId]);
+        }
+        $this->started = true;
+        $this->part($part);
     }
 
     /**
      * Emit a whole answer as one text block.
      *
-     * Used for structured-output agents, which the SDK refuses to stream, so a
+     * Used for Synapse's single-shot structured-output path, so a
      * single `prompt()` result still reaches the client through the same pipe.
      */
     public function text(string $text, string $messageId): void
@@ -196,6 +177,10 @@ class StreamEmitter
      */
     public function error(Throwable $e, string $messageId): void
     {
+        if (! $this->started) {
+            $this->part(['type' => 'start', 'messageId' => $messageId]);
+            $this->started = true;
+        }
         $detail = ProviderErrorDetail::for($e);
 
         $this->part([
@@ -215,29 +200,10 @@ class StreamEmitter
     }
 
     /**
-     * Report a mid-stream error event, which carries no exception.
-     */
-    public function streamError(Error $event, string $messageId): void
-    {
-        $this->part([
-            'type' => 'error',
-            'errorText' => $event->message,
-            'data' => [
-                'messageId' => $messageId,
-                'exceptionClass' => Error::class,
-                'stackTrace' => null,
-                'responseStatus' => null,
-                'responseBody' => null,
-                'recoverable' => $event->recoverable,
-            ],
-        ]);
-    }
-
-    /**
      * Name the provider this run is actually going through.
      *
      * A provider-native tool card carries a `provider /` prefix, and on replay
-     * that comes from the assistant message's stored meta — the provider the SDK
+     * that comes from the tool observation's provider — the provider the SDK
      * reported, not the one the agent was configured with. Those differ after a
      * failover, which is exactly when knowing who to blame matters, so the live
      * stream announces the real one rather than letting the client assume the
@@ -266,22 +232,29 @@ class StreamEmitter
     }
 
     /**
-     * Close the stream: the held `finish` part, Synapse's own completion data,
-     * then the protocol terminator.
-     */
-    /**
+     * Close the stream after persistence, including failed or paused turns.
+     *
      * @param  array<string, mixed>|null  $usage
      */
-    public function finish(?string $assistantMessageId = null, ?array $usage = null, ?int $durationMs = null): void
+    public function finish(?string $assistantMessageId = null, ?array $usage = null, ?int $durationMs = null, string $status = 'completed', ?array $turn = null): void
     {
-        if ($this->streamEnd instanceof StreamEnd) {
-            $part = $this->streamEnd->toVercelProtocolArray();
-
-            if (filled($part)) {
-                $this->part($part);
-            }
-
-            $this->streamEnd = null;
+        if ($this->finished) {
+            return;
+        }
+        $this->finished = true;
+        if (! $this->started) {
+            $this->part(['type' => 'start', 'messageId' => $assistantMessageId]);
+            $this->started = true;
+        }
+        if ($status !== 'failed') {
+            $this->part([
+                'type' => 'finish',
+                'finishReason' => match ($this->streamEnd?->reason) {
+                    'tool_calls' => 'tool-calls', 'length' => 'length', 'content_filter' => 'content-filter',
+                    default => 'stop',
+                },
+                'messageMetadata' => ['usage' => $usage],
+            ]);
         }
 
         $this->part([
@@ -290,6 +263,8 @@ class StreamEmitter
                 'assistantMessageId' => $assistantMessageId,
                 'usage' => $usage,
                 'durationMs' => $durationMs,
+                'status' => $status,
+                'turn' => $turn,
             ],
         ]);
 
@@ -311,7 +286,7 @@ class StreamEmitter
      */
     protected function part(array $part): void
     {
-        $this->raw((string) json_encode($part));
+        $this->raw((string) json_encode($part, JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR));
     }
 
     protected function raw(string $payload): void

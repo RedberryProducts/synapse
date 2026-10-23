@@ -37,7 +37,7 @@ Think of it as the missing UI for `laravel/ai`, in the same spirit as Telescope,
 
 ---
 
-> **Migration in progress:** this branch implements steps 1–3 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md). The SDK and storage foundations are updated; chat writing, streaming, and replay still require steps 4–6. This is not a releasable upgrade. Existing installations require an explicit history reset; see [DEV.md](DEV.md#laravel-ai-13-storage-reset).
+> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Real-provider testing is deferred; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
 
 ## Requirements
 
@@ -196,9 +196,10 @@ The playground is a real conversation with a real agent. Messages stream token-b
 - **Streaming text** — the answer as it arrives.
 - **Pending response state** — right after you send, a `Loading...` row appears where the reply will land and stays there until the first reasoning step, tool event, notice, answer text, or error arrives. Reasoning already received remains visible when later tools, notices, or errors arrive.
 - **Reasoning** — for models with extended thinking (Anthropic, OpenAI o-series, DeepSeek), `✦ Thinking…` appears while the model works, then collapses into a "Thinking" pane above the answer, with its own reasoning-token count in the per-message counts. Collapsed by default so it never gets in the way — and kept, so reopening the conversation later shows the same thinking you watched.
-- **Tool calls** — inline cards, in the order they happened (see [Tool inspection](#tool-inspection)).
-- **Structured output** — if your agent returns structured data, the response renders as a formatted, collapsible JSON card instead of plain text. Structured-output agents can't stream (the SDK doesn't support it), so Synapse runs them in one shot and shows the finished answer — the only visible difference is that the text arrives all at once.
-- **Metadata** — prompt/completion token counts and response time on each answer, plus the model that ran it whenever you overrode the agent's own.
+- **Tool calls** — inline cards, in the order they happened (see [Tool inspection](#tool-inspection)). Reloading preserves the same text, reasoning, and tool sequence.
+- **Approval requests** — the turn stops with an explicit notice and a paused tool card. Synapse does not yet support approving or resuming tools (issue #1); no approval is granted. You can send another message.
+- **Structured output** — if your agent returns structured data, the response renders as a formatted, collapsible JSON card instead of plain text. Synapse keeps structured-output agents on its single-shot path and shows the finished answer — the only visible difference is that the text arrives all at once.
+- **Metadata** — inclusive input/output token counts and response time on each answer, plus the model that ran it whenever you overrode the agent's own.
 
 **Conversation controls:**
 
@@ -216,7 +217,7 @@ The **⋮ menu** in the playground header holds:
 - **If your agent supports conversation memory** (it implements the SDK's `Conversational` contract — most commonly via the `RemembersConversations` trait), the playground is a true multi-turn conversation. Each message is sent with the full thread, so the agent has the earlier context. Synapse supplies that history from **its own** stored messages rather than your app's conversation tables, so you don't have to call `forUser()` or `continue()` to try an agent out, and nothing you do in the playground touches your production conversation data.
 - **If your agent is stateless** (it doesn't implement `Conversational`), each message is sent to the agent on its own, with **no earlier messages attached** — exactly how it behaves in production. Synapse still keeps the messages together in one session so you can read them as a thread, and marks the agent **Stateless** so you know why it won't recall previous turns.
 
-- **One exception: structured-output agents.** An agent implementing `HasStructuredOutput` runs single-shot with no earlier messages attached, even if it is also `Conversational`. This comes from the SDK, not from a choice Synapse made: `StreamsText::stream()` rejects any agent with structured output, so these never take the streaming path, and the wrapper Synapse uses to supply conversation history can't carry the structured-output contract without breaking every other conversational agent. In practice an agent that extracts a fixed shape from one input rarely wants memory — but if yours does, it will not have it here.
+- **One exception: structured-output agents.** An agent implementing `HasStructuredOutput` runs single-shot with no earlier messages attached, even if it is also `Conversational`. Synapse retains this existing behavior during the SDK migration; the installed SDK 1.3.0 still rejects structured streaming. Extending Synapse's structured conversation path is separate work.
 
 The point: what you see in Synapse is what you'd get in production. Synapse won't give your agent memory it doesn't actually have — if you need multi-turn behavior, that's a signal to make your agent conversational in code.
 
@@ -304,16 +305,17 @@ A conversation is marked **error** if the agent itself failed at some point. A t
 - **Agent/LLM errors** (rate limits, auth failures, timeouts, invalid requests) appear as an error card showing the exception class and message, with a collapsible stack trace. Fix your code and try again — no reload needed.
 - **Errors in your own tools** — if a tool throws while running, its card is marked failed and an error card explains what happened (class, message, stack trace), so a bug in tool code is easy to spot.
 - **Failover** — if your agent is configured to fail over between providers and does, Synapse shows an informational notice (not an error), so you know a fallback kicked in.
+- **Partial failures** — useful text, reasoning, and completed tool work are retained before the error. A failed call without a result is explicitly marked interrupted in subsequent model history; it is never presented to the model as a successful execution.
 - **Mid-stream errors** — if a provider reports a problem partway through generating, Synapse shows it in place; recoverable hiccups are styled more softly than fatal errors.
 
 ### Token counting
 
 Every assistant response carries its token cost, so you can spot bloated prompts and optimize as you go:
 
-- **Per response:** `↑ 340 · ↓ 128` (prompt in / completion out)
+- **Per response:** `↑ 340 · ↓ 128` (input / output)
 - **Per conversation:** a running total at the top of the thread
 
-Expand the token detail to see the full breakdown, including **cache-read**, **cache-write**, and **reasoning** tokens — useful when tuning prompt caching (Anthropic) or reasoning usage (OpenAI o-series).
+Cache-read and cache-write counts appear on hover; reported reasoning counts appear beside output. Cache counts are already included in input, and reasoning is included in output, so totals never add them twice. Unknown breakdowns stay hidden; a reported zero is shown. A multi-step answer is counted once, both live and after reload.
 
 ---
 
@@ -511,7 +513,7 @@ PHP is serving HTTP directly. Measured per runtime:
 | nginx + PHP-FPM (Herd, Valet, Forge) | ✅ Verified | First byte in ~2ms of a 4s run, with `output_buffering=4096` |
 | Laravel Sail | ✅ Expected | nginx + PHP-FPM in Docker — the same stack as the row above |
 | FrankenPHP | ✅ Verified | First byte in ~2ms of a 4s run |
-| **Laravel Octane** | ❌ **Not supported in v0.1.0** | See below |
+| **Laravel Octane** | ❌ **Not supported** | See below |
 
 **Octane.** Swoole and RoadRunner run their workers under PHP's CLI interface,
 where `flush()` cannot push bytes to a client — so Synapse assembles the whole

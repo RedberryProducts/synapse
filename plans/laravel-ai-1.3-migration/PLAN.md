@@ -1,6 +1,6 @@
 # Laravel AI 1.3 migration
 
-Status: steps 1–3 implemented on `codex/laravel-ai-13-migration`; steps 4–8 remain. This intermediate state is not releasable. See [PROGRESS.md](PROGRESS.md) for verification and retained regression coverage.
+Status: steps 1–8 implemented on `codex/laravel-ai-13-migration`; deterministic qualification passed. Real-provider smoke testing is deferred at the user’s request. No tag or release has been created. See [QUALIFICATION.md](QUALIFICATION.md) for exact coverage and [PROGRESS.md](PROGRESS.md) for implementation history.
 
 Migrate Synapse to `laravel/ai ^1.3`, preserving the current dashboard experience and its behavioral test coverage. This is a focused rewrite of the SDK boundary, persistence, and replay. Keep the existing React screens, routes, configuration, authorization, and package installation model unless a specific migration requirement changes them.
 

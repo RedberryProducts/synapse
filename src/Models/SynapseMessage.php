@@ -3,6 +3,7 @@
 namespace Redberry\Synapse\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -51,5 +52,11 @@ class SynapseMessage extends SynapseModel
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(SynapseConversation::class, 'conversation_id');
+    }
+
+    /** @return HasMany<SynapseToolInvocation, $this> */
+    public function toolInvocations(): HasMany
+    {
+        return $this->hasMany(SynapseToolInvocation::class, 'message_id');
     }
 }
