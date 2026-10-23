@@ -228,6 +228,8 @@ The point: what you see in Synapse is what you'd get in production. Synapse won'
 
 Whenever an agent calls a tool, a card appears inline in the conversation. This is the heart of debugging agent behavior.
 
+Stringable tool results use the same text the SDK sends to the model. Each execution keeps its output and timing on one card, both live and after reload.
+
 A tool card is **collapsed** by default, showing the tool name, a status badge, and how long it took:
 
 ```

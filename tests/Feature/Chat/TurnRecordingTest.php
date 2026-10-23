@@ -27,9 +27,11 @@ use Redberry\Synapse\Discovery\AgentDiscovery;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Models\SynapseToolInvocation;
+use Redberry\Synapse\Synapse;
 use Redberry\Synapse\Tests\Fixtures\RecordingEmitter;
 use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
 use Redberry\Synapse\Tests\Fixtures\StreamSequenceAgent;
+use Redberry\Synapse\Tests\Fixtures\StringableResultTool;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SupportAgent;
@@ -131,6 +133,33 @@ it('correlates repeated identical calls without confusing execution and model ID
         ->and($tools->pluck('tool_invocation_id')->unique())->toHaveCount(2)
         ->and($tools[0]->tool_invocation_id)->not->toBe('one')
         ->and($tools->pluck('provider')->all())->toBe(['openai', 'openai']);
+});
+
+it('correlates stringable tool results with their execution', function () {
+    Synapse::auth(fn (): bool => true);
+    app()->instance(SupportAgent::class, (new SupportAgent)->withTools([new StringableResultTool]));
+    fakeAgent(SupportAgent::class, [new ToolCall('stringable-call', 'StringableResultTool', []), 'Done.']);
+
+    $response = sendMessage('workbench.app.agents.support-agent', 'Check stock')->assertOk();
+    expect(SynapseToolInvocation::count())->toBe(1);
+    $tool = SynapseToolInvocation::sole();
+    $assistant = SynapseMessage::where('role', 'assistant')->sole();
+    $turn = chatPart($response, 'data-synapse-end')['data']['turn'];
+
+    expect($tool->tool_call_id)->toBe('stringable-call')
+        ->and($tool->tool_invocation_id)->not->toBeNull()->not->toBe('stringable-call')
+        ->and($tool->duration_ms)->not->toBeNull()
+        ->and($tool->result)->toBe('Hoodie stock: 12.')
+        ->and($tool->status)->toBe('success')
+        ->and($tool->message_id)->toBe($assistant->id)
+        ->and(collect($assistant->parts)->where('type', 'tool')->pluck('tool_invocation_id')->all())->toBe([$tool->id])
+        ->and($turn['tool_invocations'])->toHaveCount(1)
+        ->and($turn['tool_invocations'][0]['result'])->toBe($tool->result)
+        ->and($turn['tool_invocations'][0]['duration_ms'])->toBe($tool->duration_ms)
+        ->and($assistant->steps[0]['tool_results'][0]['result'])->toBe($tool->result);
+
+    $this->getJson('/synapse/api/conversations/'.$assistant->conversation_id)
+        ->assertOk()->assertJsonPath('tool_invocations', $turn['tool_invocations']);
 });
 
 it('does not retain listeners or observations across repeated sends', function () {

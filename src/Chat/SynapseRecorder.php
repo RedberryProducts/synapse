@@ -186,8 +186,9 @@ class SynapseRecorder
 
     public function toolInvoked(ToolInvoked $event): void
     {
+        // The SDK dispatches this event before casting the handler result.
         $this->executions[$event->toolInvocationId]->forceFill([
-            'status' => 'success', 'result' => $event->result,
+            'status' => 'success', 'result' => (string) $event->result,
             'finished_at' => now(), 'duration_ms' => (int) round($event->time),
         ])->save();
     }

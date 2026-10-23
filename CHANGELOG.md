@@ -20,6 +20,7 @@ Breaking migration to Laravel AI **^1.3**, requiring PHP **8.3+** and Laravel **
 
 ### Fixed
 
+- Normalize stringable tool results before recording them so one execution produces one card with its output and timing.
 - Keep recorded usage visible for tool-only paused/failed turns immediately and across subsequent sends.
 - Show unavailable-agent diagnostics in the playground while keeping existing history readable and hiding the composer.
 

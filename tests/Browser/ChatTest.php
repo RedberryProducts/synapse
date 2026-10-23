@@ -17,6 +17,7 @@ use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Tests\Fixtures\ApprovalSearchTool;
 use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
+use Redberry\Synapse\Tests\Fixtures\StringableResultTool;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SlowToolAgent;
@@ -315,6 +316,28 @@ it('marks a failed tool on the card and explains it below', function () {
     $page->assertSeeIn('@tool-status', 'error')
         ->assertSeeIn('@error-card', 'Ledger service unavailable')
         ->assertNoJavaScriptErrors();
+});
+
+it('renders one timed card for a stringable tool result', function () {
+    app()->instance(SupportAgent::class, (new SupportAgent)->withTools([new StringableResultTool]));
+    fakeAgent(SupportAgent::class, [new ToolCall('stringable-call', 'StringableResultTool', []), 'Done.']);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Check stock')->click('Send');
+    $page->assertSee('Done.')
+        ->click('[aria-label="StringableResultTool tool call"]')
+        ->assertSeeIn('@tool-card', 'Hoodie stock: 12.')
+        ->assertSeeIn('@tool-card', 'ms');
+    expect($page->script("document.querySelectorAll('[data-testid=tool-card]').length"))->toBe(1);
+
+    $id = SynapseConversation::sole()->id;
+    $reopened = visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}");
+    $reopened->assertPresent('@tool-card')
+        ->click('[aria-label="StringableResultTool tool call"]')
+        ->assertSeeIn('@tool-card', 'Hoodie stock: 12.')
+        ->assertSeeIn('@tool-card', 'ms')
+        ->assertNoJavaScriptErrors();
+    expect($reopened->script("document.querySelectorAll('[data-testid=tool-card]').length"))->toBe(1);
 });
 
 it('restores tool cards on a refresh', function () {
