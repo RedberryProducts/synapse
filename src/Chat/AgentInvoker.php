@@ -2,52 +2,32 @@
 
 namespace Redberry\Synapse\Chat;
 
-use Illuminate\Contracts\Events\Dispatcher;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasStructuredOutput;
-use Laravel\Ai\Events\AgentFailedOver;
-use Laravel\Ai\Events\InvokingTool;
-use Laravel\Ai\Events\StreamingAgent;
-use Laravel\Ai\Events\ToolInvoked;
-use Laravel\Ai\Files\File;
-use Laravel\Ai\Messages\Message;
+use Laravel\Ai\Exceptions\ApprovalNotResumableException;
+use Laravel\Ai\Exceptions\StreamErrorException;
 use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\StreamedAgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Laravel\Ai\Streaming\Events\Error;
-use Laravel\Ai\Streaming\Events\ProviderToolEvent;
-use Laravel\Ai\Streaming\Events\ReasoningDelta;
 use Redberry\Synapse\Discovery\DiscoveredAgent;
-use Redberry\Synapse\Models\SynapseConversation;
-use Redberry\Synapse\Models\SynapseMessage;
-use Redberry\Synapse\Models\SynapseToolInvocation;
 use RuntimeException;
 use Throwable;
 
-/**
- * Runs one chat turn end to end: history, invocation, streaming, persistence.
- *
- * The whole pipeline sits inside a single `catch (Throwable)`. That is not
- * belt-and-braces — it is the entire error strategy (PRD Feature 6). The SDK
- * lets exceptions propagate: `InvokesTools::executeTool()` wraps the developer's
- * tool handler in `try/finally` with no `catch`, and `TextGenerationLoop`
- * hard-codes `successful: true` on every tool result event, so there is no
- * "failed tool result" path to observe. A tool that throws exits `stream()`
- * entirely, and only a catch-all this wide can turn that into a readable card.
- */
 class AgentInvoker
 {
+    public const APPROVAL_NOTICE = 'Tool approval is required. Synapse does not support approvals yet; no approval was granted. Start a new message to continue.';
+
     public function __construct(
         protected ConversationWriter $writer,
         protected MessageHistory $history,
         protected AttachmentStore $attachments,
-        protected Dispatcher $events,
+        protected RecordingScope $recording,
+        protected ConversationPresenter $presenter,
     ) {}
 
-    /**
-     * Invoke the agent and write the turn to the stream.
-     */
     public function handle(
         DiscoveredAgent $discovered,
         string $message,
@@ -57,285 +37,119 @@ class AgentInvoker
         ?string $model = null,
     ): void {
         $conversation = null;
-        $invocationId = null;
+        $recorder = null;
+        $assistant = null;
+        $turn = null;
+        $startedAt = hrtime(true);
 
         try {
             $conversation = $this->writer->conversation($conversationId, $discovered->class, $message);
-
-            // History must be read before the new user row exists, or the SDK's
-            // own `new UserMessage($prompt)` would repeat the current message.
             $history = $this->history->for($conversation->id);
-
-            $userMessage = $this->writer->storeUserMessage(
-                $conversation,
-                $message,
-                $this->attachments->toArray($attachments),
-            );
-
-            $emitter->conversationStarted($conversation->id, $userMessage->id);
+            $user = $this->writer->storeUserMessage($conversation, $message, $this->attachments->toArray($attachments));
+            $emitter->conversationStarted($conversation->id, $user->id);
 
             $agent = app($discovered->class);
-
-            // Discovery only ever yields Agent implementations, but the
-            // container's return type is `mixed` — make that guarantee real
-            // rather than assumed, so a mis-bound class fails with a readable
-            // card instead of a type error deep inside the SDK.
             if (! $agent instanceof Agent) {
                 throw new RuntimeException($discovered->class.' does not implement '.Agent::class.'.');
             }
 
-            $this->announceProvider($emitter);
-            $this->announceFailovers($emitter);
-            $this->recordToolInvocations($conversation);
+            $structured = $agent instanceof HasStructuredOutput;
+            $target = ! $structured && $agent instanceof Conversational
+                ? SynapseConversationalAgent::for($agent, $history) : $agent;
+            $recorder = new SynapseRecorder($conversation->id, ! $structured);
+            $response = $this->recording->during($target, $recorder, $emitter, function () use ($target, $message, $attachments, $model, $structured, $recorder, $emitter): AgentResponse {
+                if ($structured) {
+                    return $target->prompt($message, $attachments, model: $model);
+                }
+                $stream = $target->stream($message, $attachments, model: $model);
+                $completed = null;
+                $terminalError = null;
+                $stream->then(function (StreamedAgentResponse $response) use (&$completed): void {
+                    $completed = $response;
+                });
+                foreach ($stream as $event) {
+                    $recorder->event($event);
+                    if ($event instanceof Error) {
+                        if (! $event->recoverable) {
+                            $terminalError = $event;
 
-            if ($agent instanceof HasStructuredOutput) {
-                $assistant = $this->promptOnce($agent, $message, $conversation, $emitter, $invocationId, $attachments, $model);
-            } else {
-                $assistant = $this->stream($agent, $history, $message, $conversation, $emitter, $invocationId, $attachments, $model);
-            }
+                            continue;
+                        }
+                        $recorder->notice($event->message, ['recoverable' => true]);
+                        $emitter->notice($event->message, ['recoverable' => true]);
+                    } else {
+                        $emitter->event($event);
+                    }
+                }
+                if ($terminalError !== null) {
+                    if ($completed !== null) {
+                        $recorder->capture($completed);
+                    }
+                    throw new StreamErrorException($terminalError);
+                }
+                if ($completed === null) {
+                    throw new RuntimeException('The provider ended the stream without completing the response.');
+                }
+                if ($completed->steps->last()?->finishReason === FinishReason::Unknown) {
+                    $recorder->capture($completed);
+                    throw new RuntimeException('The provider ended the stream without a completion reason.');
+                }
 
-            // Attach this run's tool cards to the turn they produced.
-            if ($assistant !== null && $invocationId !== null) {
-                (new SynapseRecorder($conversation->id))->linkToMessage($invocationId, $assistant->id);
-            }
-
-            $emitter->finish($assistant?->id, $assistant?->usage, $assistant?->duration_ms);
-        } catch (Throwable $e) {
-            $this->fail($e, $conversation, $invocationId, $emitter);
-        }
-    }
-
-    /**
-     * Stream a turn, emitting protocol parts as the events arrive.
-     *
-     * @param  Message[]  $history
-     * @param  array<int, File>  $attachments
-     */
-    protected function stream(
-        Agent $agent,
-        array $history,
-        string $message,
-        SynapseConversation $conversation,
-        StreamEmitter $emitter,
-        ?string &$invocationId,
-        array $attachments = [],
-        ?string $model = null,
-    ): ?SynapseMessage {
-        // Only conversational agents get history. A stateless agent is invoked
-        // exactly as it runs in production: current message, nothing else.
-        $target = $agent instanceof Conversational
-            ? SynapseConversationalAgent::for($agent, $history)
-            : $agent;
-
-        $startedAt = hrtime(true);
-        $assistant = null;
-        $reasoning = new ReasoningBuffer;
-
-        // A non-null model skips the agent's own resolution inside the SDK, so
-        // the override applies without touching the agent's code.
-        $response = $target->stream($message, $attachments, model: $model);
-
-        $invocationId = $response->invocationId;
-
-        $response->withinConversation($conversation->id)
-            ->then(function (StreamedAgentResponse $streamed) use ($conversation, $startedAt, &$assistant, $reasoning): void {
-                $assistant = $this->writer->storeAssistantMessage(
-                    $conversation,
-                    $streamed,
-                    $this->elapsedMs($startedAt),
-                    reasoning: $reasoning->text(),
-                );
+                return $completed;
             });
 
-        $providerTools = new ProviderToolRecorder($conversation->id);
-
-        foreach ($response as $event) {
-            // Reasoning exists only here: `StreamedAgentResponse->text` is
-            // `TextDelta::combine()`, which excludes it. Accumulating as it
-            // passes is what lets a replay show the thinking that was watched.
-            if ($event instanceof ReasoningDelta) {
-                $reasoning->append($event->delta);
+            $recorder->capture($response);
+            $status = $response->hasPendingApprovals() ? 'paused' : 'completed';
+            if ($status === 'paused') {
+                $recorder->notice(self::APPROVAL_NOTICE);
+                $emitter->notice(self::APPROVAL_NOTICE);
             }
-
-            // Provider-native tools never fire Laravel events — the stream is
-            // the only place they exist, so they are recorded as they pass.
-            if ($event instanceof ProviderToolEvent) {
-                $providerTools->record($event, $response->invocationId);
-
-                $emitter->event($event);
-
-                continue;
+            $parts = $recorder->finish($status);
+            $assistant = $this->writer->storeAssistantMessage(
+                $conversation, $recorder->snapshot(), $this->elapsedMs($startedAt), $parts, $status,
+                $response instanceof StructuredAgentResponse ? $response->structured : null,
+            );
+            $recorder->linkToMessage($assistant->id);
+            $turn = $this->presenter->turn($assistant);
+            if ($structured) {
+                $emitter->text($response->text, $response->invocationId);
+                if ($response instanceof StructuredAgentResponse) {
+                    $emitter->structured($response->structured);
+                }
             }
-
-            // A mid-stream error is reported and recorded, but the stream may
-            // still continue — the SDK marks these `recoverable`.
-            if ($event instanceof Error) {
-                $errorMessage = $this->writer->storeStreamError(
-                    $conversation,
-                    $event->message,
-                    $event->recoverable,
-                );
-
-                $emitter->streamError($event, $errorMessage->id);
-
-                continue;
+        } catch (Throwable $e) {
+            $paused = $e instanceof ApprovalNotResumableException;
+            if ($paused) {
+                $recorder?->notice(self::APPROVAL_NOTICE);
+                $emitter->notice(self::APPROVAL_NOTICE);
             }
-
-            $emitter->event($event);
+            if ($conversation !== null) {
+                if ($recorder !== null && $assistant === null) {
+                    $status = $paused ? 'paused' : 'failed';
+                    $parts = $recorder->finish($status, $e);
+                    $partial = $recorder->snapshot();
+                    if ($partial->text !== '' || $partial->reasoning !== '' || $partial->steps->isNotEmpty() || $parts !== []) {
+                        $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status);
+                        $recorder->linkToMessage($assistant->id);
+                        $turn = $this->presenter->turn($assistant);
+                    }
+                }
+                if (! $paused) {
+                    $error = $this->writer->storeError($conversation, $e);
+                }
+            }
+            if (! $paused) {
+                $emitter->error($e, $error->id ?? '');
+            }
         }
 
-        return $assistant;
-    }
-
-    /**
-     * Run a structured-output agent in one shot.
-     *
-     * `StreamsText::stream()` throws `InvalidArgumentException` for any agent
-     * implementing `HasStructuredOutput`, so these never take the streaming
-     * path. They are also invoked undecorated: the decorator cannot carry
-     * `HasStructuredOutput` (it would break every conversational stream), and no
-     * agent is usefully both today — so one of these gets no conversation
-     * history even when it is also `Conversational`. GOAL's memory section
-     * documents that as an exception rather than leaving it to be discovered.
-     */
-    protected function promptOnce(
-        Agent $agent,
-        string $message,
-        SynapseConversation $conversation,
-        StreamEmitter $emitter,
-        ?string &$invocationId,
-        array $attachments = [],
-        ?string $model = null,
-    ): SynapseMessage {
-        $startedAt = hrtime(true);
-
-        $response = $agent->prompt($message, $attachments, model: $model);
-
-        $invocationId = $response->invocationId;
-
-        $assistant = $this->writer->storeAssistantMessage(
-            $conversation,
-            $response,
-            $this->elapsedMs($startedAt),
-            // The parsed payload is not in `text`, which holds the raw JSON
-            // string, so it has to be kept or replay falls back to plain text.
-            structured: $response instanceof StructuredAgentResponse ? $response->structured : null,
-        );
-
-        $this->emitPrompted($response, $emitter);
-
-        return $assistant;
-    }
-
-    /**
-     * Push a non-streamed response through the same protocol the client already
-     * understands, so one reader serves both transports.
-     */
-    protected function emitPrompted(AgentResponse $response, StreamEmitter $emitter): void
-    {
-        $emitter->text($response->text, $response->invocationId);
-
-        if ($response instanceof StructuredAgentResponse) {
-            $emitter->structured($response->structured);
-        }
-    }
-
-    /**
-     * Record the failure, close out anything left hanging, and tell the browser.
-     */
-    protected function fail(
-        Throwable $e,
-        ?SynapseConversation $conversation,
-        ?string $invocationId,
-        StreamEmitter $emitter,
-    ): void {
-        $messageId = '';
-
-        if ($conversation instanceof SynapseConversation) {
-            $messageId = $this->writer->storeError($conversation, $e)->id;
-        }
-
-        $this->failDanglingInvocations($invocationId, $e);
-
-        $emitter->error($e, $messageId);
-        $emitter->finish();
-    }
-
-    /**
-     * A tool that throws fired `InvokingTool` but never `ToolInvoked`, leaving
-     * its row pending forever. Close those out so the card shows failed rather
-     * than spinning (rows themselves arrive in Epic 4).
-     */
-    protected function failDanglingInvocations(?string $invocationId, Throwable $e): void
-    {
-        if ($invocationId === null) {
-            return;
-        }
-
-        SynapseToolInvocation::query()
-            ->where('invocation_id', $invocationId)
-            ->where('status', 'pending')
-            ->update([
-                'status' => 'error',
-                'error' => $e->getMessage(),
-                'finished_at' => now(),
-            ]);
-    }
-
-    /**
-     * Write a row for every tool the run invokes.
-     *
-     * Registered per invocation because a row belongs to a conversation, and a
-     * globally-registered listener would have to guess which one.
-     */
-    protected function recordToolInvocations(SynapseConversation $conversation): void
-    {
-        $recorder = new SynapseRecorder($conversation->id);
-
-        $this->events->listen(InvokingTool::class, $recorder->toolInvoking(...));
-        $this->events->listen(ToolInvoked::class, $recorder->toolInvoked(...));
-    }
-
-    /**
-     * Surface a provider failover as information, not as a failure — the run
-     * carried on against the next configured provider.
-     */
-    protected function announceFailovers(StreamEmitter $emitter): void
-    {
-        $this->events->listen(
-            AgentFailedOver::class,
-            function (AgentFailedOver $event) use ($emitter): void {
-                $emitter->notice(
-                    sprintf(
-                        'Failed over from %s (%s): %s',
-                        $event->provider->name(),
-                        $event->model,
-                        $event->exception->getMessage(),
-                    ),
-                    ['provider' => $event->provider->name(), 'model' => $event->model],
-                );
-            }
+        $emitter->finish($assistant?->id, $assistant?->usage ?: null, $assistant?->duration_ms,
+            isset($error) ? 'failed' : ($assistant->status ?? 'failed'),
+            $turn,
         );
     }
 
-    /**
-     * Tell the client which provider the run is actually going through.
-     *
-     * The client needs this before the first provider-native tool event, which
-     * is why it rides the stream rather than being read off the agent's
-     * configuration: `StreamingAgent` fires once the SDK has resolved the
-     * provider, and again on a failover retry, so the prefix on a live tool card
-     * names the same provider the stored message will.
-     */
-    protected function announceProvider(StreamEmitter $emitter): void
-    {
-        $this->events->listen(
-            StreamingAgent::class,
-            fn (StreamingAgent $event) => $emitter->provider($event->prompt->provider()->name()),
-        );
-    }
-
-    protected function elapsedMs(float|int $startedAt): int
+    protected function elapsedMs(int $startedAt): int
     {
         return (int) round((hrtime(true) - $startedAt) / 1_000_000);
     }

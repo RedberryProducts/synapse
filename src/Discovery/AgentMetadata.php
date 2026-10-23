@@ -15,6 +15,7 @@ use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\RemembersConversations;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Providers\Provider;
 use ReflectionClass;
 use Throwable;
 
@@ -55,13 +56,16 @@ class AgentMetadata
 
         try {
             $reflection = new ReflectionClass($agent);
-            $model = $this->model($agent, $reflection);
+            $provider = $this->provider($agent, $reflection);
+            $providers = Provider::formatProviderAndModelList($provider ?? config('ai.default'), is_array($provider) ? null : $this->model($agent, $reflection));
+            $primary = array_key_first($providers);
+            $model = $primary !== null ? $providers[$primary] : null;
 
             return new DiscoveredAgent(
                 slug: AgentSlug::make($class),
                 name: class_basename($class),
                 class: $class,
-                provider: $this->provider($agent, $reflection) ?? $this->defaultProvider(),
+                provider: $primary,
                 model: $model,
                 modelTier: $model === null ? $this->modelTier($reflection) : 'default',
                 tools: $this->tools->classify($agent),
@@ -75,34 +79,17 @@ class AgentMetadata
     /**
      * @param  ReflectionClass<object>  $reflection
      */
-    protected function provider(object $agent, ReflectionClass $reflection): ?string
+    protected function provider(object $agent, ReflectionClass $reflection): Lab|array|string|null
     {
         if (method_exists($agent, 'provider')) {
-            return $this->normalizeProvider($agent->provider());
+            return $agent->provider();
         }
 
         $attributes = $reflection->getAttributes(ProviderAttribute::class);
 
         return $attributes === []
             ? null
-            : $this->normalizeProvider($attributes[0]->newInstance()->value);
-    }
-
-    /**
-     * A provider may be a Lab enum, a plain string, or a failover list. The card
-     * shows the primary one.
-     */
-    protected function normalizeProvider(mixed $provider): ?string
-    {
-        if (is_array($provider)) {
-            $provider = $provider === [] ? null : reset($provider);
-        }
-
-        return match (true) {
-            $provider instanceof Lab => $provider->value,
-            is_string($provider) => $provider,
-            default => null,
-        };
+            : $attributes[0]->newInstance()->value;
     }
 
     /**
@@ -133,13 +120,6 @@ class AgentMetadata
             $reflection->getAttributes(UseCheapestModel::class) !== [] => 'cheapest',
             default => 'default',
         };
-    }
-
-    protected function defaultProvider(): ?string
-    {
-        $default = config('ai.default');
-
-        return is_string($default) ? $default : null;
     }
 
     /**

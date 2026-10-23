@@ -2,113 +2,341 @@
 
 namespace Redberry\Synapse\Chat;
 
+use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\InvokingTool;
+use Laravel\Ai\Events\StartingStep;
+use Laravel\Ai\Events\StepCompleted;
+use Laravel\Ai\Events\ToolFailed;
 use Laravel\Ai\Events\ToolInvoked;
+use Laravel\Ai\Exceptions\ApprovalNotResumableException;
+use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\FinishReason;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Step;
+use Laravel\Ai\Responses\Data\TextUsage;
+use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Streaming\Events\ProviderToolEvent;
+use Laravel\Ai\Streaming\Events\ReasoningDelta;
+use Laravel\Ai\Streaming\Events\StreamEvent;
+use Laravel\Ai\Streaming\Events\StreamStart;
+use Laravel\Ai\Streaming\Events\TextDelta;
+use Laravel\Ai\Streaming\Events\ToolCall as ToolCallEvent;
 use Laravel\Ai\Tools\ToolNameResolver;
 use Redberry\Synapse\Models\SynapseToolInvocation;
+use Throwable;
 
-/**
- * Turns the SDK's tool events into `synapse_tool_invocations` rows.
- *
- * Two SDK facts shape everything here:
- *
- * 1. `ToolInvoked` fires **only on success**. `InvokesTools::executeTool()` runs
- *    the handler inside `try/finally` with no `catch`, so a throwing tool leaves
- *    its row `pending` — the invocation-level catch-all sweeps those to `error`.
- * 2. The id correlating the two events is not reliable under nesting (see
- *    `resolveRow()`).
- *
- * The recorder is bound per invocation rather than globally: it needs the
- * conversation the run belongs to, and a listener registered for the lifetime of
- * one request would otherwise have to guess.
- */
 class SynapseRecorder
 {
-    public function __construct(protected string $conversationId) {}
+    public ?string $invocationId = null;
 
-    /**
-     * A tool is about to run. The pending row is what gives the UI an in-flight
-     * card for free — the developer sees the call the moment it happens rather
-     * than after it returns.
-     */
+    protected int $attempt = -1;
+
+    protected int $step = 0;
+
+    protected int $streamStep = -1;
+
+    protected string $provider = '';
+
+    protected string $model = '';
+
+    /** @var array<int, array<int, Step>> */
+    protected array $attempts = [];
+
+    /** @var list<array<string, mixed>> */
+    protected array $parts = [];
+
+    /** @var array<string, array{call: ToolCall, provider: string, group: string}> */
+    protected array $calls = [];
+
+    /** @var array<string, SynapseToolInvocation> Execution ID => observation. */
+    protected array $executions = [];
+
+    /** @var array<string, string> Execution ID => attempt/step. */
+    protected array $groups = [];
+
+    /** @var array<string, string> Model call key => observation ID. */
+    protected array $observations = [];
+
+    /** @var array<string, string> */
+    protected array $text = [];
+
+    protected ?string $lastBlock = null;
+
+    public function __construct(protected string $conversationId, protected bool $streaming = true) {}
+
+    public function begin(string $invocationId, string $provider, string $model): void
+    {
+        $this->invocationId = $invocationId;
+        $this->provider = $provider;
+        $this->model = $model;
+        $this->attempt++;
+        $this->step = 0;
+        $this->streamStep = -1;
+        $this->attempts[$this->attempt] = [];
+        $this->lastBlock = null;
+    }
+
+    public function startingStep(StartingStep $event): void
+    {
+        $this->step = $event->stepNumber;
+        $this->provider = $event->provider->name();
+        $this->model = $event->model;
+        $this->lastBlock = null;
+    }
+
+    public function stepCompleted(StepCompleted $event): void
+    {
+        $response = $event->response;
+        $this->attempts[$this->attempt][$event->stepNumber] = new Step(
+            $response->text, $response->toolCalls, [], $response->finishReason,
+            $response->usage, $response->meta, $response->reasoning,
+            $response->replayBlocks, $response->providerToolCalls,
+        );
+
+        if (! $this->streaming) {
+            if ($response->reasoning !== '') {
+                $this->delta('reasoning', 'prompt', $response->reasoning);
+            }
+            if ($response->text !== '') {
+                $this->delta('text', 'prompt', $response->text);
+            }
+        }
+        foreach ($response->toolCalls as $call) {
+            $this->call($call);
+        }
+    }
+
+    public function event(StreamEvent $event): void
+    {
+        if ($event->invocationId !== $this->invocationId) {
+            return;
+        }
+
+        if ($event instanceof StreamStart) {
+            $this->step = ++$this->streamStep;
+            $this->lastBlock = null;
+        } elseif ($event instanceof TextDelta) {
+            $this->delta('text', $event->messageId, $event->delta);
+        } elseif ($event instanceof ReasoningDelta) {
+            $this->delta('reasoning', $event->reasoningId, $event->delta);
+        } elseif ($event instanceof ToolCallEvent) {
+            $this->call($event->toolCall);
+        } elseif ($event instanceof ProviderToolEvent) {
+            $row = (new ProviderToolRecorder($this->conversationId))->record($event, $this->invocationId);
+            $key = 'provider:'.$this->group().':'.$row->id;
+            if (! isset($this->observations[$key])) {
+                $this->observations[$key] = $row->id;
+                $this->part(['type' => 'tool', 'tool_invocation_id' => $row->id]);
+            }
+        }
+    }
+
+    protected function call(ToolCall $call): void
+    {
+        $key = $this->group().':'.$call->id;
+        if (isset($this->calls[$key])) {
+            return;
+        }
+        $this->calls[$key] = ['call' => $call, 'provider' => $this->provider, 'group' => $this->group()];
+        $this->part(['type' => 'tool', 'call_key' => $key]);
+    }
+
+    protected function delta(string $type, string $source, string $text): void
+    {
+        if ($type === 'text') {
+            $this->text[$this->group()] = ($this->text[$this->group()] ?? '').$text;
+        }
+        $key = $this->group().':'.$type.':'.$source;
+        if ($this->lastBlock === $key) {
+            $this->parts[array_key_last($this->parts)]['text'] .= $text;
+        } else {
+            $this->part(['type' => $type, 'text' => $text]);
+        }
+        $this->lastBlock = $key;
+    }
+
+    /** @param array<string, mixed> $part */
+    protected function part(array $part): void
+    {
+        $this->parts[] = ['id' => 'part-'.count($this->parts), ...$part];
+        $this->lastBlock = null;
+    }
+
+    /** @param array<string, mixed> $data */
+    public function notice(string $message, array $data = []): void
+    {
+        $this->part(['type' => 'notice', 'message' => $message, 'data' => $data]);
+    }
+
     public function toolInvoking(InvokingTool $event): void
     {
-        SynapseToolInvocation::query()->create([
+        $this->executions[$event->toolInvocationId] = SynapseToolInvocation::query()->create([
             'conversation_id' => $this->conversationId,
             'invocation_id' => $event->invocationId,
             'tool_invocation_id' => $event->toolInvocationId,
+            'provider' => $this->provider,
             'type' => 'tool',
             'name' => ToolNameResolver::resolve($event->tool),
             'arguments' => $event->arguments,
             'status' => 'pending',
             'started_at' => now(),
         ]);
+        $this->groups[$event->toolInvocationId] = $this->group();
     }
 
-    /**
-     * A tool returned. Nothing else reports success, so this is the only place
-     * a row leaves `pending` on the happy path.
-     */
     public function toolInvoked(ToolInvoked $event): void
     {
-        $row = $this->resolveRow($event);
-
-        if ($row === null) {
-            return;
-        }
-
-        $finishedAt = now();
-
-        $row->forceFill([
-            'status' => 'success',
-            'result' => $event->result,
-            'finished_at' => $finishedAt,
-            'duration_ms' => $row->started_at?->diffInMilliseconds($finishedAt),
+        // The SDK dispatches this event before casting the handler result.
+        $this->executions[$event->toolInvocationId]->forceFill([
+            'status' => 'success', 'result' => (string) $event->result,
+            'finished_at' => now(), 'duration_ms' => (int) round($event->time),
         ])->save();
     }
 
-    /**
-     * Find the pending row this result belongs to.
-     *
-     * The obvious lookup — by `tool_invocation_id` — is not always right. The
-     * SDK holds the current id in a single property on the *provider*, and
-     * `AiManager` caches provider instances by name. A sub-agent tool therefore
-     * runs a nested invocation through the same provider and overwrites the id
-     * before the outer tool's `ToolInvoked` fires, so the outer event carries
-     * the inner tool's id.
-     *
-     * Falling back to the newest pending row for the same run and tool name
-     * costs nothing in the common case and keeps nested calls landing on the
-     * right card. Note this cannot be reproduced under `Agent::fake()`, which
-     * clones the provider per invocation and so isolates the property.
-     */
-    protected function resolveRow(ToolInvoked $event): ?SynapseToolInvocation
+    public function toolFailed(ToolFailed $event): void
     {
-        $pending = SynapseToolInvocation::query()
-            ->where('invocation_id', $event->invocationId)
-            ->where('status', 'pending');
+        $this->executions[$event->toolInvocationId]->forceFill([
+            'status' => 'error', 'error' => $event->exception->getMessage(),
+            'finished_at' => now(), 'duration_ms' => (int) round($event->time),
+        ])->save();
+    }
 
-        $exact = (clone $pending)
-            ->where('tool_invocation_id', $event->toolInvocationId)
-            ->first();
+    public function failedAttempt(AgentFailed $event): void
+    {
+        // The SDK's failure context retains results completed before a later
+        // handler throws, even when those results never reached the stream.
+        $response = $event->prompt->runContext()?->recordedResponse();
+        if ($response !== null) {
+            $this->capture($response);
+        }
+        $last = array_key_last($this->attempts[$this->attempt]);
+        if ($last !== null && ! $event->exception instanceof ApprovalNotResumableException) {
+            $this->attempts[$this->attempt][$last]->finishReason = FinishReason::Error;
+        }
+    }
 
-        return $exact ?? $pending
-            ->where('name', ToolNameResolver::resolve($event->tool))
-            ->orderByDesc('started_at')
-            ->first();
+    public function capture(AgentResponse $response): void
+    {
+        foreach ($response->steps as $number => $step) {
+            if (! $this->streaming && ! isset($this->attempts[$this->attempt][$number])) {
+                $this->step = $number;
+                $this->lastBlock = null;
+                if ($step->reasoning !== '') {
+                    $this->delta('reasoning', 'prompt', $step->reasoning);
+                }
+                if ($step->text !== '') {
+                    $this->delta('text', 'prompt', $step->text);
+                }
+            }
+        }
+        $this->attempts[$this->attempt] = $response->steps->map(fn (Step $step): Step => clone $step)->all();
+    }
+
+    public function snapshot(): AgentResponse
+    {
+        $steps = collect($this->steps());
+        $usage = $steps->reduce(fn (TextUsage $total, Step $step): TextUsage => $total->add($step->usage), new TextUsage);
+        $text = implode("\n\n", array_filter($this->text, fn (string $text): bool => trim($text) !== ''));
+        $reasoning = collect($this->parts)->where('type', 'reasoning')->pluck('text')->implode("\n\n");
+        $meta = $steps->last()->meta ?? new Meta($this->provider, $this->model);
+
+        $response = new AgentResponse($this->invocationId ?? '', $text, $usage, $meta);
+        $response->withSteps($steps)->withReasoning($reasoning);
+
+        return $response;
     }
 
     /**
-     * Attach every row from this run to the assistant turn it produced.
+     * Associate settled model calls with executions only within their step.
+     * Approval/skipped calls have no execution ID. Failed ambiguous calls keep
+     * separate observations rather than guessing which identical call ran.
      *
-     * Rows that never get one — a run that failed before any message landed —
-     * still render, ordered by `started_at`.
+     * @return list<array<string, mixed>>
      */
-    public function linkToMessage(string $invocationId, string $messageId): void
+    public function finish(string $status, ?Throwable $failure = null): array
     {
-        SynapseToolInvocation::query()
-            ->where('invocation_id', $invocationId)
-            ->whereNull('message_id')
+        $results = [];
+        foreach ($this->attempts as $attempt => $steps) {
+            foreach ($steps as $number => $step) {
+                foreach ($step->toolCalls as $call) {
+                    $key = $attempt.':'.$number.':'.$call->id;
+                    if (! isset($this->calls[$key])) {
+                        $this->calls[$key] = ['call' => $call, 'provider' => $step->meta->provider ?? $this->provider, 'group' => $attempt.':'.$number];
+                        $this->part(['type' => 'tool', 'call_key' => $key]);
+                    }
+                }
+                foreach ($step->toolResults as $result) {
+                    $results[$attempt.':'.$number.':'.$result->id] = $result;
+                }
+            }
+        }
+
+        $used = [];
+        foreach ($this->calls as $key => $entry) {
+            $call = $entry['call'];
+            $result = $results[$key] ?? null;
+            $candidates = array_filter($this->executions, function (SynapseToolInvocation $row, string $id) use ($entry, $call, $result, $used): bool {
+                return ! isset($used[$id]) && $this->groups[$id] === $entry['group']
+                    && $row->name === $call->name && $row->arguments === $call->arguments
+                    && ($result !== null ? $result->successful() && $row->status === 'success' && $row->result === $result->result : $row->status === 'error');
+            }, ARRAY_FILTER_USE_BOTH);
+            $unanswered = array_filter($this->calls, fn (array $other, string $otherKey): bool => $other['group'] === $entry['group'] && $other['call']->name === $call->name
+                && $other['call']->arguments === $call->arguments && ! isset($results[$otherKey]), ARRAY_FILTER_USE_BOTH);
+            $row = ($result !== null || (count($candidates) === 1 && count($unanswered) === 1)) ? reset($candidates) : false;
+            if ($row !== false) {
+                $used[$row->tool_invocation_id] = true;
+                $row->forceFill(['tool_call_id' => $call->id])->save();
+            } else {
+                $row = SynapseToolInvocation::query()->create([
+                    'conversation_id' => $this->conversationId, 'invocation_id' => $this->invocationId,
+                    'tool_call_id' => $call->id, 'provider' => $entry['provider'],
+                    'type' => 'tool', 'name' => $call->name, 'arguments' => $call->arguments,
+                    'result' => $result?->result,
+                    'status' => $result !== null ? ($result->successful() ? 'success' : 'error') : ($status === 'paused' ? 'paused' : 'error'),
+                    'error' => $result !== null ? $result->error() : ($status === 'paused' ? null : 'The tool call ended without a recorded result.'),
+                    'finished_at' => $status === 'paused' && $result === null ? null : now(),
+                ]);
+            }
+            $this->observations[$key] = $row->id;
+        }
+        foreach ($this->executions as $id => $row) {
+            if ($row->status === 'pending') {
+                $row->forceFill(['status' => 'error', 'error' => $failure?->getMessage() ?? 'The invocation ended before the tool returned.', 'finished_at' => now()])->save();
+            }
+            if (! isset($used[$id])) {
+                $this->part(['type' => 'tool', 'tool_invocation_id' => $row->id]);
+            }
+        }
+        SynapseToolInvocation::query()->where('conversation_id', $this->conversationId)
+            ->where('invocation_id', $this->invocationId)->where('type', 'provider_tool')->where('status', 'pending')
+            ->when($status !== 'paused', fn ($query) => $query->update(['status' => 'error', 'error' => $failure?->getMessage() ?? 'The provider ended without a tool result.', 'finished_at' => now()]));
+
+        return array_map(function (array $part): array {
+            if (! isset($part['call_key'])) {
+                return $part;
+            }
+            $id = $this->observations[$part['call_key']];
+            unset($part['call_key']);
+
+            return [...$part, 'tool_invocation_id' => $id];
+        }, $this->parts);
+    }
+
+    public function linkToMessage(string $messageId): void
+    {
+        SynapseToolInvocation::query()->where('conversation_id', $this->conversationId)
+            ->where('invocation_id', $this->invocationId)->whereNull('message_id')
             ->update(['message_id' => $messageId]);
+    }
+
+    /** @return list<Step> */
+    protected function steps(): array
+    {
+        return array_merge([], ...array_values($this->attempts));
+    }
+
+    protected function group(): string
+    {
+        return $this->attempt.':'.$this->step;
     }
 }

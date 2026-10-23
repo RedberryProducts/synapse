@@ -1,4 +1,4 @@
-import { CircleCheck, LoaderCircle, TriangleAlert } from 'lucide-react';
+import { CircleCheck, LoaderCircle, Pause, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ToolStatus } from '@/types/chat';
 
@@ -11,6 +11,7 @@ import type { ToolStatus } from '@/types/chat';
  * layout, not for hiding what the provider said.
  */
 const styles: Record<ToolStatus, string> = {
+    paused: 'border-warning/40 bg-warning/10 text-warning',
     pending: 'border-warning/40 bg-warning/10 text-warning',
     success: 'border-success/40 bg-success/10 text-success',
     error: 'border-destructive/40 bg-destructive/10 text-destructive',
@@ -18,6 +19,7 @@ const styles: Record<ToolStatus, string> = {
 
 const icons: Record<ToolStatus, typeof CircleCheck> = {
     pending: LoaderCircle,
+    paused: Pause,
     success: CircleCheck,
     error: TriangleAlert,
 };

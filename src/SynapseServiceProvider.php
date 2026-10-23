@@ -6,6 +6,16 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Events\AgentFailed;
+use Laravel\Ai\Events\AgentFailedOver;
+use Laravel\Ai\Events\InvokingTool;
+use Laravel\Ai\Events\PromptingAgent;
+use Laravel\Ai\Events\StartingStep;
+use Laravel\Ai\Events\StepCompleted;
+use Laravel\Ai\Events\StreamingAgent;
+use Laravel\Ai\Events\ToolFailed;
+use Laravel\Ai\Events\ToolInvoked;
+use Redberry\Synapse\Chat\RecordingScope;
 use Redberry\Synapse\Discovery\AgentDiscovery;
 use Redberry\Synapse\Http\Middleware\Authorize;
 
@@ -20,6 +30,7 @@ class SynapseServiceProvider extends ServiceProvider
 
         // Singleton = discovery runs once per request, never persistently cached.
         $this->app->singleton(AgentDiscovery::class);
+        $this->app->scoped(RecordingScope::class);
     }
 
     /**
@@ -28,6 +39,20 @@ class SynapseServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerPrePackageUninstallListener();
+
+        foreach ([
+            PromptingAgent::class,
+            StreamingAgent::class,
+            StartingStep::class,
+            StepCompleted::class,
+            InvokingTool::class,
+            ToolInvoked::class,
+            ToolFailed::class,
+            AgentFailed::class,
+            AgentFailedOver::class,
+        ] as $event) {
+            $this->app['events']->listen($event, [RecordingScope::class, 'handle']);
+        }
 
         $this->registerRoutes();
 

@@ -3,6 +3,7 @@
 namespace Redberry\Synapse\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -11,13 +12,14 @@ use Illuminate\Support\Carbon;
  * @property string $role
  * @property string|null $content
  * @property array<int, mixed> $attachments
- * @property array<int, mixed> $tool_calls
- * @property array<int, mixed> $tool_results
+ * @property array<int, mixed>|null $steps
+ * @property array<int, mixed>|null $parts
+ * @property string $status
  * @property array<string, mixed> $usage
  * @property array<string, mixed> $meta
  * @property array<string, mixed> $metadata
- * @property int|null $prompt_tokens
- * @property int|null $completion_tokens
+ * @property int|null $input_tokens
+ * @property int|null $output_tokens
  * @property int|null $duration_ms
  * @property Carbon|null $created_at
  */
@@ -34,13 +36,13 @@ class SynapseMessage extends SynapseModel
 
     protected $casts = [
         'attachments' => 'array',
-        'tool_calls' => 'array',
-        'tool_results' => 'array',
+        'steps' => 'array',
+        'parts' => 'array',
         'usage' => 'array',
         'meta' => 'array',
         'metadata' => 'array',
-        'prompt_tokens' => 'integer',
-        'completion_tokens' => 'integer',
+        'input_tokens' => 'integer',
+        'output_tokens' => 'integer',
         'duration_ms' => 'integer',
     ];
 
@@ -50,5 +52,11 @@ class SynapseMessage extends SynapseModel
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(SynapseConversation::class, 'conversation_id');
+    }
+
+    /** @return HasMany<SynapseToolInvocation, $this> */
+    public function toolInvocations(): HasMany
+    {
+        return $this->hasMany(SynapseToolInvocation::class, 'message_id');
     }
 }

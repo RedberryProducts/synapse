@@ -1,6 +1,7 @@
 import { basePath } from './config';
 import type {
     ChatError,
+    CompletedTurn,
     ProviderToolPart,
     StreamHandlers,
     StreamPart,
@@ -54,6 +55,8 @@ export async function streamChat(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let completed = false;
+    let terminated = false;
 
     for (;;) {
         const { done, value } = await reader.read();
@@ -71,13 +74,14 @@ export async function streamChat(
         for (const event of events) {
             const payload = event.replace(/^data: /gm, '').trim();
 
-            if (payload === '' || payload === '[DONE]') {
-                continue;
-            }
-
-            dispatch(JSON.parse(payload) as StreamPart, handlers);
+            if (payload === '[DONE]') { terminated = true; continue; }
+            if (payload === '') continue;
+            const part = JSON.parse(payload) as StreamPart;
+            if (part.type === 'data-synapse-end') completed = true;
+            dispatch(part, handlers);
         }
     }
+    if (!completed || !terminated) throw new Error('The stream ended before the response was saved. Reload the conversation to check its status.');
 }
 
 function toFormData(body: {
@@ -143,7 +147,7 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
             break;
 
         case 'tool-output-available':
-            handlers.onToolOutput?.(part.toolCallId ?? '', part.output);
+            if (!part.preliminary) handlers.onToolOutput?.(part.toolCallId ?? '', part.output);
             break;
 
         case 'tool-output-error':
@@ -171,6 +175,7 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
                 (part.data?.assistantMessageId as string | null) ?? null,
                 (part.data?.usage as Usage | null) ?? null,
                 (part.data?.durationMs as number | null) ?? null,
+                (part.data?.turn as CompletedTurn | null) ?? null,
             );
             break;
 

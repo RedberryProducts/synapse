@@ -18,7 +18,7 @@ use Redberry\Synapse\Models\SynapseToolInvocation;
 
 function providerEvent(string $itemId, string $type, string $status, array $data = []): ProviderToolEvent
 {
-    return new ProviderToolEvent('evt_'.uniqid(), $itemId, $type, $data, $status, time());
+    return new ProviderToolEvent('evt_'.uniqid(), $itemId, $type, $data, $status, time(), 'openai');
 }
 
 function recordProviderTool(ProviderToolEvent ...$events): SynapseToolInvocation

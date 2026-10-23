@@ -5,6 +5,7 @@ namespace Redberry\Synapse\Discovery;
 use Laravel\Ai\Attributes\Strict;
 use Laravel\Ai\Attributes\Timeout as TimeoutAttribute;
 use Laravel\Ai\Contracts\HasProviderOptions;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Gateway\TextGenerationOptions;
 use Laravel\Ai\ToolChoice;
 use ReflectionClass;
@@ -48,7 +49,7 @@ class GenerationOptions
             return [];
         }
 
-        return $agent->providerOptions($provider);
+        return $agent->providerOptions(Lab::tryFrom($provider) ?? $provider);
     }
 
     /**

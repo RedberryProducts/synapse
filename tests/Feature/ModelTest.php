@@ -19,13 +19,13 @@ it('persists a conversation with messages and tool invocations', function () {
         'role' => 'assistant',
         'content' => 'Here are some options',
         'attachments' => [],
-        'tool_calls' => [['id' => 't1', 'name' => 'searchProducts']],
-        'tool_results' => [],
-        'usage' => ['prompt_tokens' => 340, 'completion_tokens' => 128],
+        'steps' => [['tool_calls' => [['id' => 't1', 'name' => 'searchProducts']]]],
+        'parts' => [],
+        'usage' => ['input_tokens' => 340, 'output_tokens' => 128],
         'meta' => ['provider' => 'openai', 'model' => 'gpt-5.6-luna'],
         'metadata' => [],
-        'prompt_tokens' => 340,
-        'completion_tokens' => 128,
+        'input_tokens' => 340,
+        'output_tokens' => 128,
     ]);
 
     $conversation->toolInvocations()->create([
@@ -45,7 +45,7 @@ it('persists a conversation with messages and tool invocations', function () {
 
     // uuid7 string keys + JSON array casts round-trip correctly.
     expect($conversation->id)->toBeString();
-    expect($message->tool_calls)->toBeArray();
-    expect($message->tool_calls[0]['name'])->toBe('searchProducts');
-    expect($message->usage['completion_tokens'])->toBe(128);
+    expect($message->steps)->toBeArray();
+    expect($message->steps[0]['tool_calls'][0]['name'])->toBe('searchProducts');
+    expect($message->usage['output_tokens'])->toBe(128);
 });

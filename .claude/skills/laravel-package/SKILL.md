@@ -119,6 +119,12 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
 
 `laravel/ai` resolves from Packagist using `composer.json` constraints. Do not wire `references/laravel/ai` as a canonical path repository for installation QA: that would test a local SDK checkout instead of the published dependency. See DEV.md.
 
+For SDK 1.3, persist `Responses\Data\Step::toArray()` in Synapse's private history and project display data separately. SDK execution IDs and model tool-call IDs are distinct. Register event listeners once, activate recording only during the playground invocation, and restore scope in `finally`; never remove a host application's listeners. Forward agent middleware, skills, and cache settings through the decorator. Discovery must merge skill tools with `LoadSkill::mergeInto()` and recognize SDK-wrapped sub-agent/MCP tools.
+
+Breaking storage changes use self-contained follow-up migrations. Require an explicit clear with the old installation before upgrading, reject nonempty storage without deleting it, and verify the configured connection plus package-absent migration loading. See [the upgrade guide](../../../UPGRADE.md).
+
+Qualify Laravel 12 and 13 on real PHP 8.3 and 8.4 runtimes, including the exact SDK floor and latest stable allowed resolution. Keep dependency experiments in isolated copies; do not overwrite the developer's lockfile or preview app. Run feature and browser suites sequentially within each copy: installation tests temporarily publish/remove Testbench migrations. GD is required by upload test fixtures. Verify HTTP flushing separately with a slow deterministic tool and output buffering enabled; CLI tests cannot prove streaming.
+
 ## See also
 
 - **AGENTS.md** — Synapse architecture map + coding standards.

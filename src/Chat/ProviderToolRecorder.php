@@ -39,7 +39,7 @@ class ProviderToolRecorder
     /**
      * Upsert the row for one provider-tool event.
      */
-    public function record(ProviderToolEvent $event, string $invocationId): void
+    public function record(ProviderToolEvent $event, string $invocationId): SynapseToolInvocation
     {
         $row = $this->existingRow($event, $invocationId);
         $status = $this->normalizeStatus($event->status);
@@ -67,13 +67,14 @@ class ProviderToolRecorder
 
             $row->forceFill($attributes)->save();
 
-            return;
+            return $row;
         }
 
-        SynapseToolInvocation::query()->create([
+        return SynapseToolInvocation::query()->create([
             'conversation_id' => $this->conversationId,
             'invocation_id' => $invocationId,
-            'tool_invocation_id' => $event->itemId,
+            'tool_call_id' => $event->itemId,
+            'provider' => $event->provider,
             'type' => 'provider_tool',
             'name' => $this->name($event),
             'arguments' => $event->data,
@@ -144,9 +145,11 @@ class ProviderToolRecorder
         }
 
         return SynapseToolInvocation::query()
+            ->where('conversation_id', $this->conversationId)
             ->where('invocation_id', $invocationId)
+            ->where('provider', $event->provider)
             ->where('type', 'provider_tool')
-            ->where('tool_invocation_id', $event->itemId)
+            ->where('tool_call_id', $event->itemId)
             ->first();
     }
 }

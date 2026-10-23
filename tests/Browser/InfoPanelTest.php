@@ -94,8 +94,8 @@ it('closes the panel and reopens it from the header', function () {
 
 it('explains an unavailable agent inside the panel', function () {
     visit('/synapse/playground/workbench.app.agents.broken-agent?info=1')
-        ->assertSeeIn('@unresolvable-hint', 'construct this agent')
-        ->assertSeeIn('@unresolvable-hint', '$this->app->bind(');
+        ->assertSeeIn('@info-panel', 'construct this agent')
+        ->assertSeeIn('@info-panel', '$this->app->bind(');
 });
 
 it('shows a not-found state for an unknown agent', function () {

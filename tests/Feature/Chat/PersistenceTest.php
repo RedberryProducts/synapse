@@ -1,7 +1,7 @@
 <?php
 
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
@@ -32,7 +32,7 @@ it('promotes token counts and keeps the full usage breakdown', function () {
     fakeAgent(SupportAgent::class, [
         new TextResponse(
             'Counted.',
-            new Usage(promptTokens: 142, completionTokens: 89, reasoningTokens: 7),
+            new TextUsage(inputTokens: 142, outputTokens: 89, reasoningTokens: 7),
             new Meta('openai', 'gpt-5.6-luna'),
         ),
     ]);
@@ -42,14 +42,14 @@ it('promotes token counts and keeps the full usage breakdown', function () {
     $assistant = SynapseMessage::query()->where('role', 'assistant')->sole();
 
     // Promoted columns exist for cheap SQL aggregates...
-    expect($assistant->prompt_tokens)->toBe(142)
-        ->and($assistant->completion_tokens)->toBe(89)
+    expect($assistant->input_tokens)->toBe(142)
+        ->and($assistant->output_tokens)->toBe(89)
         // ...while the JSON column keeps everything Usage carries.
         ->and($assistant->usage)->toBe([
-            'prompt_tokens' => 142,
-            'completion_tokens' => 89,
-            'cache_write_input_tokens' => 0,
-            'cache_read_input_tokens' => 0,
+            'input_tokens' => 142,
+            'output_tokens' => 89,
+            'cache_read_input_tokens' => null,
+            'cache_write_input_tokens' => null,
             'reasoning_tokens' => 7,
         ]);
 });
@@ -76,13 +76,13 @@ it('measures how long the turn took', function () {
 
 it('reports the usage on the closing part', function () {
     fakeAgent(SupportAgent::class, [
-        new TextResponse('Done.', new Usage(promptTokens: 10, completionTokens: 4), new Meta('openai', 'gpt-5.6-luna')),
+        new TextResponse('Done.', new TextUsage(inputTokens: 10, outputTokens: 4), new Meta('openai', 'gpt-5.6-luna')),
     ]);
 
     $end = chatPart(sendMessage('workbench.app.agents.support-agent', 'Finish up'), 'data-synapse-end');
 
-    expect($end['data']['usage']['prompt_tokens'])->toBe(10)
-        ->and($end['data']['usage']['completion_tokens'])->toBe(4)
+    expect($end['data']['usage']['input_tokens'])->toBe(10)
+        ->and($end['data']['usage']['output_tokens'])->toBe(4)
         ->and($end['data']['assistantMessageId'])->not->toBeEmpty();
 });
 
