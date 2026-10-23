@@ -190,3 +190,12 @@ Completed on 2026-10-23. The user explicitly deferred real API-key testing; no p
 Historical framework minimums require an exact advisory exception in disposable test copies; current Laravel 12/13 resolutions have clean dependency audits. Package/preview audit settings were not relaxed. Setup failures (GD, concurrent Testbench migration mutation, document root, sandbox port access) were corrected and affected gates rerun completely. See [QUALIFICATION.md](QUALIFICATION.md) for versions, evidence, commands, and limitations.
 
 The temporary qualification servers are stopped; the user's deterministic preview remains on **http://127.0.0.1:8013/synapse**. The migration is prepared for pull-request review. Real-provider smoke testing and any tag/publish action remain separate next steps.
+
+
+## Live-provider follow-up
+
+The user subsequently authorized real OpenAI testing. All 11 test agents were exercised in the visible browser using gpt-4.1-mini: ten callable scenarios and the intentional constructor failure. See [LIVE-PROVIDER-TEST.md](LIVE-PROVIDER-TEST.md) for the execution record. Two UI gaps were found (live paused/failed usage and the unavailable-agent sidebar route); attachment transport/persistence passed, while the initial color answer was inaccurate. The 8013 preview now uses real OpenAI calls. No package implementation, automated test, tag, or release changed in this session.
+
+### Live-test fixes and MCP advisory
+
+Fixed both UI findings and added four browser regressions, preserving the existing Info panel assertions with explicit panel scoping. Live OpenAI rechecks passed without reload (approval 103 tokens, failure 79, then recovery total 206). Added the optional MCP conflict `<1.1.0` for GHSA-m25c-38v7-94p8; Composer rejects 1.0.0 and accepts the patched 1.1.0 floor. The preview retains MCP 1.1.1 and a clean audit. Final gates: 289 unit/feature tests, 85 browser tests, Pint, PHPStan, TypeScript, build, Composer validation, and diff checks pass. See [LIVE-PROVIDER-TEST.md](LIVE-PROVIDER-TEST.md) for evidence and remaining model/provider limits.

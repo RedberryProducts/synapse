@@ -18,6 +18,15 @@ Breaking migration to Laravel AI **^1.3**, requiring PHP **8.3+** and Laravel **
 - Discover skill loaders, wrapped sub-agents/MCP tools, failover provider/model maps, and provider-specific options using SDK semantics.
 - Show an explicit paused state for approval requests without approving or executing them. Approval controls remain outside this migration.
 
+### Fixed
+
+- Keep recorded usage visible for tool-only paused/failed turns immediately and across subsequent sends.
+- Show unavailable-agent diagnostics in the playground while keeping existing history readable and hiding the composer.
+
+### Security
+
+- Reject optional `laravel/mcp` versions below 1.1.0, enforcing the patched 1.x floor for [GHSA-m25c-38v7-94p8](https://github.com/laravel/mcp/security/advisories/GHSA-m25c-38v7-94p8).
+
 ### Retained
 
 - Existing chat, history, attachments, info panel, model selection, theme, and navigation behavior.

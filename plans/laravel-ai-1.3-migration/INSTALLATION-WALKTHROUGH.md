@@ -178,10 +178,22 @@ cd /Users/revazgh/Projects/Synapse/build/laravel-ai13-dx
 php artisan serve --host=127.0.0.1 --port=8013 --no-reload
 ```
 
-Keep this app's local preview enabled for deterministic responses without API spend. Because Synapse is symlinked, edits in the package checkout are reflected in this app; frontend edits still require rebuilding the package's `dist/`.
+For deterministic responses without API spend, enable this app's local preview. The later live-test session below leaves it disabled. Because Synapse is symlinked, edits in the package checkout are reflected in this app; frontend edits still require rebuilding the package's `dist/`.
 
 ### Step 8 follow-up checks
 
 Rebuilt the package assets and ran `bin/check-streaming.sh http://127.0.0.1:8013 app.ai.agents.catalog-agent` from the package checkout. Also started a temporary PHP 8.4.25 server from this app's `public/` directory with `output_buffering=4096` on port 8015, ran the same script against that port, and checked that the latest assistant/tool records were completed/successful. Both passed. The first temporary-server attempt used the wrong working directory; it was corrected before obtaining valid timings.
 
 Stopped the temporary 8015 server afterward. The original 8013 server and additional successful slow-tool conversations remain available. No app dependencies, provider keys, or demo settings changed. The separate PHP 8.3/Laravel 12 installation and full matrix are recorded in [QUALIFICATION.md](QUALIFICATION.md).
+
+### Live API follow-up
+
+At the user's request, stored the supplied OpenAI credential in this ignored app's `.env` (mode `0600`), set `SYNAPSE_PREVIEW=false`, set `ai.providers.openai.models.text.default` to `gpt-4.1-mini`, and ran `php artisan config:clear` from the app directory. The existing 8013 server picked up the configuration. No credential was committed or printed in the report.
+
+Drove all 11 agents in the visible browser, including real tool calls, two-turn history, structured output, approval pause, failure/recovery, delegation, MCP, and discovery diagnostics. Uploaded a synthetic image, checked its stored hash and replay, searched History, and reopened paused/failed turns. The exact actions, results, two UI gaps, model-accuracy limitation, conversation IDs, and screenshots are recorded in [LIVE-PROVIDER-TEST.md](LIVE-PROVIDER-TEST.md).
+
+The app now remains in **live OpenAI mode** for inspection. To restore the earlier deterministic preview, set `SYNAPSE_PREVIEW=true` and run `php artisan config:clear` in this app.
+
+### UI-fix and MCP security follow-up
+
+Rebuilt the package assets, reloaded the visible preview, and verified the unavailable-agent diagnostic. Created fresh approval/failure conversations and confirmed usage immediately with real OpenAI calls, including recovery totals. After adding the package's MCP conflict, Composer dry runs rejected 1.0.0 and accepted 1.1.0. Ran `composer update redberry/synapse --no-scripts --no-interaction` from this app to refresh its path-package lock entry; no other package changed, MCP remains 1.1.1, and the audit is clean. No preview flags or credentials changed. Full results are in [LIVE-PROVIDER-TEST.md](LIVE-PROVIDER-TEST.md).

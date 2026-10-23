@@ -1,12 +1,14 @@
 # Upgrading to the Laravel AI 1.3 migration
 
-This guide describes the planned **0.2.0 breaking release**. The migration branch is not tagged or published yet. Deterministic qualification is recorded in [QUALIFICATION.md](plans/laravel-ai-1.3-migration/QUALIFICATION.md); real-provider testing is deferred.
+This guide describes the planned **0.2.0 breaking release**. The migration branch is not tagged or published yet. Deterministic qualification is recorded in [QUALIFICATION.md](plans/laravel-ai-1.3-migration/QUALIFICATION.md); live OpenAI results are recorded in [LIVE-PROVIDER-TEST.md](plans/laravel-ai-1.3-migration/LIVE-PROVIDER-TEST.md).
 
 ## Requirements
 
 - PHP 8.3 or later.
 - Laravel 12.62+ or 13.15+ for API compatibility. Use a current patched framework release for deployment; the historical minimums precede [Laravel's TokenGuard fix](https://github.com/laravel/framework/security/advisories/GHSA-f9x3-7vq9-cph6), released in 12.68.0 / 13.29.0.
 - `laravel/ai` ^1.3. Follow the SDK's [1.3 upgrade guide](https://github.com/laravel/ai/blob/v1.3.0/UPGRADE.md) for your application's agents, tools, middleware, and SDK-owned storage.
+
+If your application uses `laravel/mcp`, it must resolve to **1.1.0 or later**. Synapse rejects older versions to enforce the patch for [GHSA-m25c-38v7-94p8](https://github.com/laravel/mcp/security/advisories/GHSA-m25c-38v7-94p8), an MCP client OAuth discovery SSRF/credential-exposure issue. MCP remains optional. The advisory also lists 0.9.7 as patched, but SDK 1.3 requires MCP 1.x when installed. Include `laravel/mcp` in your Composer update command if your lockfile still has 1.0.x.
 
 Synapse's migrations affect only `synapse_*` tables. They do not upgrade or clear the SDK's `agent_conversations` or `agent_conversation_messages` tables.
 

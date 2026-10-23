@@ -492,14 +492,14 @@ function stopStreaming(entries: ChatEntry[], turnId: string): ChatEntry[] {
                 ? { ...entry, pending: false, streaming: false, reasoningStreaming: false }
                 : entry,
         )
-        // A turn that produced neither text nor reasoning — a failure before any
-        // output — would otherwise leave an empty bubble under the error card.
+        // Remove empty placeholders, but retain billable tool-only turns.
         .filter(
             (entry) =>
                 entry.kind !== 'assistant' ||
                 entry.text !== '' ||
                 entry.reasoning !== '' ||
-                entry.structured !== null,
+                entry.structured !== null ||
+                entry.usage !== null,
         );
 }
 

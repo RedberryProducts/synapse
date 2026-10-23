@@ -1,6 +1,6 @@
 # Step 8 qualification — 2026-10-23
 
-Deterministic qualification passed for the migration working tree on `codex/laravel-ai-13-migration`. **Real-provider smoke testing is deferred at the user's request.** No provider credentials were used, and no tag or release was created. The planned breaking pre-1.0 release is **0.2.0**; see [CHANGELOG.md](../../CHANGELOG.md) and [UPGRADE.md](../../UPGRADE.md).
+Deterministic qualification passed for the migration working tree on `codex/laravel-ai-13-migration`. Real-provider testing was initially deferred; the subsequent authorized [live OpenAI browser session](LIVE-PROVIDER-TEST.md) exercised all 11 test agents and identified two UI gaps that were subsequently fixed and rechecked. No provider credentials were used for the deterministic gates below, and no tag or release was created. The planned breaking pre-1.0 release is **0.2.0**; see [CHANGELOG.md](../../CHANGELOG.md) and [UPGRADE.md](../../UPGRADE.md).
 
 ## Compatibility matrix
 
@@ -62,7 +62,7 @@ dist/app.css sha256 d56ce50900c40bb9616a7067c002a8a74ffc704203bece28e9340eb0b792
 - All **282 original `it()` / `test()` declarations** from baseline `a1b24fa` remain. Fixture changes reflect SDK serialization; existing user-facing behavior assertions are retained. Existing conditional skips remain unchanged.
 - Closed production issues **#7–#10** remain covered and passing; see [REGRESSION-AUDIT.md](REGRESSION-AUDIT.md).
 - Reviewed PHP, frontend, schema, and test diffs for ordered replay, partial failures, inclusive usage, approval non-execution, provider identity, private serialization, and listener cleanup. Existing focused tests cover the SDK-internal `recordedResponse()` dependency, repeated calls, nested tools, and failure recovery.
-- Package code contains no SDK-table access. Provider request-shape tests use fake HTTP; browser agents remain faked. Preview middleware prevents stray provider requests.
+- Package code contains no SDK-table access. Provider request-shape tests use fake HTTP; browser agents remain faked. Preview middleware prevented stray provider requests during these deterministic gates; the later live session explicitly disabled it in the fresh app.
 - Removed the now-unused `StreamEmitter::streamError()` path and its import. Invocation errors already use the single owning path. Updated its stale provider attribution comment.
 - No dependency changes, new frontend dependencies, unrelated refactors, or test assertion weakening were needed in step 8. No frontend source changed; assets were rebuilt for qualification.
 
@@ -96,8 +96,8 @@ Two other setup failures were resolved without weakening tests: the initial PHP 
 
 Logs: `/tmp/synapse-step8-check.log`, `-build.log`, `-browser.log`, `-l12-browser.log`, `-l13-browser.log`, `-php{83,84}-l{12,13}-{floor,latest}-check.log`, `-l12-install.log`, `-stream83.log`, `-stream84.log`, and the latest-resolution `-audit.json` files. Container build recipes and resolved lockfiles remain in `build/release-matrix` for inspection.
 
-## Deferred real-provider check
+## Live-provider follow-up
 
-When the user supplies/configures an API key, disable the local preview middleware for the selected agent and verify real text streaming, tool execution, two-turn history, structured output, error presentation, reload, and usage/provider identity. Exercise another provider and failover if those are intended for the release. This has **not** been run or inferred from fake responses. Approval resume is still issue #1 and remains outside this migration.
+The subsequent [OpenAI browser test](LIVE-PROVIDER-TEST.md) used gpt-4.1-mini with the preview middleware disabled, covering all ten callable agents plus the intentionally unavailable agent. Tool calls, history, structured output, safe approval pause, error recovery, and attachment persistence were exercised. The two discovered UI gaps are fixed: paused/failed usage now appears immediately and the unavailable sidebar route shows its diagnostic. The follow-up passes 289 unit/feature tests and 85 browser tests; details and live evidence are in the linked report. Composer also rejects MCP versions below the advisory-patched 1.1.0 floor when MCP is installed. Visual-answer accuracy was mixed. Other providers/failover and reasoning-specific live output remain unverified. Approval resume is still issue #1 and remains outside this migration.
 
 Tag/publish require a separate instruction. The planned release number appears only in draft release documentation; Composer's tagged version remains the source of truth when a release is actually prepared.

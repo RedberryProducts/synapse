@@ -8,7 +8,7 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 
 ![The Synapse playground: a conversation with a tool call expanded to show its arguments and result](docs/screenshots/playground.png)
 
-> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Real-provider testing is deferred; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
+> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Live OpenAI flows have also been exercised; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
 
 ## Requirements
 
@@ -17,6 +17,7 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 | PHP | 8.3+ |
 | Laravel | 12.62+ or 13.15+ |
 | `laravel/ai` | ^1.3 |
+| `laravel/mcp` (optional) | 1.1.0+ when installed |
 
 ---
 

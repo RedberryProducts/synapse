@@ -37,7 +37,7 @@ Think of it as the missing UI for `laravel/ai`, in the same spirit as Telescope,
 
 ---
 
-> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Real-provider testing is deferred; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
+> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Live OpenAI flows have also been exercised; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
 
 ## Requirements
 
@@ -46,6 +46,7 @@ Think of it as the missing UI for `laravel/ai`, in the same spirit as Telescope,
 | PHP | 8.3+ |
 | Laravel | 12.62+ or 13.15+ |
 | `laravel/ai` | ^1.3 |
+| `laravel/mcp` (optional) | 1.1.0+ when installed |
 
 Synapse installs alongside your existing `laravel/ai` setup. It reads the agents and providers you already have — you don't configure providers or API keys in Synapse; it uses your app's `config/ai.php`.
 
@@ -178,6 +179,8 @@ Each **agent card** shows:
 - **Tools** — a chip per tool; if there are many, they collapse into a `+N` chip you can hover to see the full list
 
 Click a card to open its playground, or click **Info** to open the [agent info panel](#agent-info-panel).
+
+Agents that cannot be constructed show an actionable diagnostic in Discovery and in their playground, including when opened from the sidebar. Their composer is hidden until the error is fixed; saved conversations remain readable.
 
 **How discovery works:** Synapse looks in the directories you configure — by default `app/Ai/Agents/` (where `make:agent` generates agents) and `app/Agents/` — for classes implementing `Laravel\Ai\Contracts\Agent`. There's no manual registration — creating the class is enough. Because discovery runs fresh each request, it always matches your current code (ideal during active development).
 
@@ -315,7 +318,7 @@ Every assistant response carries its token cost, so you can spot bloated prompts
 - **Per response:** `↑ 340 · ↓ 128` (input / output)
 - **Per conversation:** a running total at the top of the thread
 
-Cache-read and cache-write counts appear on hover; reported reasoning counts appear beside output. Cache counts are already included in input, and reasoning is included in output, so totals never add them twice. Unknown breakdowns stay hidden; a reported zero is shown. A multi-step answer is counted once, both live and after reload.
+Cache-read and cache-write counts appear on hover; reported reasoning counts appear beside output. Cache counts are already included in input, and reasoning is included in output, so totals never add them twice. Unknown breakdowns stay hidden; a reported zero is shown. A multi-step answer is counted once, both live and after reload. Tool-only turns keep their reported usage visible immediately, including when a tool fails or pauses for approval; later sends retain those counts.
 
 ---
 

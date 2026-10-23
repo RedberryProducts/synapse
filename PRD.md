@@ -10,9 +10,9 @@ The MVP targets **Laravel AI SDK (`laravel/ai`)** as its sole data source. By de
 
 **Package:** `redberry/synapse`
 
-**Target SDK version:** `laravel/ai ^1.3` (PHP ^8.3, Laravel ^12.62 or ^13.15). The integration boundary is verified against SDK v1.3.0.
+**Target SDK version:** `laravel/ai ^1.3` (PHP ^8.3, Laravel ^12.62 or ^13.15). The integration boundary is verified against SDK v1.3.0. MCP remains optional; Composer conflicts with `laravel/mcp <1.1.0` to enforce the patched 1.x floor for [GHSA-m25c-38v7-94p8](https://github.com/laravel/mcp/security/advisories/GHSA-m25c-38v7-94p8). SDK 1.3 already excludes MCP 0.x, including its patched 0.9.7 release.
 
-**Migration status:** steps 1–8 implement the SDK boundary, scoped recording, ordered history, SSE mapping, API/UI replay, and discovery. Deterministic qualification passes on PHP 8.3/8.4 with Laravel 12/13. Real-provider testing is deferred; no release is tagged or published. See [qualification](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and [upgrade instructions](UPGRADE.md).
+**Migration status:** steps 1–8 implement the SDK boundary, scoped recording, ordered history, SSE mapping, API/UI replay, and discovery. Deterministic qualification passes on PHP 8.3/8.4 with Laravel 12/13. Live OpenAI browser flows have also been exercised; no release is tagged or published. See [qualification](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and [upgrade instructions](UPGRADE.md).
 
 The conversational wrapper forwards skills and runtime tool replacements. Cache attributes are forwarded before application step middleware using public SDK value objects, preserving each step's current options and released tool choice. Application middleware receives `PendingStep` once per generation step.
 
@@ -74,6 +74,8 @@ Long agent names in constrained discovery/sidebar labels stay on one line, trunc
 The FQCN and full configuration live in the Info panel (Feature 4), not on the card. Interface-derived capability data (`Conversational`, `HasStructuredOutput`, …) is **not rendered as card badges** — it remains in the discovery API payload for internal use (see Feature 4).
 
 **Actions:** Click a card → opens the Chat Playground; the card's `Info` link opens the Info panel
+
+Unavailable agents reuse `UnresolvableHint` in the playground, including sidebar/direct navigation. Hide the composer, empty-chat invitation, and stateless notice while unavailable; preserve the saved thread for inspection.
 
 **How discovery works:**
 - Scans for classes implementing the SDK's `Agent` contract
@@ -688,7 +690,7 @@ No bundled/hidden database: a package-registered secret connection would be invi
 
 The `steps` column stores ordered `Responses\Data\Step::toArray()` serializations, including calls/results, finish reason, usage, provider/model, reasoning, replay blocks, and provider tool calls. This is the public response shape, not the SDK database store's compact format. SDK replay data stays private; never return `steps` wholesale in an API response. Provider history is rebuilt in step order with public SDK message constructors and call/result deserializers.
 
-The `parts` column holds the display sequence in array order. Each block has a stable per-turn `id` and `type`: `text`/`reasoning` blocks carry `text`; `tool` blocks carry the Synapse observation row's `tool_invocation_id` (the row primary key, not the SDK execution ID); notice/error blocks carry the existing safe display payload. Tool status, duration, and result remain owned by `synapse_tool_invocations`. The sequence is a compact transcript, not a raw stream-event log. The recorder writes this sequence. `ConversationPresenter` supplies the same explicit public projection to conversation reload and stream completion; private steps, replay blocks, and provider call fields are never part of that projection.
+The `parts` column holds the display sequence in array order. Each block has a stable per-turn `id` and `type`: `text`/`reasoning` blocks carry `text`; `tool` blocks carry the Synapse observation row's `tool_invocation_id` (the row primary key, not the SDK execution ID); notice/error blocks carry the existing safe display payload. Tool status, duration, and result remain owned by `synapse_tool_invocations`. The sequence is a compact transcript, not a raw stream-event log. The recorder writes this sequence. `ConversationPresenter` supplies the same explicit public projection to conversation reload and stream completion; private steps, replay blocks, and provider call fields are never part of that projection. Client stream cleanup preserves assistant entries with recorded usage even without text, reasoning, or structured output, so tool-only paused/failed turns retain immediate metadata and cumulative totals.
 
 `status` is `completed`, `paused`, or `failed`; the database defaults to `completed`. `input_tokens` and `output_tokens` promote the inclusive counts in `TextUsage::toArray()`. Cache counts and reasoning counts are optional subsets; totals must not add them again. Existing content, attachments, usage, meta, metadata, duration, timestamps, and indexes remain.
 

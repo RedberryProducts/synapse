@@ -28,6 +28,9 @@
         "pestphp/pest-plugin-browser": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0"
     },
+    "conflict": {
+        "laravel/mcp": "<1.1.0"
+    },
     "autoload": {
         "psr-4": {
             "Redberry\\Synapse\\": "src/"

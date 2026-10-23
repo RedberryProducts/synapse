@@ -22,6 +22,7 @@ use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SlowToolAgent;
 use Workbench\App\Agents\SupportAgent;
 use Workbench\App\Agents\WeatherAgent;
+use Workbench\App\Tools\BrokenLedgerTool;
 
 beforeEach(function () {
     config(['synapse.discovery.paths' => [dirname(__DIR__, 2).'/workbench/app/Agents']]);
@@ -595,6 +596,36 @@ it('shows an approval pause without leaving the composer loading', function () {
         ->assertSee('Synapse does not support approvals yet')
         ->assertNoJavaScriptErrors();
 });
+
+it('keeps usage visible when a tool-only turn stops', function (string $status) {
+    fakeAgent(SupportAgent::class);
+    $tool = $status === 'paused' ? new ApprovalSearchTool : new BrokenLedgerTool;
+    $name = class_basename($tool);
+    app()->instance(SupportAgent::class, (new StepSequenceAgent([
+        new StepResponse('', [new ToolCall('counted-tool', $name, ['query' => 'hoodie', 'entry' => '42'])], FinishReason::ToolCalls, new TextUsage(100, 20), new Meta('openai', 'test')),
+    ]))->withTools([$tool]));
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Run the tool')->click('Send');
+    $page->assertPresent('@message-meta')
+        ->assertSeeIn('@message-meta', 'Input: 100')
+        ->assertSeeIn('@message-meta', 'Output: 20')
+        ->assertSeeIn('@conversation-tokens', 'Total 120')
+        ->assertMissing('@message-assistant-loading');
+
+    $id = SynapseConversation::sole()->id;
+    visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}")
+        ->assertPresent('@message-meta')
+        ->assertSeeIn('@conversation-tokens', 'Total 120');
+
+    app()->instance(SupportAgent::class, new StepSequenceAgent([
+        new StepResponse('Recovered.', [], FinishReason::Stop, new TextUsage(50, 10), new Meta('openai', 'test')),
+    ]));
+    $page->type('@composer-input', 'Continue without tools')->click('Send');
+    $page->assertSee('Recovered.')
+        ->assertSeeIn('@conversation-tokens', 'Total 180')
+        ->assertNoJavaScriptErrors();
+})->with(['paused', 'failed']);
 
 it('reports an incomplete transport stream instead of silently completing', function () {
     $page = visit('/synapse/playground/workbench.app.agents.support-agent');
