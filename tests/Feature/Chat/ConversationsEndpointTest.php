@@ -1,8 +1,8 @@
 <?php
 
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
 use Laravel\Ai\Streaming\Events\ProviderToolEvent;
 use Redberry\Synapse\Chat\ProviderToolRecorder;
@@ -47,8 +47,8 @@ it('reports the agent it belongs to', function () {
 
 it('totals the tokens across the thread', function () {
     fakeAgent(SupportAgent::class, [
-        new TextResponse('One.', new Usage(promptTokens: 100, completionTokens: 20), new Meta('openai', 'gpt-5.6-luna')),
-        new TextResponse('Two.', new Usage(promptTokens: 42, completionTokens: 9), new Meta('openai', 'gpt-5.6-luna')),
+        new TextResponse('One.', new TextUsage(inputTokens: 100, outputTokens: 20), new Meta('openai', 'gpt-5.6-luna')),
+        new TextResponse('Two.', new TextUsage(inputTokens: 42, outputTokens: 9), new Meta('openai', 'gpt-5.6-luna')),
     ]);
 
     $id = chatConversationId(sendMessage('workbench.app.agents.support-agent', 'First'));
@@ -75,7 +75,7 @@ it('includes the error rows so a refresh still shows what went wrong', function 
 
 it('carries per-message usage and duration', function () {
     fakeAgent(SupportAgent::class, [
-        new TextResponse('Answer.', new Usage(promptTokens: 11, completionTokens: 3), new Meta('openai', 'gpt-5.6-luna')),
+        new TextResponse('Answer.', new TextUsage(inputTokens: 11, outputTokens: 3), new Meta('openai', 'gpt-5.6-luna')),
     ]);
 
     $id = chatConversationId(sendMessage('workbench.app.agents.support-agent', 'Question'));
@@ -115,7 +115,7 @@ it('reports a provider tool with the provider own status word', function () {
     ]);
 
     (new ProviderToolRecorder($conversation->id))->record(
-        new ProviderToolEvent('evt_1', 'srvtoolu_1', 'server_tool_use', ['name' => 'web_search'], 'searching', time()),
+        new ProviderToolEvent('evt_1', 'srvtoolu_1', 'server_tool_use', ['name' => 'web_search'], 'searching', time(), 'anthropic'),
         'inv_1',
     );
 

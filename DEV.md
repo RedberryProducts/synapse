@@ -126,3 +126,25 @@ Mostly automated by the hook (`composer hooks`):
 The repository currently has no automated test-matrix workflow; the existing GitHub workflow triggers an external task. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`.
 
 Compatibility should be checked on both supported Laravel majors (12 and 13), including a fresh install and production boot after `composer install --no-dev`. Browser e2e requires Playwright, Chromium, and current compiled assets.
+
+## Laravel AI 1.3 storage reset
+
+The migration branch is an intermediate implementation, not a release. Once the full migration passes its release gates, existing installations must follow this order:
+
+1. Back up any Synapse history you need and stop requests/jobs that can write to Synapse. Keep traffic stopped until the upgrade is complete.
+2. On the existing installation, with its existing storage configuration, run `php artisan synapse:clear`. This explicitly deletes Synapse conversations, messages, tool observations, and uploaded attachments. It does not delete SDK conversation data.
+3. Upgrade Synapse and its Composer dependencies.
+4. Run `php artisan vendor:publish --tag=synapse-migrations` to publish the new follow-up migration, then `php artisan migrate`.
+5. Verify the upgraded dashboard before resuming traffic.
+
+The migration refuses nonempty Synapse storage and leaves it untouched. It also refuses a rollback with data. There is no historical-data backfill or old-format reader. If a damaged installation contains orphan message/tool rows after `synapse:clear`, back up and explicitly remove those orphan Synapse rows on the configured connection before retrying. Never use `migrate:fresh` on the host application for this upgrade.
+
+Fresh installations run all four published migrations. The host application's own Laravel AI conversation migration is separate; follow the [SDK upgrade guide](https://github.com/laravel/ai/blob/v1.3.0/UPGRADE.md) for that data.
+
+For the steps 1–3 milestone, run the focused tests with:
+
+```bash
+./vendor/bin/pest tests/Feature/AiStorageMigrationTest.php tests/Feature/ModelTest.php tests/Feature/RetentionTest.php tests/Feature/Chat/SdkBoundaryTest.php tests/Feature/Chat/DecoratorTest.php
+```
+
+This does not replace `composer check` or `composer test:e2e`. Their known intermediate failures are recorded in [PROGRESS.md](plans/laravel-ai-1.3-migration/PROGRESS.md) and must all be resolved before release.

@@ -37,13 +37,15 @@ Think of it as the missing UI for `laravel/ai`, in the same spirit as Telescope,
 
 ---
 
+> **Migration in progress:** this branch implements steps 1–3 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md). The SDK and storage foundations are updated; chat writing, streaming, and replay still require steps 4–6. This is not a releasable upgrade. Existing installations require an explicit history reset; see [DEV.md](DEV.md#laravel-ai-13-storage-reset).
+
 ## Requirements
 
 | Requirement | Version |
 |-------------|---------|
 | PHP | 8.3+ |
-| Laravel | 12 or 13 |
-| `laravel/ai` | 0.9.x, 0.10.x, or 0.11.x |
+| Laravel | 12.62+ or 13.15+ |
+| `laravel/ai` | ^1.3 |
 
 Synapse installs alongside your existing `laravel/ai` setup. It reads the agents and providers you already have — you don't configure providers or API keys in Synapse; it uses your app's `config/ai.php`.
 

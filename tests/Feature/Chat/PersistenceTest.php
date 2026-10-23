@@ -1,7 +1,7 @@
 <?php
 
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
@@ -32,7 +32,7 @@ it('promotes token counts and keeps the full usage breakdown', function () {
     fakeAgent(SupportAgent::class, [
         new TextResponse(
             'Counted.',
-            new Usage(promptTokens: 142, completionTokens: 89, reasoningTokens: 7),
+            new TextUsage(inputTokens: 142, outputTokens: 89, reasoningTokens: 7),
             new Meta('openai', 'gpt-5.6-luna'),
         ),
     ]);
@@ -76,7 +76,7 @@ it('measures how long the turn took', function () {
 
 it('reports the usage on the closing part', function () {
     fakeAgent(SupportAgent::class, [
-        new TextResponse('Done.', new Usage(promptTokens: 10, completionTokens: 4), new Meta('openai', 'gpt-5.6-luna')),
+        new TextResponse('Done.', new TextUsage(inputTokens: 10, outputTokens: 4), new Meta('openai', 'gpt-5.6-luna')),
     ]);
 
     $end = chatPart(sendMessage('workbench.app.agents.support-agent', 'Finish up'), 'data-synapse-end');

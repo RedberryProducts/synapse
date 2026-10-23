@@ -6,17 +6,6 @@ use Redberry\Synapse\Synapse;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\SupportAgent;
 
-/*
-| Reasoning lives only in the stream: `StreamedAgentResponse->text` is
-| `TextDelta::combine()`, which excludes it, and nothing else retains the
-| deltas. Synapse gathers them as they pass and stores them on the assistant
-| row, so a replayed conversation shows the thinking that was watched rather
-| than quietly dropping it.
-|
-| `Agent::fake()` never produces ReasoningDelta events, so the buffer is
-| exercised directly and the persistence through the endpoint.
-*/
-
 beforeEach(function () {
     Synapse::auth(fn (): bool => true);
 

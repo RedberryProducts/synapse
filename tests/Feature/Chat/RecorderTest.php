@@ -66,8 +66,7 @@ it('records one row per call when a turn uses several tools', function () {
 });
 
 it('leaves a throwing tool as a failed row rather than a pending one', function () {
-    // ToolInvoked never fires for a tool that throws — executeTool() has no
-    // catch — so the invocation-level catch-all is what closes this row out.
+    // A throwing handler must leave a terminal failure, never a pending card.
     fakeAgent(FlakyToolAgent::class, [
         new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
     ]);

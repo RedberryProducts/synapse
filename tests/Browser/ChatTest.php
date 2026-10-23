@@ -9,8 +9,8 @@
 */
 
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
 use Workbench\App\Agents\ExtractorAgent;
@@ -104,7 +104,7 @@ it('preserves reasoning when a later stream event clears the loading placeholder
         $event,
     ]);
 
-    // The SDK fake cannot emit reasoning events; supply those SSE parts at the transport boundary.
+    // Intercept transport to control which event clears the loading placeholder.
     $page->script(<<<JS
         (() => {
             const originalFetch = window.fetch;
@@ -137,7 +137,7 @@ it('shows per-message and conversation token counts', function () {
     fakeAgent(SupportAgent::class, [
         new TextResponse(
             'Counted.',
-            new Usage(promptTokens: 142, completionTokens: 89),
+            new TextUsage(inputTokens: 142, outputTokens: 89),
             new Meta('openai', 'gpt-5.6-luna'),
         ),
     ]);
@@ -539,4 +539,33 @@ it('renders the conversation in both themes', function () {
         $page->assertSeeIn('@message-assistant', 'An answer in any theme.')
             ->assertNoJavaScriptErrors();
     }
+});
+
+it('preserves interleaved text and tool steps after reloading the thread', function () {
+    fakeAgent(SupportAgent::class, [
+        (new TextResponse('First I search hoodies.', new TextUsage, new Meta))
+            ->withToolCallsAndResults(collect([new ToolCall('hoodie', 'SearchProductsTool', ['query' => 'hoodie'])]), collect()),
+        (new TextResponse('Now I search scarves.', new TextUsage, new Meta))
+            ->withToolCallsAndResults(collect([new ToolCall('scarf', 'SearchProductsTool', ['query' => 'scarf'])]), collect()),
+        'Both items are available.',
+    ]);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Find a hoodie and a scarf')->click('Send');
+    $page->assertSee('Both items are available.');
+
+    $expected = ['First I search hoodies.', 'SearchProductsTool', 'Now I search scarves.', 'SearchProductsTool', 'Both items are available.'];
+    $types = <<<'JS'
+    Array.from(document.querySelectorAll('[data-testid=tool-card],[data-testid=message-assistant]'))
+        .map(el => el.dataset.testid === 'tool-card' ? 'SearchProductsTool' :
+            ['First I search hoodies.', 'Now I search scarves.', 'Both items are available.'].find(text => el.textContent.includes(text)))
+    JS;
+    expect($page->script($types))->toBe($expected);
+    $page->assertSee('First I search hoodies.')->assertSee('Now I search scarves.');
+
+    $id = SynapseConversation::query()->sole()->id;
+    $reopened = visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}");
+    $reopened->assertSee('Both items are available.')
+        ->assertSee('First I search hoodies.')->assertSee('Now I search scarves.')
+        ->assertNoJavaScriptErrors();
+    expect($reopened->script($types))->toBe($expected);
 });

@@ -214,7 +214,7 @@ holds the amber card open long enough to watch in the playground.
 2. **Mirror the agent, don't fake it.** Conversational agents get full history; stateless agents get one message per turn (PRD Feature 2).
 3. **One catch-all owns errors.** Any `\Throwable` during invocation (including a throwing tool `handle()`) becomes an inline error card (PRD Feature 6).
 4. **`config()` at runtime, `env()` only in config files.** Keeps `config:cache` safe.
-5. **Store replay data in the SDK's own serialization shapes** (`ToolCall::toArray()`, `Usage::toArray()`, `File::fromArray()`); Synapse-specific observations live in `synapse_tool_invocations`.
+5. **Store replay data in the SDK's own serialization shapes** (`Step::toArray()`, `TextUsage::toArray()`, SDK file serialization). Private `steps` and ordered display `parts` have distinct roles; tool observations live in `synapse_tool_invocations`. See PRD Database Schema for the 1.3 contract.
 6. **Cascade deletes in `ConversationRepository`**, never DB foreign keys.
 7. **`dist/` is committed; `references/` and `testing-laravel-project/` are gitignored.**
 

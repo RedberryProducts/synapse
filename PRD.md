@@ -10,7 +10,11 @@ The MVP targets **Laravel AI SDK (`laravel/ai`)** as its sole data source. By de
 
 **Package:** `redberry/synapse`
 
-**Target SDK version:** `laravel/ai` 0.9.x, 0.10.x, or 0.11.x (PHP ^8.3, Laravel 12/13). APIs below were verified against v0.9.1; compatibility checks also cover v0.10.2 and v0.11.2. Future SDK minor versions require compatibility testing before widening the Composer constraint.
+**Target SDK version:** `laravel/ai ^1.3` (PHP ^8.3, Laravel ^12.62 or ^13.15). The integration boundary is verified against SDK v1.3.0.
+
+**Migration status:** steps 1–3 establish the dependency, wrapper fidelity, regression coverage, and storage contract. The feature chapters remain the acceptance contract for the ongoing rewrite; legacy writer/history/streaming implementations are intentionally awaiting steps 4–6. This branch is not releasable. See [the implementation progress](plans/laravel-ai-1.3-migration/PROGRESS.md).
+
+The conversational wrapper forwards skills and runtime tool replacements. Cache attributes are forwarded before application step middleware using public SDK value objects, preserving each step's current options and released tool choice. Application middleware receives `PendingStep` once per generation step.
 
 ### Why?
 
@@ -712,12 +716,13 @@ No bundled/hidden database: a package-registered secret connection would be invi
 
 ### Design principle: store replay data in the SDK's own serialization shapes
 
-Before every prompt, the `SynapseConversationalAgent` decorator must rebuild `Message[]` history. The SDK's `DatabaseConversationStore` defines the canonical round-trip: assistant rows carry `tool_calls` / `tool_results` JSON, rehydrated via `ToolCall::fromArray()` / `ToolResult::fromArray()` into the `AssistantMessage(toolCalls)` → `ToolResultMessage` → `AssistantMessage(text)` sequence.
+The `steps` column stores ordered `Responses\Data\Step::toArray()` serializations, including calls/results, finish reason, usage, provider/model, reasoning, replay blocks, and provider tool calls. This is the public response shape, not the SDK database store's compact format. SDK replay data stays private; never return `steps` wholesale in an API response. Step 4 will rebuild provider history in step order with public SDK message constructors and call/result deserializers.
 
-Synapse stores replay data in **exactly those shapes** (`ToolCall::toArray()`, `ToolResult::toArray()`, `Usage::toArray()`). When the SDK evolves its payloads, Synapse's stored JSON evolves with it — rehydration mirrors the SDK's own store code instead of maintaining a parallel bespoke format. This splits the schema into two concerns:
+The `parts` column holds the display sequence in array order. Each block has a stable per-turn `id` and `type`: `text`/`reasoning` blocks carry `text`; `tool` blocks carry the Synapse observation row's `tool_invocation_id` (the row primary key, not the SDK execution ID); notice/error blocks carry the existing safe display payload. Tool status, duration, and result remain owned by `synapse_tool_invocations`. The sequence is a compact transcript, not a raw stream-event log. Steps 4–6 will write and project it.
 
-- **`synapse_messages`** — SDK-shaped replay data (what the decorator feeds back to the agent)
-- **`synapse_tool_invocations`** — Synapse-shaped observation data (timing, status — things the SDK doesn't store and no SDK change can break)
+`status` is `completed`, `paused`, or `failed`; the database defaults to `completed`. `input_tokens` and `output_tokens` promote the inclusive counts in `TextUsage::toArray()`. Cache counts and reasoning counts are optional subsets; totals must not add them again. Existing content, attachments, usage, meta, metadata, duration, timestamps, and indexes remain.
+
+A fourth, self-contained migration transforms empty legacy storage. It refuses any rows in any Synapse table before altering schema, on both upgrade and rollback. It never clears data or accesses SDK tables. Existing installations must stop Synapse traffic and explicitly clear their history/attachments first; see [the reset procedure](DEV.md#laravel-ai-13-storage-reset). The first three published migrations remain unchanged.
 
 ### Tables
 
@@ -737,11 +742,12 @@ Schema::create('synapse_messages', function (Blueprint $table) {
     $table->string('role', 25);                   // user | assistant | error
     $table->text('content')->nullable();          // message text, or error message
     $table->text('attachments');                  // JSON — SDK File serialization ({type, path, disk, name}); rehydrated via File::fromArray()
-    $table->text('tool_calls');                   // JSON — ToolCall::toArray() shapes (SDK-compatible)
-    $table->text('tool_results');                 // JSON — ToolResult::toArray() shapes (SDK-compatible)
-    $table->text('usage');                        // JSON — full Usage::toArray(), all 5 token fields
-    $table->unsignedInteger('prompt_tokens')->nullable();     // promoted for SQL aggregates
-    $table->unsignedInteger('completion_tokens')->nullable(); // promoted for SQL aggregates
+    $table->text('steps')->nullable();            // private SDK Step::toArray() sequence
+    $table->text('parts')->nullable();            // ordered display blocks with stable per-turn IDs
+    $table->string('status', 25)->default('completed');
+    $table->text('usage');                        // TextUsage::toArray(), including nullable subsets
+    $table->unsignedInteger('input_tokens')->nullable();      // inclusive input count
+    $table->unsignedInteger('output_tokens')->nullable();     // inclusive output count
     $table->unsignedInteger('duration_ms')->nullable();       // response wall time
     $table->text('meta');                         // JSON — provider, model, citations
     $table->text('metadata');                     // JSON — Synapse-specific (exception_class, stack_trace)

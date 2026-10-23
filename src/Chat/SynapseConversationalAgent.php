@@ -7,12 +7,15 @@ use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
+use Laravel\Ai\Contracts\HasSkills;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Providers\TextProvider;
+use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Gateway\TextGenerationOptions;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Promptable;
+use Laravel\Ai\Providers\Tools\ProviderTool;
 use Laravel\Ai\ToolChoice;
 use ReflectionMethod;
 use Stringable;
@@ -34,12 +37,12 @@ use Stringable;
  * - `HasStructuredOutput` — `StreamsText::stream()` throws for any agent that
  *   implements it, so carrying it here would break every conversational stream.
  *   Structured agents are invoked undecorated via `prompt()` instead.
- * - `RemembersConversations` — `GeneratesText::gatherMiddlewareFor()` looks for
- *   the trait with `class_uses_recursive()`. Leaving it off is what keeps the
- *   SDK's `RememberConversation` middleware and the developer's own store out
+ * - `RemembersConversations` — the SDK checks both the contract and the
+ *   trait. Leaving both off keeps the SDK's `RememberConversation` middleware
+ *   and the developer's own store out
  *   of the picture, which is the whole point of supplying history ourselves.
  */
-class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware, HasProviderOptions, HasTools
+class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware, HasProviderOptions, HasSkills, HasTools
 {
     /*
     | The aliases keep the trait's own implementations reachable after the
@@ -50,6 +53,7 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
         getProvidersAndModels as protected promptableProvidersAndModels;
         getTimeout as protected promptableTimeout;
         getDefaultModelFor as protected promptableDefaultModelFor;
+        resolveAgentTools as protected promptableAgentTools;
     }
 
     /**
@@ -71,8 +75,8 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
      * Wrap the given agent, preserving the `#[Strict]` attribute when present.
      *
      * `Strict::isAppliedTo()` reads the attribute straight off the instance with
-     * no method fallback, so it is the one setting a forwarding method cannot
-     * carry — it needs an annotated subclass instead.
+     * no method fallback, so this setting needs an annotated subclass instead
+     * of a forwarding method.
      *
      * @param  Message[]  $history
      */
@@ -111,7 +115,29 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
 
     public function middleware(): array
     {
-        return $this->agent instanceof HasMiddleware ? $this->agent->middleware() : [];
+        $middleware = $this->agent instanceof HasMiddleware ? $this->agent->middleware() : [];
+
+        if ($this->options->cacheInstructions !== null || $this->options->cacheToolDefinitions !== null) {
+            array_unshift($middleware, new ForwardCacheOptions(
+                $this->options->cacheInstructions,
+                $this->options->cacheToolDefinitions,
+            ));
+        }
+
+        return $middleware;
+    }
+
+    public function skills(): iterable
+    {
+        return $this->agent instanceof HasSkills ? $this->agent->skills() : [];
+    }
+
+    /**
+     * @return array<int, Agent|Tool|ProviderTool>|null
+     */
+    protected function resolveAgentTools(): ?array
+    {
+        return $this->promptableAgentTools() ?? $this->callOnAgent('resolveAgentTools', []);
     }
 
     /**
@@ -126,8 +152,8 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
 
     /*
     | Generation options. TextGenerationOptions::forAgent() checks for a method
-    | before falling back to the attribute, so forwarding the resolved values as
-    | methods is enough — this class never needs the attributes themselves.
+    | before falling back to the attribute for these settings. Attribute-only
+    | cache settings are forwarded separately by ForwardCacheOptions.
     */
 
     public function maxSteps(): ?int

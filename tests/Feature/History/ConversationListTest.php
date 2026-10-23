@@ -1,8 +1,8 @@
 <?php
 
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Synapse;
@@ -51,7 +51,7 @@ it('sorts oldest first when asked', function () {
 it('reports the agent, tokens and tool count per row', function () {
     fakeAgent(SupportAgent::class, [
         new ToolCall(id: 'call_1', name: 'SearchProductsTool', arguments: ['query' => 'hoodie']),
-        new TextResponse('Found it.', new Usage(promptTokens: 200, completionTokens: 50), new Meta('openai', 'gpt-5.6-luna')),
+        new TextResponse('Found it.', new TextUsage(inputTokens: 200, outputTokens: 50), new Meta('openai', 'gpt-5.6-luna')),
     ]);
 
     sendMessage('workbench.app.agents.support-agent', 'Find me a hoodie');

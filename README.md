@@ -8,13 +8,15 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 
 ![The Synapse playground: a conversation with a tool call expanded to show its arguments and result](docs/screenshots/playground.png)
 
+> **Migration in progress:** this branch implements steps 1–3 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md). The SDK and storage foundations are updated; chat writing, streaming, and replay still require steps 4–6. This is not a releasable upgrade. Existing installations require an explicit history reset; see [DEV.md](DEV.md#laravel-ai-13-storage-reset).
+
 ## Requirements
 
 | | |
 |---|---|
 | PHP | 8.3+ |
-| Laravel | 12 or 13 |
-| `laravel/ai` | 0.9.x, 0.10.x, or 0.11.x |
+| Laravel | 12.62+ or 13.15+ |
+| `laravel/ai` | ^1.3 |
 
 ---
 
