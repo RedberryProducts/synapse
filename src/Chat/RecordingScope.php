@@ -12,6 +12,7 @@ use Laravel\Ai\Events\StartingStep;
 use Laravel\Ai\Events\StepCompleted;
 use Laravel\Ai\Events\ToolFailed;
 use Laravel\Ai\Events\ToolInvoked;
+use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 
 class RecordingScope
@@ -22,15 +23,17 @@ class RecordingScope
 
     protected ?StreamEmitter $emitter = null;
 
+    protected ?AgentPrompt $prompt = null;
+
     public function during(Agent $target, SynapseRecorder $recorder, StreamEmitter $emitter, Closure $run): AgentResponse
     {
-        $previous = [$this->target, $this->recorder, $this->emitter];
-        [$this->target, $this->recorder, $this->emitter] = [$target, $recorder, $emitter];
+        $previous = [$this->target, $this->recorder, $this->emitter, $this->prompt];
+        [$this->target, $this->recorder, $this->emitter, $this->prompt] = [$target, $recorder, $emitter, null];
 
         try {
             return $run();
         } finally {
-            [$this->target, $this->recorder, $this->emitter] = $previous;
+            [$this->target, $this->recorder, $this->emitter, $this->prompt] = $previous;
         }
     }
 
@@ -45,6 +48,7 @@ class RecordingScope
                 return;
             }
 
+            $this->prompt = $event->prompt;
             $this->recorder->begin($event->invocationId, $event->prompt->provider()->name(), $event->prompt->model);
             $this->emitter->provider($event->prompt->provider()->name());
 
@@ -68,6 +72,12 @@ class RecordingScope
 
     protected function failover(AgentFailedOver $event): void
     {
+        // Retryable attempts skip AgentFailed. Capture their completed results
+        // before the next PromptingAgent replaces this attempt's context.
+        $response = $this->prompt?->runContext()?->recordedResponse();
+        if ($response !== null) {
+            $this->recorder?->capture($response);
+        }
         $message = sprintf('Failed over from %s (%s): %s', $event->provider->name(), $event->model, $event->exception->getMessage());
         $data = ['provider' => $event->provider->name(), 'model' => $event->model];
         $this->recorder?->notice($message, $data);

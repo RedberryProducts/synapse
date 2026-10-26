@@ -19,6 +19,7 @@ use Redberry\Synapse\Tests\Fixtures\ApprovalSearchTool;
 use Redberry\Synapse\Tests\Fixtures\InterruptedAnswerAgent;
 use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
 use Redberry\Synapse\Tests\Fixtures\StringableResultTool;
+use Redberry\Synapse\Tests\Fixtures\StructuredFailoverAgent;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SlowToolAgent;
@@ -41,6 +42,30 @@ it('continues from the visible partial answer after reopening a failed turn', fu
     $page->type('@composer-input', 'Continue')->click('Send')
         ->assertSee('Continuing: The hoodie stock is')
         ->assertNoJavaScriptErrors();
+});
+
+it('keeps successful tool cards truthful across structured provider failover', function () {
+    fakeAgent(StructuredFailoverAgent::class, StructuredFailoverAgent::responses());
+    app()->instance(ExtractorAgent::class, new StructuredFailoverAgent);
+    $page = visit('/synapse/playground/workbench.app.agents.extractor-agent');
+    $page->type('@composer-input', 'Find Ada')->click('Send')
+        ->assertSee('Failed over from openai')
+        ->assertSee('Ada')
+        ->assertCount('@tool-card', 2)
+        ->assertCount('[data-testid="tool-card"][data-tool-status="success"]', 2)
+        ->click('[aria-label="SearchProductsTool tool call"] >> nth=0')
+        ->assertSeeIn('@tool-result', 'Sony WH-1000')
+        ->assertSeeIn('[data-testid="tool-card"] >> nth=0', 'ms')
+        ->assertNoJavaScriptErrors();
+    $page->refresh()
+        ->assertPresent('@tool-card')
+        ->assertCount('@tool-card', 2)
+        ->assertCount('[data-testid="tool-card"][data-tool-status="success"]', 2)
+        ->assertSee('Failed over from openai')
+        ->assertSee('Ada')
+        ->click('[aria-label="SearchProductsTool tool call"] >> nth=0')
+        ->assertSeeIn('@tool-result', 'Sony WH-1000')
+        ->assertSeeIn('[data-testid="tool-card"] >> nth=0', 'ms');
 });
 
 it('shows the hero state before the first message', function () {

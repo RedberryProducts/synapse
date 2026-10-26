@@ -190,6 +190,8 @@ The playground is a real conversation with a real agent. Messages stream token-b
 
 If an answer fails mid-stream, its visible partial text stays in the conversation context for the next message, including when a tool already completed earlier in that turn.
 
+When the SDK retries with another provider, successful tools from the earlier attempt keep their results and timing. The retry appears as a notice, without falsely marking those tools as failed.
+
 **Composing messages:**
 
 - **Text** — type and send.

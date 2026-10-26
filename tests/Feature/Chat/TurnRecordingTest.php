@@ -33,6 +33,7 @@ use Redberry\Synapse\Tests\Fixtures\RecordingEmitter;
 use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
 use Redberry\Synapse\Tests\Fixtures\StreamSequenceAgent;
 use Redberry\Synapse\Tests\Fixtures\StringableResultTool;
+use Redberry\Synapse\Tests\Fixtures\StructuredFailoverAgent;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SupportAgent;
@@ -423,4 +424,35 @@ it('keeps a recovered stream error as a notice without creating an error row', f
     expect($assistant->status)->toBe('completed')
         ->and(array_column($assistant->parts, 'type'))->toBe(['notice', 'text'])
         ->and(SynapseMessage::where('role', 'error')->count())->toBe(0);
+});
+
+it('preserves completed tool results from a structured attempt before failover', function () {
+    Synapse::auth(fn (): bool => true);
+    fakeAgent(StructuredFailoverAgent::class, StructuredFailoverAgent::responses());
+    app()->instance(ExtractorAgent::class, new StructuredFailoverAgent);
+    $response = sendMessage('workbench.app.agents.extractor-agent', 'Find Ada');
+    $assistant = SynapseMessage::where('role', 'assistant')->sole();
+    $tools = SynapseToolInvocation::orderBy('id')->get();
+
+    expect($tools)->toHaveCount(2)
+        ->and($tools->pluck('status')->all())->toBe(['success', 'success'])
+        ->and($tools->pluck('provider')->all())->toBe(['openai', 'anthropic'])
+        ->and($tools->pluck('tool_call_id')->all())->toBe(['search', 'search'])
+        ->and($tools->pluck('tool_invocation_id')->unique())->toHaveCount(2)
+        ->and($tools->whereNull('tool_invocation_id'))->toBeEmpty()
+        ->and($tools->whereNull('duration_ms'))->toBeEmpty()
+        ->and($assistant->steps[0]['tool_results'][0]['result'])->toBe($tools[0]->result)
+        ->and($assistant->steps[1]['tool_results'][0]['result'])->toBe($tools[1]->result)
+        ->and($assistant->status)->toBe('completed')
+        ->and($assistant->meta['provider'])->toBe('anthropic')
+        ->and($assistant->meta['structured'])->toBe(['name' => 'Ada'])
+        ->and($assistant->input_tokens)->toBe(20)
+        ->and($assistant->output_tokens)->toBe(4)
+        ->and(array_column($assistant->parts, 'type'))->toBe(['tool', 'notice', 'tool', 'text'])
+        ->and(SynapseMessage::where('role', 'error')->count())->toBe(0);
+
+    $completion = chatPart($response, 'data-synapse-end')['data']['turn'];
+    $reload = $this->getJson('/synapse/api/conversations/'.$assistant->conversation_id)->assertOk();
+    expect($reload->json('tool_invocations'))->toBe($completion['tool_invocations'])
+        ->and($reload->json('messages.1'))->toBe($completion['message']);
 });
