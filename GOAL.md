@@ -188,6 +188,8 @@ Agents that cannot be constructed show an actionable diagnostic in Discovery and
 
 The playground is a real conversation with a real agent. Messages stream token-by-token as the model generates them.
 
+If an answer fails mid-stream, its visible partial text stays in the conversation context for the next message, including when a tool already completed earlier in that turn.
+
 **Composing messages:**
 
 - **Text** — type and send.

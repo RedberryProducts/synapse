@@ -16,6 +16,7 @@ use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Tests\Fixtures\ApprovalSearchTool;
+use Redberry\Synapse\Tests\Fixtures\InterruptedAnswerAgent;
 use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
 use Redberry\Synapse\Tests\Fixtures\StringableResultTool;
 use Workbench\App\Agents\ExtractorAgent;
@@ -27,6 +28,19 @@ use Workbench\App\Tools\BrokenLedgerTool;
 
 beforeEach(function () {
     config(['synapse.discovery.paths' => [dirname(__DIR__, 2).'/workbench/app/Agents']]);
+});
+
+it('continues from the visible partial answer after reopening a failed turn', function () {
+    fakeAgent(SupportAgent::class);
+    app()->instance(SupportAgent::class, new InterruptedAnswerAgent);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Find a hoodie')->click('Send')
+        ->assertSee('The hoodie stock is')
+        ->assertSee('Answer interrupted');
+    $page->refresh()->assertSee('The hoodie stock is');
+    $page->type('@composer-input', 'Continue')->click('Send')
+        ->assertSee('Continuing: The hoodie stock is')
+        ->assertNoJavaScriptErrors();
 });
 
 it('shows the hero state before the first message', function () {

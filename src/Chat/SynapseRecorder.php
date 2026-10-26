@@ -235,6 +235,14 @@ class SynapseRecorder
     public function snapshot(): AgentResponse
     {
         $steps = collect($this->steps());
+        // A stream can yield visible text without completing its SDK step.
+        // Keep that text in replay without inventing usage for the missing response.
+        if (! isset($this->attempts[$this->attempt][$this->step]) && isset($this->text[$this->group()])) {
+            $steps->push(new Step(
+                $this->text[$this->group()], [], [], FinishReason::Unknown,
+                new TextUsage, new Meta($this->provider, $this->model), '', [],
+            ));
+        }
         $usage = $steps->reduce(fn (TextUsage $total, Step $step): TextUsage => $total->add($step->usage), new TextUsage);
         $text = implode("\n\n", array_filter($this->text, fn (string $text): bool => trim($text) !== ''));
         $reasoning = collect($this->parts)->where('type', 'reasoning')->pluck('text')->implode("\n\n");

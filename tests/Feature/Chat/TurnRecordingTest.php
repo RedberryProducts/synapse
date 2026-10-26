@@ -28,6 +28,7 @@ use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Models\SynapseToolInvocation;
 use Redberry\Synapse\Synapse;
+use Redberry\Synapse\Tests\Fixtures\InterruptedAnswerAgent;
 use Redberry\Synapse\Tests\Fixtures\RecordingEmitter;
 use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
 use Redberry\Synapse\Tests\Fixtures\StreamSequenceAgent;
@@ -238,6 +239,26 @@ it('retains an unfinished model call without claiming it executed', function () 
         ->and($tool->tool_invocation_id)->toBeNull()
         ->and(SynapseMessage::where('role', 'assistant')->sole()->parts[0]['tool_invocation_id'])->toBe($tool->id);
 });
+
+it('replays unfinished answer text after a completed tool step', function (string $partial) {
+    fakeAgent(SupportAgent::class);
+    app()->instance(SupportAgent::class, new InterruptedAnswerAgent($partial));
+    recordTurn();
+    $assistant = SynapseMessage::where('role', 'assistant')->sole();
+    $history = app(MessageHistory::class)->for($assistant->conversation_id);
+
+    expect($assistant->status)->toBe('failed')
+        ->and($assistant->content)->toBe("Searching.\n\n".$partial)
+        ->and($history)->toHaveCount(4)
+        ->and($history[1]->content)->toBe('Searching.')
+        ->and($history[2])->toBeInstanceOf(ToolResultMessage::class)
+        ->and($history[2]->toolResults->sole()->successful())->toBeTrue()
+        ->and($history[3]->content)->toBe($partial)
+        ->and($assistant->input_tokens)->toBe(10);
+
+    recordTurn('Continue', $assistant->conversation_id);
+    expect(SynapseMessage::where('role', 'assistant')->orderByDesc('id')->first()->content)->toBe('Continuing: '.$partial);
+})->with(['The hoodie stock is', 'Searching.']);
 
 it('does not guess which identical unanswered model call matches a failed execution', function () {
     fakeAgent(SupportAgent::class);
