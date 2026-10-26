@@ -16,8 +16,8 @@ export interface ConversationSummary {
      */
     status: ConversationStatus;
     tool_calls: number;
-    prompt_tokens: number;
-    completion_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
     total_tokens: number;
     created_at: string | null;
     updated_at: string | null;

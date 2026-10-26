@@ -6,6 +6,12 @@ use Laravel\Ai\Events\StreamingAgent;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\ToolResultMessage;
+use Laravel\Ai\Responses\Data\FinishReason;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Step;
+use Laravel\Ai\Responses\Data\TextUsage;
+use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\ToolResult;
 use Redberry\Synapse\Chat\MessageHistory;
 use Redberry\Synapse\Chat\SynapseConversationalAgent;
 use Redberry\Synapse\Models\SynapseMessage;
@@ -108,22 +114,17 @@ it('replays a tool turn back into the SDK message sequence', function () {
 
     // A completed tool turn stored on the assistant row rehydrates into the
     // SDK's own assistant → tool-result → assistant sequence.
-    SynapseMessage::query()
-        ->where('conversation_id', $conversationId)
-        ->where('role', 'assistant')
-        ->update([
-            'tool_calls' => json_encode([[
-                'id' => 'call_1',
-                'name' => 'search_products',
-                'arguments' => ['query' => 'hoodie'],
-            ]]),
-            'tool_results' => json_encode([[
-                'id' => 'call_1',
-                'name' => 'search_products',
-                'arguments' => ['query' => 'hoodie'],
-                'result' => '3 matches',
-            ]]),
-        ]);
+    $assistant = SynapseMessage::query()->where('conversation_id', $conversationId)->where('role', 'assistant')->sole();
+    $toolStep = new Step(
+        text: '',
+        toolCalls: [new ToolCall('call_1', 'search_products', ['query' => 'hoodie'])],
+        toolResults: [new ToolResult('call_1', 'search_products', ['query' => 'hoodie'], '3 matches')],
+        finishReason: FinishReason::ToolCalls,
+        usage: new TextUsage,
+        meta: new Meta('openai', 'test'),
+        reasoning: '', replayBlocks: [],
+    );
+    $assistant->update(['steps' => [$toolStep->toArray(), ...$assistant->steps]]);
 
     $history = app(MessageHistory::class)->for($conversationId);
 

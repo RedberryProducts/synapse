@@ -5,6 +5,10 @@
 | scoped to the element it belongs to. See AGENTS.md → Browser tests.
 */
 
+use Redberry\Synapse\Models\SynapseConversation;
+use Workbench\App\Agents\BrokenAgent;
+use Workbench\App\Agents\SupportAgent;
+
 beforeEach(function () {
     config(['synapse.discovery.paths' => [dirname(__DIR__, 2).'/workbench/app/Agents']]);
 });
@@ -62,6 +66,34 @@ it('explains why an agent cannot be instantiated and how to fix it', function ()
         )
         ->assertSee('an interface with no binding')
         ->assertSee('$this->app->bind(');
+});
+
+it('explains unavailable agents when opened from the sidebar', function () {
+    visit('/synapse')
+        ->click('[data-testid="sidebar-agent-name"][title="IncomeProtectionRecommendationDataCollectorBrokenAgent"]')
+        ->assertPathContains('/playground/')
+        ->assertMissing('@agent-card-unavailable')
+        ->assertPresent('@unresolvable-hint')
+        ->assertSeeIn('@unresolvable-hint', 'an interface with no binding')
+        ->assertSeeIn('@unresolvable-hint', '$this->app->bind(')
+        ->assertDontSee('Stateless — each message is sent independently')
+        ->assertMissing('@chat-empty')
+        ->assertMissing('@chat-composer')
+        ->assertNoJavaScriptErrors();
+});
+
+it('keeps saved history readable when its agent becomes unavailable', function () {
+    fakeAgent(SupportAgent::class, ['Saved answer.']);
+    sendMessage('workbench.app.agents.support-agent', 'A saved question');
+    $conversation = SynapseConversation::sole();
+    $conversation->update(['agent_class' => BrokenAgent::class]);
+
+    visit("/synapse/playground/workbench.app.agents.broken-agent?c={$conversation->id}")
+        ->assertPresent('@unresolvable-hint')
+        ->assertSeeIn('@unresolvable-hint', 'an interface with no binding')
+        ->assertSeeIn('@message-assistant', 'Saved answer.')
+        ->assertMissing('@chat-composer')
+        ->assertNoJavaScriptErrors();
 });
 
 it('opens the playground when a card is clicked', function () {

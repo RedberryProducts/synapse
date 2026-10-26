@@ -8,13 +8,16 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 
 ![The Synapse playground: a conversation with a tool call expanded to show its arguments and result](docs/screenshots/playground.png)
 
+> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Live OpenAI flows have also been exercised; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
+
 ## Requirements
 
 | | |
 |---|---|
 | PHP | 8.3+ |
-| Laravel | 12 or 13 |
-| `laravel/ai` | 0.9.x, 0.10.x, or 0.11.x |
+| Laravel | 12.62+ or 13.15+ |
+| `laravel/ai` | ^1.3 |
+| `laravel/mcp` (optional) | 1.1.0+ when installed |
 
 ---
 
@@ -120,7 +123,7 @@ The playground streams replies as the model produces them, which needs PHP to be
 | nginx + PHP-FPM (Herd, Valet, Forge) | ✅ Verified |
 | Laravel Sail | ✅ Expected — same stack |
 | FrankenPHP | ✅ Verified |
-| **Laravel Octane** | ❌ Not supported in v0.1.0 |
+| **Laravel Octane** | ❌ Not supported |
 
 Octane's workers run under PHP's CLI interface, where output cannot be pushed to a client mid-request, so replies arrive complete instead of streaming. Nothing breaks — Synapse detects it and says so in the playground rather than leaving you looking at a blank thread. It isn't tested per release yet, so it isn't claimed as supported.
 

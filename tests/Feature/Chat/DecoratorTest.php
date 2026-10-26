@@ -5,6 +5,7 @@ use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
+use Laravel\Ai\Contracts\HasSkills;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Gateway\TextGenerationOptions;
@@ -114,7 +115,8 @@ it('returns empty capabilities for an agent that has none', function () {
     $wrapper = SynapseConversationalAgent::for(new WeatherAgent);
 
     expect($wrapper->middleware())->toBe([])
-        ->and($wrapper->providerOptions('openai'))->toBe([]);
+        ->and($wrapper->providerOptions('openai'))->toBe([])
+        ->and([...$wrapper->skills()])->toBe([]);
 });
 
 it('supplies Synapse history instead of the agent own messages', function () {
@@ -132,7 +134,8 @@ it('carries the contracts the SDK branches on', function () {
     expect($wrapper)->toBeInstanceOf(Conversational::class)
         ->toBeInstanceOf(HasTools::class)
         ->toBeInstanceOf(HasMiddleware::class)
-        ->toBeInstanceOf(HasProviderOptions::class);
+        ->toBeInstanceOf(HasProviderOptions::class)
+        ->toBeInstanceOf(HasSkills::class);
 });
 
 it('never claims structured output', function () {
@@ -143,7 +146,7 @@ it('never claims structured output', function () {
 });
 
 it('does not pull in the SDK conversation middleware', function () {
-    // gatherMiddlewareFor() looks for the RemembersConversations *trait*.
+    // The SDK recognizes both the conversation contract and its trait.
     // Leaving it off is what keeps the developer's own ConversationStore out of
     // the picture while Synapse supplies history directly.
     expect(class_uses_recursive(SynapseConversationalAgent::for(new SupportAgent)))

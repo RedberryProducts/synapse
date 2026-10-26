@@ -17,8 +17,8 @@ export function ConversationTokens({
             className="flex flex-wrap items-center gap-x-8 gap-y-1 text-sm text-muted-foreground"
         >
             <Stat icon={Database} label="Total" value={prompt + completion} />
-            <Stat icon={SquareGanttChart} label="Prompt" value={prompt} />
-            <Stat icon={CopyCheck} label="Completion" value={completion} />
+            <Stat icon={SquareGanttChart} label="Input" value={prompt} />
+            <Stat icon={CopyCheck} label="Output" value={completion} />
         </div>
     );
 }

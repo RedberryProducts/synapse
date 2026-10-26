@@ -2,7 +2,7 @@ import type { MessageMetaData, Usage } from '@/types/chat';
 
 /**
  * Per-response token counts, as the Figma conversation screen shows them:
- * `Prompt: 142   Completion: 89   Total: 231`.
+ * `Input: 142   Output: 89   Total: 231`.
  *
  * Reasoning tokens join the row when a model produced any — they are billed and
  * invisible, which is exactly the combination worth surfacing. Cache reads and
@@ -20,11 +20,11 @@ export function MessageMeta({
     /** The agent's configured model, when it differs from what ran. */
     agentModel?: string | null;
 }) {
-    const total = usage.prompt_tokens + usage.completion_tokens;
+    const total = usage.input_tokens + usage.output_tokens;
 
     const cache = [
-        usage.cache_read_input_tokens > 0 && `Cache read: ${usage.cache_read_input_tokens}`,
-        usage.cache_write_input_tokens > 0 && `Cache write: ${usage.cache_write_input_tokens}`,
+        usage.cache_read_input_tokens !== null && `Cache read: ${usage.cache_read_input_tokens}`,
+        usage.cache_write_input_tokens !== null && `Cache write: ${usage.cache_write_input_tokens}`,
     ].filter(Boolean) as string[];
 
     // Naming the model only when it was overridden keeps the row quiet in the
@@ -35,12 +35,12 @@ export function MessageMeta({
     return (
         <div
             data-testid="message-meta"
-            title={cache.length > 0 ? cache.join(' · ') : undefined}
+            title={['Cache counts are included in input; reasoning is included in output.', ...cache].join(' ')}
             className="mt-3 flex flex-wrap gap-4 text-xs text-subtle-foreground"
         >
-            <span>Prompt: {usage.prompt_tokens}</span>
-            <span>Completion: {usage.completion_tokens}</span>
-            {usage.reasoning_tokens > 0 && <span>Reasoning: {usage.reasoning_tokens}</span>}
+            <span>Input: {usage.input_tokens}</span>
+            <span>Output: {usage.output_tokens}</span>
+            {usage.reasoning_tokens !== null && <span>Reasoning: {usage.reasoning_tokens}</span>}
             <span>Total: {total}</span>
             {durationMs !== null && <span>{durationMs}ms</span>}
             {overridden && <span>on {meta?.model}</span>}

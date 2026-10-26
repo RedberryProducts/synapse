@@ -83,6 +83,8 @@ export function ToolCard({ entry }: { entry: ToolEntry }) {
                             value={entry.error}
                             testId="tool-result"
                         />
+                    ) : entry.status === 'paused' ? (
+                        <p className="text-xs text-subtle-foreground">Approval required. This tool has not run; approvals are not yet supported in Synapse.</p>
                     ) : entry.status === 'pending' ? (
                         <p className="text-xs text-subtle-foreground">
                             Still running{entry.providerStatus && ` — provider reports “${entry.providerStatus}”`}.

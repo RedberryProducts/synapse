@@ -10,7 +10,9 @@ use Illuminate\Support\Carbon;
  * @property string $conversation_id
  * @property string|null $message_id
  * @property string $invocation_id
- * @property string $tool_invocation_id
+ * @property string|null $tool_invocation_id
+ * @property string|null $tool_call_id
+ * @property string|null $provider
  * @property string $type
  * @property string $name
  * @property string $status

@@ -8,19 +8,64 @@
 | flakiness, and the assertions are about Synapse rather than about a model.
 */
 
+use Laravel\Ai\Gateway\StepResponse;
+use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
+use Redberry\Synapse\Tests\Fixtures\ApprovalSearchTool;
+use Redberry\Synapse\Tests\Fixtures\InterruptedAnswerAgent;
+use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
+use Redberry\Synapse\Tests\Fixtures\StringableResultTool;
+use Redberry\Synapse\Tests\Fixtures\StructuredFailoverAgent;
 use Workbench\App\Agents\ExtractorAgent;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SlowToolAgent;
 use Workbench\App\Agents\SupportAgent;
 use Workbench\App\Agents\WeatherAgent;
+use Workbench\App\Tools\BrokenLedgerTool;
 
 beforeEach(function () {
     config(['synapse.discovery.paths' => [dirname(__DIR__, 2).'/workbench/app/Agents']]);
+});
+
+it('continues from the visible partial answer after reopening a failed turn', function () {
+    fakeAgent(SupportAgent::class);
+    app()->instance(SupportAgent::class, new InterruptedAnswerAgent);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Find a hoodie')->click('Send')
+        ->assertSee('The hoodie stock is')
+        ->assertSee('Answer interrupted');
+    $page->refresh()->assertSee('The hoodie stock is');
+    $page->type('@composer-input', 'Continue')->click('Send')
+        ->assertSee('Continuing: The hoodie stock is')
+        ->assertNoJavaScriptErrors();
+});
+
+it('keeps successful tool cards truthful across structured provider failover', function () {
+    fakeAgent(StructuredFailoverAgent::class, StructuredFailoverAgent::responses());
+    app()->instance(ExtractorAgent::class, new StructuredFailoverAgent);
+    $page = visit('/synapse/playground/workbench.app.agents.extractor-agent');
+    $page->type('@composer-input', 'Find Ada')->click('Send')
+        ->assertSee('Failed over from openai')
+        ->assertSee('Ada')
+        ->assertCount('@tool-card', 2)
+        ->assertCount('[data-testid="tool-card"][data-tool-status="success"]', 2)
+        ->click('[aria-label="SearchProductsTool tool call"] >> nth=0')
+        ->assertSeeIn('@tool-result', 'Sony WH-1000')
+        ->assertSeeIn('[data-testid="tool-card"] >> nth=0', 'ms')
+        ->assertNoJavaScriptErrors();
+    $page->refresh()
+        ->assertPresent('@tool-card')
+        ->assertCount('@tool-card', 2)
+        ->assertCount('[data-testid="tool-card"][data-tool-status="success"]', 2)
+        ->assertSee('Failed over from openai')
+        ->assertSee('Ada')
+        ->click('[aria-label="SearchProductsTool tool call"] >> nth=0')
+        ->assertSeeIn('@tool-result', 'Sony WH-1000')
+        ->assertSeeIn('[data-testid="tool-card"] >> nth=0', 'ms');
 });
 
 it('shows the hero state before the first message', function () {
@@ -104,7 +149,7 @@ it('preserves reasoning when a later stream event clears the loading placeholder
         $event,
     ]);
 
-    // The SDK fake cannot emit reasoning events; supply those SSE parts at the transport boundary.
+    // Intercept transport to control which event clears the loading placeholder.
     $page->script(<<<JS
         (() => {
             const originalFetch = window.fetch;
@@ -137,7 +182,7 @@ it('shows per-message and conversation token counts', function () {
     fakeAgent(SupportAgent::class, [
         new TextResponse(
             'Counted.',
-            new Usage(promptTokens: 142, completionTokens: 89),
+            new TextUsage(inputTokens: 142, outputTokens: 89),
             new Meta('openai', 'gpt-5.6-luna'),
         ),
     ]);
@@ -146,8 +191,8 @@ it('shows per-message and conversation token counts', function () {
 
     $page->type('@composer-input', 'Count my tokens')->click('Send');
 
-    $page->assertSeeIn('@message-meta', 'Prompt: 142')
-        ->assertSeeIn('@message-meta', 'Completion: 89')
+    $page->assertSeeIn('@message-meta', 'Input: 142')
+        ->assertSeeIn('@message-meta', 'Output: 89')
         ->assertSeeIn('@message-meta', 'Total: 231')
         ->assertSeeIn('@conversation-tokens', 'Total 231');
 });
@@ -310,6 +355,28 @@ it('marks a failed tool on the card and explains it below', function () {
     $page->assertSeeIn('@tool-status', 'error')
         ->assertSeeIn('@error-card', 'Ledger service unavailable')
         ->assertNoJavaScriptErrors();
+});
+
+it('renders one timed card for a stringable tool result', function () {
+    app()->instance(SupportAgent::class, (new SupportAgent)->withTools([new StringableResultTool]));
+    fakeAgent(SupportAgent::class, [new ToolCall('stringable-call', 'StringableResultTool', []), 'Done.']);
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Check stock')->click('Send');
+    $page->assertSee('Done.')
+        ->click('[aria-label="StringableResultTool tool call"]')
+        ->assertSeeIn('@tool-card', 'Hoodie stock: 12.')
+        ->assertSeeIn('@tool-card', 'ms');
+    expect($page->script("document.querySelectorAll('[data-testid=tool-card]').length"))->toBe(1);
+
+    $id = SynapseConversation::sole()->id;
+    $reopened = visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}");
+    $reopened->assertPresent('@tool-card')
+        ->click('[aria-label="StringableResultTool tool call"]')
+        ->assertSeeIn('@tool-card', 'Hoodie stock: 12.')
+        ->assertSeeIn('@tool-card', 'ms')
+        ->assertNoJavaScriptErrors();
+    expect($reopened->script("document.querySelectorAll('[data-testid=tool-card]').length"))->toBe(1);
 });
 
 it('restores tool cards on a refresh', function () {
@@ -540,3 +607,115 @@ it('renders the conversation in both themes', function () {
             ->assertNoJavaScriptErrors();
     }
 });
+
+it('preserves interleaved text and tool steps after reloading the thread', function () {
+    fakeAgent(SupportAgent::class);
+    app()->instance(SupportAgent::class, new StepSequenceAgent([
+        new StepResponse('First I search hoodies.', [new ToolCall('hoodie', 'SearchProductsTool', ['query' => 'hoodie'])], FinishReason::ToolCalls, new TextUsage(100, 20, cacheReadInputTokens: 30, reasoningTokens: 5), new Meta('openai', 'test')),
+        new StepResponse('Now I search scarves.', [new ToolCall('scarf', 'SearchProductsTool', ['query' => 'scarf'])], FinishReason::ToolCalls, new TextUsage(100, 20, cacheReadInputTokens: 30, reasoningTokens: 5), new Meta('openai', 'test')),
+        new StepResponse('Both items are available.', [], FinishReason::Stop, new TextUsage(100, 20, cacheReadInputTokens: 30, reasoningTokens: 5), new Meta('openai', 'test')),
+    ]));
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Find a hoodie and a scarf')->click('Send');
+    $page->assertSee('Both items are available.')->assertSeeIn('@conversation-tokens', 'Total 360');
+    expect($page->script("document.querySelectorAll('[data-testid=message-meta]').length"))->toBe(1);
+
+    $expected = ['First I search hoodies.', 'SearchProductsTool', 'Now I search scarves.', 'SearchProductsTool', 'Both items are available.'];
+    $types = <<<'JS'
+    Array.from(document.querySelectorAll('[data-testid=tool-card],[data-testid=message-assistant]'))
+        .map(el => el.dataset.testid === 'tool-card' ? 'SearchProductsTool' :
+            ['First I search hoodies.', 'Now I search scarves.', 'Both items are available.'].find(text => el.textContent.includes(text)))
+    JS;
+    expect($page->script($types))->toBe($expected);
+    $page->assertSee('First I search hoodies.')->assertSee('Now I search scarves.');
+
+    $id = SynapseConversation::query()->sole()->id;
+    $reopened = visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}");
+    $reopened->assertSee('Both items are available.')
+        ->assertSee('First I search hoodies.')->assertSee('Now I search scarves.')
+        ->assertNoJavaScriptErrors();
+    expect($reopened->script($types))->toBe($expected);
+    $reopened->assertSeeIn('@message-meta', 'Input: 300')->assertSeeIn('@message-meta', 'Output: 60')
+        ->assertSeeIn('@message-meta', 'Reasoning: 15')->assertSeeIn('@conversation-tokens', 'Total 360');
+    expect($reopened->script("document.querySelectorAll('[data-testid=message-meta]').length"))->toBe(1);
+});
+
+it('shows an approval pause without leaving the composer loading', function () {
+    app()->instance(SupportAgent::class, (new SupportAgent)->withTools([new ApprovalSearchTool]));
+    fakeAgent(SupportAgent::class, [new ToolCall('approval', 'ApprovalSearchTool', ['query' => 'hoodie'])]);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Search')->click('Send');
+    $page->assertPresent('[data-tool-status=paused]')
+        ->assertSee('Synapse does not support approvals yet')
+        ->assertMissing('@message-assistant-loading')
+        ->click('[aria-label="ApprovalSearchTool tool call"]')
+        ->assertSeeIn('@tool-card', 'This tool has not run');
+    $page->type('@composer-input', 'Another question');
+    expect($page->script("document.querySelector('[aria-label=\"Send message\"]').disabled"))->toBeFalse();
+    $id = SynapseConversation::sole()->id;
+    visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}")
+        ->assertPresent('[data-tool-status=paused]')
+        ->assertSee('Synapse does not support approvals yet')
+        ->assertNoJavaScriptErrors();
+});
+
+it('keeps usage visible when a tool-only turn stops', function (string $status) {
+    fakeAgent(SupportAgent::class);
+    $tool = $status === 'paused' ? new ApprovalSearchTool : new BrokenLedgerTool;
+    $name = class_basename($tool);
+    app()->instance(SupportAgent::class, (new StepSequenceAgent([
+        new StepResponse('', [new ToolCall('counted-tool', $name, ['query' => 'hoodie', 'entry' => '42'])], FinishReason::ToolCalls, new TextUsage(100, 20), new Meta('openai', 'test')),
+    ]))->withTools([$tool]));
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Run the tool')->click('Send');
+    $page->assertPresent('@message-meta')
+        ->assertSeeIn('@message-meta', 'Input: 100')
+        ->assertSeeIn('@message-meta', 'Output: 20')
+        ->assertSeeIn('@conversation-tokens', 'Total 120')
+        ->assertMissing('@message-assistant-loading');
+
+    $id = SynapseConversation::sole()->id;
+    visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}")
+        ->assertPresent('@message-meta')
+        ->assertSeeIn('@conversation-tokens', 'Total 120');
+
+    app()->instance(SupportAgent::class, new StepSequenceAgent([
+        new StepResponse('Recovered.', [], FinishReason::Stop, new TextUsage(50, 10), new Meta('openai', 'test')),
+    ]));
+    $page->type('@composer-input', 'Continue without tools')->click('Send');
+    $page->assertSee('Recovered.')
+        ->assertSeeIn('@conversation-tokens', 'Total 180')
+        ->assertNoJavaScriptErrors();
+})->with(['paused', 'failed']);
+
+it('reports an incomplete transport stream instead of silently completing', function () {
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->script(<<<'JS'
+        (() => {
+            window.fetch = async () => new Response('data: {"type":"text-start","id":"one"}\n\ndata: {"type":"text-delta","id":"one","delta":"Partial transport answer."}\n\n', {headers: {'Content-Type': 'text/event-stream'}});
+        })()
+    JS);
+    $page->type('@composer-input', 'Hello')->click('Send');
+    $page->assertPresent('@error-card')
+        ->assertSeeIn('@error-card', 'The stream ended before the response was saved.')
+        ->assertSeeIn('@message-assistant', 'Partial transport answer.')
+        ->assertMissing('@message-assistant-loading')
+        ->assertNoJavaScriptErrors();
+});
+
+it('distinguishes unknown token breakdowns from reported zero', function (?int $count) {
+    fakeAgent(SupportAgent::class, [new TextResponse('Counted.', new TextUsage(inputTokens: 100, outputTokens: 20, cacheReadInputTokens: $count, reasoningTokens: $count), new Meta('openai', 'test'))]);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Count')->click('Send');
+    $page->assertPresent('@message-meta')->assertSeeIn('@message-meta', 'Total: 120');
+    $title = $page->script("document.querySelector('[data-testid=message-meta]').title");
+    if ($count === null) {
+        expect($title)->not->toContain('Cache read:');
+        $page->assertDontSee('Reasoning:');
+    } else {
+        expect($title)->toContain('Cache read: 0');
+        $page->assertSeeIn('@message-meta', 'Reasoning: 0');
+    }
+    $page->assertNoJavaScriptErrors();
+})->with([null, 0]);

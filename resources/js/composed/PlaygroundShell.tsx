@@ -4,6 +4,7 @@ import { ConversationMenu } from '@/components/ConversationMenu';
 import { ConversationTokens } from '@/components/ConversationTokens';
 import { StatelessNotice } from '@/components/StatelessNotice';
 import { StreamingNotice } from '@/components/StreamingNotice';
+import { UnresolvableHint } from '@/components/UnresolvableHint';
 import { Badge } from '@/elements/Badge';
 import { Button } from '@/elements/Button';
 import { config } from '@/lib/config';
@@ -98,7 +99,7 @@ export function PlaygroundShell({
                             </Badge>
                         )}
 
-                        {agent && !agent.capabilities.conversational && <StatelessNotice />}
+                        {agent?.available && !agent.capabilities.conversational && <StatelessNotice />}
 
                         {/*
                             A property of the runtime rather than of the agent,
@@ -129,20 +130,39 @@ export function PlaygroundShell({
                     </div>
                 </header>
 
-                <ChatThread entries={entries} agentModel={agent?.model} />
-
-                <div className="px-8 pt-2 pb-6">
-                    <div className="mx-auto max-w-3xl">
-                        <ChatComposer
-                            onSend={onSend}
-                            models={agent?.models ?? []}
-                            model={model}
-                            onModelChange={onModelChange}
-                            disabled={sending || agentMissing || agent?.available === false}
-                            autoFocus={!started}
+                {agent?.available === false && (
+                    <div className="px-8 pt-4">
+                        <UnresolvableHint
+                            kind={agent.error_kind}
+                            dependencies={agent.unresolvable}
+                            error={agent.error}
                         />
+                        <p className="mt-2 text-xs text-subtle-foreground">
+                            Fix the error above, then refresh. Saved conversations remain readable.
+                        </p>
                     </div>
-                </div>
+                )}
+
+                {agent?.available !== false || started ? (
+                    <ChatThread entries={entries} agentModel={agent?.model} />
+                ) : (
+                    <div className="flex-1" />
+                )}
+
+                {agent?.available !== false && (
+                    <div className="px-8 pt-2 pb-6">
+                        <div className="mx-auto max-w-3xl">
+                            <ChatComposer
+                                onSend={onSend}
+                                models={agent?.models ?? []}
+                                model={model}
+                                onModelChange={onModelChange}
+                                disabled={sending || agentMissing}
+                                autoFocus={!started}
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             {panelOpen && (

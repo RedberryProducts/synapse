@@ -5,7 +5,6 @@ namespace Redberry\Synapse\Discovery;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
-use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\ObjectSchema;
 use Laravel\Ai\Providers\Tools\ProviderTool;
@@ -23,18 +22,16 @@ use Throwable;
  */
 class ToolDetail
 {
+    public function __construct(protected AgentTools $tools = new AgentTools) {}
+
     /**
      * @return array<int, array<string, mixed>>
      */
     public function all(object $agent, ?string $provider = null): array
     {
-        if (! $agent instanceof HasTools) {
-            return [];
-        }
-
         $tools = [];
 
-        foreach ($agent->tools() as $tool) {
+        foreach ($this->tools->for($agent) as $tool) {
             $tools[] = $this->detail($tool, $provider);
         }
 
@@ -65,6 +62,8 @@ class ToolDetail
     protected function detail(mixed $tool, ?string $provider): array
     {
         return match (true) {
+            $tool instanceof AgentTool => $this->agentTool($tool->agent()),
+            $tool instanceof McpTool, $tool instanceof McpServerTool => $this->userTool($tool, 'mcp'),
             $tool instanceof Agent => $this->agentTool($tool),
             $tool instanceof Tool => $this->userTool($tool, 'tool'),
             McpTool::supports($tool) => $this->userTool(new McpTool($tool), 'mcp'),
