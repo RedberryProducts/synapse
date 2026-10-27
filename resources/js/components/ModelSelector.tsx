@@ -25,7 +25,9 @@ export function ModelSelector({
     models,
     selected,
     onSelect,
+    disabled = false,
 }: {
+    disabled?: boolean;
     models: ModelOption[];
     selected: string | null;
     onSelect: (model: string | null) => void;
@@ -39,6 +41,7 @@ export function ModelSelector({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger
+                disabled={disabled}
                 data-testid="model-selector"
                 aria-label={`Model: ${current.label}`}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"

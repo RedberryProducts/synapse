@@ -81,10 +81,26 @@ In `local`, the dashboard is open and needs no authentication — that's the poi
 
 - **Discovery** — every agent class in your app, with its provider, model and tools. Write a class, refresh, it's there.
 - **Chat playground** — streaming replies, attachments, a model selector for trying another model without touching your code, and full conversation persistence.
+- **Tool approvals** — approve or deny SDK approval requests inline, including after a refresh. Supports custom/SDK tools, SDK MCP wrappers, and approval before sub-agent delegation.
 - **Tool inspection** — each call inline as a card: arguments, results, duration, and failures marked as failures. Provider-native tools are distinguished from your own.
 - **Info panel** — the agent's resolved config, system prompt, tool schemas and middleware, exactly as the SDK would use them.
 - **History** — search, filter, replay, rename and delete past conversations.
 - **Errors** — anything that throws becomes an inline card with the exception class, message and stack trace. Never a dead stream or a raw 500.
+
+## Tool approvals
+
+Use the Laravel AI SDK's `Approvable` contract and `InteractsWithApprovals` trait on custom tools, or call `requireApproval('Reason shown to the user')` on an SDK tool that supports it. Synapse follows the SDK's decision for each actual call, including argument-dependent approval rules.
+
+The playground displays the arguments and reason before execution. Approve or deny each pending call; batches continue once every call has a decision. Denial lets the model continue with an explanation that the action was declined. Reloading preserves pending requests. Native provider-hosted tools and approvals inside child agents are not supported by this integration.
+
+When upgrading from Synapse 0.2, publish and run the additive migration before opening the dashboard:
+
+```bash
+php artisan vendor:publish --tag=synapse-migrations
+php artisan migrate
+```
+
+Existing history is retained. Older paused turns lack the resume checkpoint; start a new turn for those. No new approval request runs automatically, and no SDK conversation tables are used.
 
 ## Configuration
 

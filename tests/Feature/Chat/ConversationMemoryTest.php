@@ -13,7 +13,6 @@ use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
 use Redberry\Synapse\Chat\MessageHistory;
-use Redberry\Synapse\Chat\SynapseConversationalAgent;
 use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Synapse;
 use Workbench\App\Agents\SupportAgent;
@@ -92,17 +91,17 @@ it('sends a stateless agent only the current message', function () {
         ->and($captured[1])->toBe([]);
 });
 
-it('never wraps a stateless agent', function () {
+it('gives a stateless approval wrapper an empty history', function () {
     fakeAgent(WeatherAgent::class, ['Clear skies.']);
 
     $wrapped = null;
     Event::listen(StreamingAgent::class, function (StreamingAgent $event) use (&$wrapped): void {
-        $wrapped = $event->prompt->agent instanceof SynapseConversationalAgent;
+        $wrapped = $event->prompt->agent->messages();
     });
 
     sendMessage('workbench.app.agents.weather-agent', 'Weather?');
 
-    expect($wrapped)->toBeFalse();
+    expect($wrapped)->toBe([]);
 });
 
 it('replays a tool turn back into the SDK message sequence', function () {

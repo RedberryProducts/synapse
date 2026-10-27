@@ -180,6 +180,7 @@ export function ChatComposer({
 
                 <ModelSelector
                     models={models}
+                    disabled={disabled}
                     selected={model ?? null}
                     onSelect={(next) => onModelChange?.(next)}
                 />

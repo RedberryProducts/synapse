@@ -26,6 +26,27 @@ class MessageHistory
     }
 
     /** @return Message[] */
+    public function forApproval(SynapseMessage $paused, bool $conversational): array
+    {
+        $user = SynapseMessage::query()->where('conversation_id', $paused->conversation_id)
+            ->where('role', 'user')->where('id', '<', $paused->id)->latest('id')->firstOrFail();
+        $records = SynapseMessage::query()->where('conversation_id', $paused->conversation_id)
+            ->whereIn('role', ['user', 'assistant'])->where('id', '<', $paused->id)
+            ->when(! $conversational, fn ($query) => $query->where('id', $user->id))
+            ->orderByDesc('id')->limit(self::LIMIT)->get()->reverse()->values();
+        $messages = $records->flatMap(fn (SynapseMessage $record): array => $this->toMessages($record))->all();
+        foreach ($paused->steps ?? [] as $step) {
+            $messages[] = new AssistantMessage($step['text'], collect($step['tool_calls'])->map(ToolCall::fromArray(...)),
+                $step['replay_blocks'], $step['meta']['provider'] ?? $paused->approval['provider']);
+            if ($step['tool_results'] !== []) {
+                $messages[] = new ToolResultMessage(collect($step['tool_results'])->map(ToolResult::fromArray(...)));
+            }
+        }
+
+        return $messages;
+    }
+
+    /** @return Message[] */
     protected function toMessages(SynapseMessage $record): array
     {
         if ($record->role === 'user') {

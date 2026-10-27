@@ -52,6 +52,8 @@ export interface StreamHandlers {
     onToolInput?: (toolCallId: string, name: string, input: unknown) => void;
     onToolOutput?: (toolCallId: string, output: unknown) => void;
     onToolError?: (toolCallId: string, errorText: string) => void;
+    onToolApproval?: (toolCallId: string) => void;
+    onToolDenied?: (toolCallId: string) => void;
     onProviderTool?: (event: ProviderToolPart) => void;
     onFinish?: (assistantMessageId: string | null, usage: Usage | null, durationMs: number | null, turn: CompletedTurn | null) => void;
     /** Anything a later epic adds; ignored rather than treated as an error. */
@@ -136,9 +138,11 @@ export interface NoticeEntry {
     message: string;
 }
 
-export type ToolStatus = 'pending' | 'paused' | 'success' | 'error';
+export type ToolStatus = 'pending' | 'paused' | 'success' | 'error' | 'denied';
 
 export interface ToolEntry {
+    turnId?: string;
+    toolCallId?: string | null;
     kind: 'tool';
     id: string;
     /** `tool` = the developer's own code; `provider_tool` = run inside the provider. */
@@ -164,6 +168,7 @@ export interface ConversationMessage {
     role: 'user' | 'assistant' | 'error';
     status: 'completed' | 'paused' | 'failed';
     parts: DisplayPart[];
+    approval: ToolApproval | null;
     content: string | null;
     attachments: MessageAttachment[];
     usage: Usage | null;
@@ -213,4 +218,22 @@ export type DisplayPart =
 export interface CompletedTurn {
     message: ConversationMessage;
     tool_invocations: ConversationToolInvocation[];
+}
+
+export type ApprovalDecision = 'approve' | 'deny';
+
+export interface ToolApproval {
+    state: 'pending' | 'running';
+    revision: string;
+    requests: { id: string; tool: string; arguments: unknown; reason: string | null }[];
+}
+
+export interface PendingTurnApproval extends ToolApproval {
+    messageId: string;
+}
+
+export interface ApprovalSubmission {
+    messageId: string;
+    revision: string;
+    decisions: Record<string, ApprovalDecision>;
 }

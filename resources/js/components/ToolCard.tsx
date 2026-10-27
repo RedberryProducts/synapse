@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { ChevronDown, Timer, Wrench, Zap } from 'lucide-react';
+import { Button } from '@/elements/Button';
 import { JsonView } from '@/elements/JsonView';
 import { cn } from '@/lib/utils';
 import { ToolStatusBadge } from './ToolStatusBadge';
-import type { ToolEntry } from '@/types/chat';
+import type { ApprovalDecision, ToolEntry } from '@/types/chat';
 
 /**
  * One tool call, inline in the thread — Figma `Inline Tool Call cards`.
@@ -16,7 +17,14 @@ import type { ToolEntry } from '@/types/chat';
  * lightning variant: they ran inside the provider rather than in the developer's
  * own code, and that distinction matters when you're working out who to blame.
  */
-export function ToolCard({ entry }: { entry: ToolEntry }) {
+export interface ToolApprovalControls {
+    reason: string | null;
+    decision?: ApprovalDecision;
+    disabled: boolean;
+    onDecide: (decision: ApprovalDecision) => void;
+}
+
+export function ToolCard({ entry, approval }: { entry: ToolEntry; approval?: ToolApprovalControls }) {
     const [open, setOpen] = useState(false);
 
     const isProviderTool = entry.type === 'provider_tool';
@@ -32,7 +40,7 @@ export function ToolCard({ entry }: { entry: ToolEntry }) {
             <button
                 type="button"
                 onClick={() => setOpen(!open)}
-                aria-expanded={open}
+                aria-expanded={open || Boolean(approval)}
                 aria-label={`${entry.name} tool call`}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left"
             >
@@ -72,19 +80,32 @@ export function ToolCard({ entry }: { entry: ToolEntry }) {
                 </span>
             </button>
 
-            {open && (
+            {(open || approval) && (
                 <div className="flex flex-col gap-4 px-4 pt-1 pb-4">
                     <JsonView label="Arguments" value={entry.arguments} testId="tool-arguments" />
 
-                    {entry.status === 'error' ? (
+                    {approval ? (
+                        <div data-testid="tool-approval" className="flex flex-col gap-3">
+                            <p className="text-sm text-foreground">Approval required</p>
+                            <p className="text-xs text-muted-foreground">{approval.reason ?? 'This tool needs your permission before it can run.'}</p>
+                            <div className="flex gap-2">
+                                <Button size="sm" disabled={approval.disabled} aria-pressed={approval.decision === 'approve'} onClick={() => approval.onDecide('approve')}>
+                                    {approval.decision === 'approve' ? 'Approved' : 'Approve'}
+                                </Button>
+                                <Button size="sm" variant="ghost" disabled={approval.disabled} aria-pressed={approval.decision === 'deny'} onClick={() => approval.onDecide('deny')}>
+                                    {approval.decision === 'deny' ? 'Denied' : 'Deny'}
+                                </Button>
+                            </div>
+                        </div>
+                    ) : entry.status === 'error' || entry.status === 'denied' ? (
                         <JsonView
                             label="Result"
-                            tone="error"
-                            value={entry.error}
+                            tone={entry.status === 'error' ? 'error' : undefined}
+                            value={entry.error ?? entry.result ?? 'The user declined this action.'}
                             testId="tool-result"
                         />
                     ) : entry.status === 'paused' ? (
-                        <p className="text-xs text-subtle-foreground">Approval required. This tool has not run; approvals are not yet supported in Synapse.</p>
+                        <p className="text-xs text-subtle-foreground">This call paused before execution. It has no active approval request.</p>
                     ) : entry.status === 'pending' ? (
                         <p className="text-xs text-subtle-foreground">
                             Still running{entry.providerStatus && ` — provider reports “${entry.providerStatus}”`}.

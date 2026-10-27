@@ -8,6 +8,7 @@ use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasSkills;
+use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Contracts\Tool;
@@ -36,7 +37,7 @@ use Stringable;
  *
  * - `HasStructuredOutput` — `StreamsText::stream()` throws for any agent that
  *   implements it, so carrying it here would break every conversational stream.
- *   Structured agents are invoked undecorated via `prompt()` instead.
+ *   Structured agents use a schema-forwarding subclass and `prompt()` instead.
  * - `RemembersConversations` — the SDK checks both the contract and the
  *   trait. Leaving both off keeps the SDK's `RememberConversation` middleware
  *   and the developer's own store out
@@ -61,6 +62,8 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
      */
     protected TextGenerationOptions $options;
 
+    protected ?ApprovalContinuation $approvalContinuation = null;
+
     /**
      * @param  Message[]  $history
      */
@@ -82,6 +85,12 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
      */
     public static function for(Agent $agent, array $history = []): self
     {
+        if ($agent instanceof HasStructuredOutput) {
+            return Strict::isAppliedTo($agent)
+                ? new StrictSynapseStructuredAgent($agent, $history)
+                : new SynapseStructuredAgent($agent, $history);
+        }
+
         return Strict::isAppliedTo($agent)
             ? new StrictSynapseConversationalAgent($agent, $history)
             : new self($agent, $history);
@@ -113,6 +122,13 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
         return $this->agent instanceof HasTools ? $this->agent->tools() : [];
     }
 
+    public function continuingApproval(ApprovalContinuation $continuation): static
+    {
+        $this->approvalContinuation = $continuation;
+
+        return $this;
+    }
+
     public function middleware(): array
     {
         $middleware = $this->agent instanceof HasMiddleware ? $this->agent->middleware() : [];
@@ -122,6 +138,10 @@ class SynapseConversationalAgent implements Agent, Conversational, HasMiddleware
                 $this->options->cacheInstructions,
                 $this->options->cacheToolDefinitions,
             ));
+        }
+
+        if ($this->approvalContinuation !== null) {
+            array_unshift($middleware, new RecordApprovalResults($this->approvalContinuation));
         }
 
         return $middleware;

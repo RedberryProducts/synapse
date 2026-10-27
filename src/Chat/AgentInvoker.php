@@ -13,12 +13,13 @@ use Laravel\Ai\Responses\StreamedAgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use Laravel\Ai\Streaming\Events\Error;
 use Redberry\Synapse\Discovery\DiscoveredAgent;
+use Redberry\Synapse\Models\SynapseMessage;
 use RuntimeException;
 use Throwable;
 
 class AgentInvoker
 {
-    public const APPROVAL_NOTICE = 'Tool approval is required. Synapse does not support approvals yet; no approval was granted. Start a new message to continue.';
+    public const APPROVAL_NOTICE = 'Tool approval is required. Review the pending tool calls to continue.';
 
     public function __construct(
         protected ConversationWriter $writer,
@@ -26,6 +27,7 @@ class AgentInvoker
         protected AttachmentStore $attachments,
         protected RecordingScope $recording,
         protected ConversationPresenter $presenter,
+        protected ToolApprovals $approvals,
     ) {}
 
     public function handle(
@@ -35,6 +37,7 @@ class AgentInvoker
         StreamEmitter $emitter,
         array $attachments = [],
         ?string $model = null,
+        ?SynapseMessage $resuming = null,
     ): void {
         $conversation = null;
         $recorder = null;
@@ -44,9 +47,13 @@ class AgentInvoker
 
         try {
             $conversation = $this->writer->conversation($conversationId, $discovered->class, $message);
-            $history = $this->history->for($conversation->id);
-            $user = $this->writer->storeUserMessage($conversation, $message, $this->attachments->toArray($attachments));
-            $emitter->conversationStarted($conversation->id, $user->id);
+            if ($resuming === null) {
+                $history = $this->history->for($conversation->id);
+                $user = $this->writer->storeUserMessage($conversation, $message, $this->attachments->toArray($attachments));
+                $emitter->conversationStarted($conversation->id, $user->id);
+            } else {
+                $emitter->approvalResumed($resuming);
+            }
 
             $agent = app($discovered->class);
             if (! $agent instanceof Agent) {
@@ -54,14 +61,22 @@ class AgentInvoker
             }
 
             $structured = $agent instanceof HasStructuredOutput;
-            $target = ! $structured && $agent instanceof Conversational
-                ? SynapseConversationalAgent::for($agent, $history) : $agent;
-            $recorder = new SynapseRecorder($conversation->id, ! $structured);
-            $response = $this->recording->during($target, $recorder, $emitter, function () use ($target, $message, $attachments, $model, $structured, $recorder, $emitter): AgentResponse {
+            $conversational = ! $structured && $agent instanceof Conversational;
+            $history = $resuming !== null ? $this->history->forApproval($resuming, $conversational) : ($conversational ? $history : []);
+            $target = SynapseConversationalAgent::for($agent, $history);
+            $continuation = $resuming === null ? null : new ApprovalContinuation($resuming);
+            if ($continuation !== null) {
+                $target->continuingApproval($continuation);
+            }
+            $input = $continuation?->decisions() ?? $message;
+            $provider = $resuming?->approval['provider'];
+            $model = $resuming?->approval['model'] ?? $model;
+            $recorder = new SynapseRecorder($conversation->id, ! $structured, $continuation);
+            $response = $this->recording->during($target, $recorder, $emitter, function () use ($target, $input, $attachments, $provider, $model, $structured, $recorder, $emitter): AgentResponse {
                 if ($structured) {
-                    return $target->prompt($message, $attachments, model: $model);
+                    return $target->prompt($input, $attachments, provider: $provider, model: $model);
                 }
-                $stream = $target->stream($message, $attachments, model: $model);
+                $stream = $target->stream($input, $attachments, provider: $provider, model: $model);
                 $completed = null;
                 $terminalError = null;
                 $stream->then(function (StreamedAgentResponse $response) use (&$completed): void {
@@ -108,6 +123,7 @@ class AgentInvoker
             $assistant = $this->writer->storeAssistantMessage(
                 $conversation, $recorder->snapshot(), $this->elapsedMs($startedAt), $parts, $status,
                 $response instanceof StructuredAgentResponse ? $response->structured : null,
+                $this->approvals->checkpoint($response, $recorder), $resuming,
             );
             $recorder->linkToMessage($assistant->id);
             $turn = $this->presenter->turn($assistant);
@@ -128,11 +144,14 @@ class AgentInvoker
                     $status = $paused ? 'paused' : 'failed';
                     $parts = $recorder->finish($status, $e);
                     $partial = $recorder->snapshot();
-                    if ($partial->text !== '' || $partial->reasoning !== '' || $partial->steps->isNotEmpty() || $parts !== []) {
-                        $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status);
+                    if ($resuming !== null || $partial->text !== '' || $partial->reasoning !== '' || $partial->steps->isNotEmpty() || $parts !== []) {
+                        $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status, existing: $resuming);
                         $recorder->linkToMessage($assistant->id);
                         $turn = $this->presenter->turn($assistant);
                     }
+                }
+                if ($resuming !== null && $assistant === null) {
+                    $resuming->forceFill(['status' => 'failed', 'approval_state' => null, 'approval' => null])->save();
                 }
                 if (! $paused) {
                     $error = $this->writer->storeError($conversation, $e);

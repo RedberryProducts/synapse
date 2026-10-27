@@ -59,7 +59,9 @@ it('maps denied or failed tool results to an error part', function (bool $denied
     $emitter->event(new ToolCallEvent('call', new ToolCall('tool', 'Search', []), time()));
     $emitter->event(new ToolResultEvent('result', new ToolResult('tool', 'Search', [], 'Unavailable'), $denied, 'Unavailable', time(), denied: $denied));
     $part = json_decode($emitter->written()[2], true);
-    expect($part)->toBe(['type' => 'tool-output-error', 'toolCallId' => 'tool', 'errorText' => 'Unavailable']);
+    expect($part)->toBe($denied
+        ? ['type' => 'tool-output-denied', 'toolCallId' => 'tool']
+        : ['type' => 'tool-output-error', 'toolCallId' => 'tool', 'errorText' => 'Unavailable']);
 })->with([true, false]);
 
 it('substitutes invalid UTF8 instead of dropping a streamed text part', function () {

@@ -51,12 +51,16 @@ class ConversationRepository
             return 0;
         }
 
-        $this->deleteAttachmentFiles($ids);
+        return (new SynapseConversation)->getConnection()->transaction(function () use ($ids): int {
+            SynapseConversation::query()->whereIn('id', $ids)->lockForUpdate()->get();
+            abort_if(SynapseMessage::query()->whereIn('conversation_id', $ids)->where('approval_state', 'running')->exists(),
+                409, 'An approval continuation is running. Reload the conversation before deleting it.');
+            $this->deleteAttachmentFiles($ids);
+            SynapseToolInvocation::query()->whereIn('conversation_id', $ids)->delete();
+            SynapseMessage::query()->whereIn('conversation_id', $ids)->delete();
 
-        SynapseToolInvocation::query()->whereIn('conversation_id', $ids)->delete();
-        SynapseMessage::query()->whereIn('conversation_id', $ids)->delete();
-
-        return SynapseConversation::query()->whereIn('id', $ids)->delete();
+            return SynapseConversation::query()->whereIn('id', $ids)->delete();
+        });
     }
 
     /**

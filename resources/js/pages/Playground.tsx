@@ -6,6 +6,7 @@ import { PlaygroundShell } from '@/composed/PlaygroundShell';
 import { useAgent } from '@/hooks/useAgent';
 import { useConversation } from '@/hooks/useConversation';
 import { usePanelState } from '@/hooks/usePanelState';
+import type { ApprovalDecision } from '@/types/chat';
 import { recall, remember } from '@/lib/lastConversation';
 
 export default function Playground() {
@@ -51,7 +52,10 @@ export default function Playground() {
         }
     }, [slug, conversationId]);
 
-    const { entries, sending, send, reset, clear, totals } = useConversation(slug, conversationId);
+    const { entries, approval, approvalError, loading: conversationLoading, sending, send, reset, clear, totals } = useConversation(slug, conversationId);
+
+    const [decisions, setDecisions] = useState<Record<string, ApprovalDecision>>({});
+    useEffect(() => setDecisions({}), [approval?.revision, conversationId]);
 
     const setConversation = useCallback(
         (id: string | null) => {
@@ -96,7 +100,20 @@ export default function Playground() {
             loading={loading}
             error={error}
             entries={entries}
-            sending={sending}
+            approval={approval}
+            approvalError={approvalError}
+            decisions={decisions}
+            onDecision={(id, decision) => {
+                const selected = { ...decisions, [id]: decision };
+                setDecisions(selected);
+                if (approval?.requests.length === 1) {
+                    void send('', setConversation, { approval: { messageId: approval.messageId, revision: approval.revision, decisions: selected } });
+                }
+            }}
+            onContinueApproval={() => {
+                if (approval) void send('', setConversation, { approval: { messageId: approval.messageId, revision: approval.revision, decisions } });
+            }}
+            sending={sending || conversationLoading}
             totals={totals}
             model={model}
             onModelChange={setModel}

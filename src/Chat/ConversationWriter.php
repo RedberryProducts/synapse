@@ -7,6 +7,7 @@ use Laravel\Ai\Exceptions\StreamErrorException;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Step;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Redberry\Synapse\Models\SynapseConversation;
 use Redberry\Synapse\Models\SynapseMessage;
 use Throwable;
@@ -23,6 +24,8 @@ class ConversationWriter
      * Longest a derived conversation title may be.
      */
     protected const int TITLE_LENGTH = 80;
+
+    public function __construct(protected ToolApprovals $approvals) {}
 
     /**
      * Find the conversation for this turn, creating one when needed.
@@ -53,15 +56,19 @@ class ConversationWriter
         string $content,
         array $attachments = [],
     ): SynapseMessage {
-        $conversation->messages()->where('role', 'assistant')->where('status', 'paused')
-            ->get()->each(function (SynapseMessage $message): void {
-                $message->forceFill(['steps' => array_map(
-                    fn (array $step): array => [...$step, 'replay_blocks' => []],
-                    $message->steps ?? [],
-                )])->save();
-            });
+        return $conversation->getConnection()->transaction(function () use ($conversation, $content, $attachments): SynapseMessage {
+            SynapseConversation::query()->lockForUpdate()->findOrFail($conversation->id);
+            $this->approvals->assertCanSend($conversation->id);
+            $conversation->messages()->where('role', 'assistant')->where('status', 'paused')
+                ->get()->each(function (SynapseMessage $message): void {
+                    $message->forceFill(['steps' => array_map(
+                        fn (array $step): array => [...$step, 'replay_blocks' => []],
+                        $message->steps ?? [],
+                    )])->save();
+                });
 
-        return $this->store($conversation, 'user', content: $content, attachments: $attachments);
+            return $this->store($conversation, 'user', content: $content, attachments: $attachments);
+        });
     }
 
     /**
@@ -77,30 +84,36 @@ class ConversationWriter
         array $parts = [],
         string $status = 'completed',
         ?array $structured = null,
+        ?array $approval = null,
+        ?SynapseMessage $existing = null,
     ): SynapseMessage {
-        $hasUsage = $status !== 'failed' || $response->steps->contains(
+        $hasUsage = ! empty($existing->usage) || $status !== 'failed' || $response->steps->contains(
             fn (Step $step): bool => $step->finishReason !== FinishReason::Unknown,
         );
+
+        $usage = TextUsage::fromArray($existing->usage ?? [])->add($response->usage);
+        $steps = [...($existing->steps ?? []), ...$response->steps->map(fn (Step $step): array => $step->toArray())->all()];
 
         return $this->store(
             $conversation,
             'assistant',
-            content: $response->text,
-            steps: $response->steps->map(fn (Step $step): array => [
-                ...$step->toArray(),
-                'replay_blocks' => $status === 'paused' ? $step->replayBlocks : [],
-            ])->values()->all(),
+            content: implode("\n\n", array_filter([$existing?->content, $response->text], fn (?string $text): bool => filled($text))),
+            steps: array_map(fn (array $step): array => [
+                ...$step, 'replay_blocks' => $status === 'paused' ? $step['replay_blocks'] : [],
+            ], $steps),
             parts: $parts,
             status: $status,
-            usage: $hasUsage ? $response->usage->toArray() : [],
-            inputTokens: $hasUsage ? $response->usage->inputTokens : null,
-            outputTokens: $hasUsage ? $response->usage->outputTokens : null,
-            durationMs: $durationMs,
+            usage: $hasUsage ? $usage->toArray() : [],
+            inputTokens: $hasUsage ? $usage->inputTokens : null,
+            outputTokens: $hasUsage ? $usage->outputTokens : null,
+            durationMs: ($existing->duration_ms ?? 0) + $durationMs,
             meta: array_filter([
                 ...$response->meta->toArray(),
-                'reasoning' => $response->reasoning !== '' ? $response->reasoning : null,
+                'reasoning' => implode("\n\n", array_filter([$existing?->meta['reasoning'] ?? null, $response->reasoning])) ?: null,
                 'structured' => $structured,
             ], fn (mixed $value): bool => $value !== null),
+            approval: $approval,
+            existing: $existing,
         );
     }
 
@@ -149,8 +162,11 @@ class ConversationWriter
         ?int $durationMs = null,
         array $meta = [],
         array $metadata = [],
+        ?array $approval = null,
+        ?SynapseMessage $existing = null,
     ): SynapseMessage {
-        $message = SynapseMessage::query()->create([
+        $message = $existing ?? new SynapseMessage;
+        $message->forceFill([
             'conversation_id' => $conversation->id,
             'role' => $role,
             'content' => $content,
@@ -164,7 +180,9 @@ class ConversationWriter
             'duration_ms' => $durationMs,
             'meta' => $meta,
             'metadata' => $metadata,
-        ]);
+            'approval' => $approval,
+            'approval_state' => $approval === null ? null : 'pending',
+        ])->save();
 
         // Retention and the history list both order by this.
         $conversation->forceFill(['updated_at' => now()])->save();

@@ -24,6 +24,11 @@ class ConversationPresenter
             'id' => $message->id,
             'role' => $message->role,
             'status' => $message->status,
+            'approval' => $message->approval === null ? null : [
+                'state' => $message->approval_state,
+                'revision' => $message->approval['revision'],
+                'requests' => $message->approval['requests'],
+            ],
             'parts' => $this->parts($message),
             'content' => $message->content,
             'attachments' => $this->attachments($message),

@@ -369,8 +369,10 @@ it('keeps stateless turns independent in the same stored conversation', function
     recordTurn('First', slug: 'workbench.app.agents.weather-agent');
     recordTurn('Second', SynapseConversation::sole()->id, 'workbench.app.agents.weather-agent');
     expect($prompts)->toHaveCount(2)
-        ->and($prompts[0])->toBeInstanceOf(WeatherAgent::class)
-        ->and($prompts[1])->toBeInstanceOf(WeatherAgent::class)
+        ->and($prompts[0]->wrapped())->toBeInstanceOf(WeatherAgent::class)
+        ->and($prompts[1]->wrapped())->toBeInstanceOf(WeatherAgent::class)
+        ->and($prompts[0]->messages())->toBe([])
+        ->and($prompts[1]->messages())->toBe([])
         ->and(SynapseMessage::where('role', 'assistant')->pluck('content')->all())->toBe(['Sunny.', 'Rain.']);
 });
 
