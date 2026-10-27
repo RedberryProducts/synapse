@@ -11,7 +11,8 @@ permissions: {}
 
 jobs:
   trigger-task:
-    if: github.event.pull_request.merged == true
+    # Temporarily paused. Restore the merged-PR condition and enable Actions via issue #22.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

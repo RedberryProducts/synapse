@@ -127,7 +127,7 @@ Mostly automated by the hook (`composer hooks`):
 
 ## CI
 
-The repository currently has no automated test-matrix workflow; the existing GitHub workflow triggers an external task. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`.
+The repository currently has no automated test-matrix workflow. The Maestro task-trigger workflow is temporarily disabled in GitHub Actions and its job is disabled in source. [Issue #22](https://github.com/RedberryProducts/synapse/issues/22) tracks restoring the merged-PR condition and enabling the workflow when the integration is needed again. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`.
 
 Compatibility should be checked on both supported Laravel majors (12 and 13), including a fresh install and production boot after `composer install --no-dev`. Browser e2e requires Playwright, Chromium, and current compiled assets.
 
