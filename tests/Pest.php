@@ -4,7 +4,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Ai\Ai;
 use Redberry\Synapse\Chat\StrictSynapseConversationalAgent;
+use Redberry\Synapse\Chat\StrictSynapseStructuredAgent;
 use Redberry\Synapse\Chat\SynapseConversationalAgent;
+use Redberry\Synapse\Chat\SynapseStructuredAgent;
 use Redberry\Synapse\Tests\BrowserTestCase;
 use Redberry\Synapse\Tests\TestCase;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -18,9 +20,9 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
  * Fake an agent's responses for the whole chat pipeline.
  *
  * `Ai::hasFakeGatewayFor()` keys on the concrete class name, and Synapse hands
- * the SDK a `SynapseConversationalAgent` wrapper for conversational agents — so
+ * the SDK a history-isolating wrapper for playground agents — so
  * `SupportAgent::fake()` alone would leave the decorated call talking to a real
- * provider. Registering all three classes is what makes the fake stick
+ * provider. Registering every wrapper class is what makes the fake stick
  * regardless of which path the invoker takes.
  *
  * **Every conversational agent therefore shares one gateway** — the decorator's.
@@ -33,7 +35,7 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
  */
 function fakeAgent(string $agent, array|Closure $responses = []): void
 {
-    foreach ([$agent, SynapseConversationalAgent::class, StrictSynapseConversationalAgent::class] as $class) {
+    foreach ([$agent, SynapseConversationalAgent::class, StrictSynapseConversationalAgent::class, SynapseStructuredAgent::class, StrictSynapseStructuredAgent::class] as $class) {
         Ai::fakeAgent($class, $responses);
     }
 }

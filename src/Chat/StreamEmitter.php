@@ -14,8 +14,10 @@ use Laravel\Ai\Streaming\Events\StreamStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextEnd;
 use Laravel\Ai\Streaming\Events\TextStart;
+use Laravel\Ai\Streaming\Events\ToolApprovalRequest;
 use Laravel\Ai\Streaming\Events\ToolCall;
 use Laravel\Ai\Streaming\Events\ToolResult;
+use Redberry\Synapse\Models\SynapseMessage;
 use Throwable;
 
 /** Maps SDK events to Synapse's SSE contract, with completion after persistence. */
@@ -91,6 +93,14 @@ class StreamEmitter
         ]);
     }
 
+    public function approvalResumed(SynapseMessage $message): void
+    {
+        foreach ($message->approval['requests'] as $request) {
+            $this->toolCalls[$request['id']] = true;
+        }
+        $this->part(['type' => 'data-synapse-resume', 'data' => ['assistantMessageId' => $message->id]]);
+    }
+
     /**
      * Translate one SDK stream event into zero or more protocol parts.
      */
@@ -111,6 +121,15 @@ class StreamEmitter
             return;
         }
 
+        if ($event instanceof ToolApprovalRequest) {
+            foreach ($event->pendingApprovals as $approval) {
+                $this->part(['type' => 'tool-approval-request', 'toolCallId' => $approval->id,
+                    'approvalId' => $approval->id, 'reason' => $approval->reason]);
+            }
+
+            return;
+        }
+
         $part = match (true) {
             $event instanceof StreamStart => ['type' => 'start', 'messageId' => $event->invocationId],
             $event instanceof TextStart => ['type' => 'text-start', 'id' => $event->messageId],
@@ -120,8 +139,9 @@ class StreamEmitter
             $event instanceof ReasoningDelta => ['type' => 'reasoning-delta', 'id' => $event->reasoningId, 'delta' => $event->delta],
             $event instanceof ReasoningEnd => ['type' => 'reasoning-end', 'id' => $event->reasoningId],
             $event instanceof ToolCall => ['type' => 'tool-input-available', 'toolCallId' => $event->toolCall->id, 'toolName' => $event->toolCall->name, 'input' => $event->toolCall->arguments],
-            $event instanceof ToolResult => $event->denied || ! $event->successful
-                ? ['type' => 'tool-output-error', 'toolCallId' => $event->toolResult->id, 'errorText' => $event->error ?? ($event->denied ? 'The tool call was denied.' : 'The tool failed.')]
+            $event instanceof ToolResult && $event->denied => ['type' => 'tool-output-denied', 'toolCallId' => $event->toolResult->id],
+            $event instanceof ToolResult => ! $event->successful
+                ? ['type' => 'tool-output-error', 'toolCallId' => $event->toolResult->id, 'errorText' => $event->error ?? 'The tool failed.']
                 : ['type' => 'tool-output-available', 'toolCallId' => $event->toolResult->id, 'output' => $event->toolResult->result],
             $event instanceof ProviderToolEvent => ['type' => 'data-provider-tool', 'data' => $event->toArray()],
             $event instanceof Citation && $event->citation instanceof UrlCitation => ['type' => 'source-url', 'sourceId' => $event->citation->url, 'url' => $event->citation->url, 'title' => $event->citation->title],

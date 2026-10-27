@@ -113,13 +113,13 @@ The core experience — select an agent and have a real conversation.
 - The playground shows an assistant-side pending response indicator immediately after send, and clears or replaces it on the first meaningful stream event so slow provider startup never looks stalled
 - Synapse owns its SSE wire format and React reader. `StreamEmitter` explicitly maps SDK 1.3 event classes to the established Vercel-style text/reasoning/tool parts and Synapse-specific provider, notice, error, and completion parts. It does not call removed event serialization methods or return the SDK response directly.
 - Reasoning blocks (Anthropic extended thinking, OpenAI o-series, DeepSeek) rendered inline as a collapsible "Thinking…" pane separate from the final answer; reasoning token count shown alongside prompt/completion tokens
-- Structured-output agents (`HasStructuredOutput`) retain Synapse’s existing undecorated `prompt()` path with no prior history. Their completed `StructuredAgentResponse::structured` renders as a JSON card. The installed SDK 1.3.0 still rejects `HasStructuredOutput` in `StreamsText::stream()`; extending this Synapse path is outside this migration.
+- Structured-output agents (`HasStructuredOutput`) use a schema-forwarding `SynapseStructuredAgent` and `prompt()` with no prior user turns. Approval continuations receive the current paused turn only. Their completed `StructuredAgentResponse::structured` renders as a JSON card. The installed SDK 1.3.0 still rejects `HasStructuredOutput` in `StreamsText::stream()`; extending this Synapse path is outside this migration.
 - Conversation persists across page refreshes (stored in Synapse DB)
 - Conversation memory mirrors the agent: multi-turn for `Conversational` agents, independent request/response per message for stateless agents (with a "Stateless" badge) — see Technical Implementation
 
 **Inline tool call cards** (see Feature 3 for detail):
 - When the agent calls a tool, a card appears inline in the chat flow
-- Collapsed state: tool name + status badge (`success` / `error`)
+- Collapsed state: tool name + status badge (`pending` / `paused` / `success` / `denied` / `error`)
 - No disruption to the chat reading flow
 
 **Per-message metadata:**
@@ -160,11 +160,10 @@ $messages = $agent instanceof Conversational ? $agent->messages() : [];
 $messages[] = new UserMessage($prompt->prompt, $prompt->attachments->all());
 ```
 
-So Synapse only wraps `Conversational` agents with the history decorator; stateless agents are invoked as-is, and the SDK naturally sends just the current `UserMessage`:
+Synapse wraps every playground agent so SDK conversation storage stays isolated and approvals can resume. Conversational agents receive thread history; stateless and structured agents receive an empty history for each new user turn:
 
 ```php
-// SynapseConversationalAgent — applied ONLY to agents that already implement
-// Conversational, to feed Synapse's own thread history instead of the agent's store
+// Synapse supplies history according to the original agent capability.
 class SynapseConversationalAgent implements Agent, Conversational, HasTools /*, ... */
 {
     public function __construct(
@@ -180,9 +179,8 @@ class SynapseConversationalAgent implements Agent, Conversational, HasTools /*, 
 }
 
 // Invocation:
-$target = $agent instanceof Conversational
-    ? new SynapseConversationalAgent($agent, $history)  // multi-turn: inject history
-    : $agent;                                           // stateless: current message only
+$history = $agent instanceof Conversational && ! $agent instanceof HasStructuredOutput ? $history : [];
+$target = SynapseConversationalAgent::for($agent, $history);
 ```
 
 **The decorator must forward more than it looks.** The sketch above shows the *intent*; a faithful implementation also has to forward everything the SDK resolves by reflecting on the agent **instance**, because each of those call sites sees the decorator's class instead of the wrapped agent's: `provider()` / `model()` (`Promptable::getProvidersAndModels()`), `timeout()`, the `#[UseSmartestModel]` / `#[UseCheapestModel]` tier (`getDefaultModelFor()`), and `maxSteps` / `maxTokens` / `temperature` / `topP` / `toolChoice` (`TextGenerationOptions::forAgent()`). All of those check a **method before** the attribute, so forwarding methods is enough. `#[Strict]` is the exception — attribute-only, with no method fallback — so it needs a `#[Strict]`-annotated subclass of the decorator, selected by `Strict::isAppliedTo($agent)`. Without this the playground silently runs a different model and different generation settings than the Info panel reports. See [plans/epic-03-chat-mvp](plans/epic-03-chat-mvp/PLAN.md#1-the-decorator-is-riskier-than-the-prd-sketch-suggests).
@@ -199,14 +197,14 @@ This approach:
 **Streaming flow:**
 1. User sends message → `POST /synapse/api/chat/{agent}/send` (see HTTP API surface in Tech Stack & Architecture)
 2. Synapse stores user message in `synapse_messages`
-3. **If the target agent is `Conversational`**, Synapse wraps it in `SynapseConversationalAgent` with the full thread history; **otherwise it uses the agent as-is** (no history injection — stateless, current message only). See "Synapse's approach" above
+3. Synapse wraps the agent with full history for conversational agents, or empty history for stateless/structured agents. Structured agents use a schema-forwarding subclass and `prompt()` instead of streaming. See "Synapse's approach" above
 4. Calls `$target->stream($currentMessage, $attachments, …)` → returns `StreamableAgentResponse`
 5. The frontend immediately inserts a transient assistant placeholder so the thread shows `Loading...` before the first SSE part arrives; later cleanup removes only entries still marked pending and preserves any reasoning already received
-6. `AgentInvoker` iterates events through the scoped recorder and explicit `StreamEmitter` mapper. Preliminary tool results never settle cards; failed or denied results emit `tool-output-error`. Invalid UTF-8 is substituted. SDK step endings are held until persistence finishes. The stream has one start, one `data-synapse-end`, and one `[DONE]`; successful/paused turns also emit one `finish`. Completion carries the saved public turn projection, so live completion and reload use identical parts/tool observations. A premature browser transport EOF becomes an inline error. An SDK response with no completion reason is retained as failed partial output.
+6. `AgentInvoker` iterates events through the scoped recorder and explicit `StreamEmitter` mapper. Preliminary tool results never settle cards; failed results emit `tool-output-error`, denied results emit `tool-output-denied`, and pending requests emit `tool-approval-request`. Invalid UTF-8 is substituted. SDK step endings are held until persistence finishes. The stream has one start, one `data-synapse-end`, and one `[DONE]`; successful/paused turns also emit one `finish`. Completion carries the saved public turn projection, so live completion and reload use identical parts/tool observations. A premature browser transport EOF becomes an inline error. An SDK response with no completion reason is retained as failed partial output.
 
 7. `AgentInvoker` owns completion and failure. Its `then()` callback only captures the successful SDK response; persistence happens after stream consumption. `SynapseRecorder` accumulates ordered text/reasoning/tool/notice parts and canonical SDK steps. A completed or paused response is written once through `ConversationWriter`; a failure retains useful partial output and completed steps before one rich error row. A failure before any output creates no assistant row. Unknown usage on an incomplete first step stays null, not zero.
 8. `MessageHistory` reads the prior thread **before** storing the new user message, preventing duplication of the current prompt. It expands each stored SDK step into assistant text/calls followed by matching tool results, then the next step. Visible text from an unfinished streamed step is saved as an additional SDK-shaped step with an unknown finish reason, so subsequent prompts retain it even after completed tool steps; it contributes no invented usage. Failed unanswered calls receive explicit interrupted-result placeholders; error cards and notices never become model context. Tool-call deserialization preserves provider fields such as Gemini thought signatures. Paused unanswered calls and raw replay blocks are excluded from new prompts. Closed turns discard raw blocks; a new prompt expires blocks retained on an earlier paused turn.
-9. `RecordingScope` is container-scoped and active only inside `during()`, with `finally` restoration. Class listeners are registered once; they do not accumulate closures or remove application listeners. Prompt identity and parent/invocation IDs isolate the root run. No global SDK store binding, conversation participant, or SDK conversation ID is used. Structured agents retain the existing undecorated, single-shot exception.
+9. `RecordingScope` is container-scoped and active only inside `during()`, with `finally` restoration. Class listeners are registered once; they do not accumulate closures or remove application listeners. Prompt identity and parent/invocation IDs isolate the root run. No global SDK store binding, conversation participant, or SDK conversation ID is used. Structured agents use the schema-forwarding decorator and remain single-shot.
 
 
 **Flushing — guard on `PHP_SAPI`, never on `headers_sent()`.** Each SSE part is pushed with `ob_flush(); flush();` as it is written, which is what makes the dashboard live. The guard on that flush must be the SAPI, exactly as Symfony's `Response::send()` and Laravel's own `eventStream()` do it. `headers_sent()` looks like the right question and is not: the stock `php.ini` sets `output_buffering = 4096`, so the first `echo` lands in PHP's own buffer and the headers are therefore *never* sent — the guard answers "no" for every part, of every run, and the whole conversation is assembled and painted at once. Measured on nginx + PHP-FPM with the two guards and nothing else different: **2ms to first byte versus 4019ms of a 4020ms run.** No test tier can catch this, because the feature suite and the browser driver both run Laravel in-process on the CLI SAPI, where flushing is deliberately off — `bin/check-streaming.sh` is the gate instead. `Synapse::streams()` exposes the same rule to the UI so a runtime that cannot stream says so rather than looking hung.
@@ -291,7 +289,13 @@ ToolFailed($invocationId, $toolInvocationId, $agent, $tool, $arguments, $excepti
 | `Streaming\Events\ToolCall` | `$event->toolCall->id`, `$event->toolCall->name`, `$event->toolCall->arguments`, `$event->toolCall->reasoningId` |
 | `Streaming\Events\ToolResult` | `$event->toolResult->id`, `$event->toolResult->name`, `$event->toolResult->result`, `$event->successful`, `$event->error` |
 
-**Tool result mapping** — Synapse explicitly maps SDK `ToolResult` events. `preliminary` child output is ignored until the parent settles; `denied` or unsuccessful results become `tool-output-error`, while successful final results become `tool-output-available`. Handler exceptions use the invocation catch-all. Approval pauses emit an unsupported-approval notice and persist `paused` tool observations with no execution ID or result. The SDK’s stateless `ApprovalNotResumableException` gets the same paused presentation. No approve/resume endpoint is provided.
+**Tool result mapping** — Synapse explicitly maps SDK `ToolResult` events. `preliminary` child output is ignored until the parent settles; `denied` results become `tool-output-denied`, unsuccessful results become `tool-output-error`, while successful final results become `tool-output-available`. Handler exceptions use the invocation catch-all. Approval pauses persist `paused` observations plus a durable checkpoint. `POST /api/chat/{agent}/messages/{message}/approvals` accepts a revision and explicit call-ID-keyed approve/deny decisions for the complete batch. The dashboard gate and web/CSRF middleware apply. A transaction locks the conversation and claims the pending checkpoint once. Stale, concurrent, cross-agent, and incomplete decisions cannot execute a tool.
+
+**Approval continuation** — `MessageHistory::forApproval()` includes the paused SDK steps and provider replay blocks; normal history still excludes unanswered calls. `Decisions` resumes the saved provider/model without failover or a new user message. The original assistant row and tool observation identities are retained; new steps, display parts, duration, and SDK usage are merged once. Approved pending executions are correlated in SDK request order, with name/argument checks, so identical calls retain their own output and timing. `RecordApprovalResults` saves resolved results before application step middleware or the next provider request; streaming result events also checkpoint them. A subsequent model failure retains completed tool results. Denial supplies a result explaining the decision, allowing the model to continue without executing the rejected tool.
+
+**Approval UI** — pending cards show arguments, the SDK reason, and Approve/Deny. One request submits immediately; a batch requires a choice for every request followed by Continue with decisions. Pending/running approvals disable sends and model selection; a new conversation remains available. Refresh restores the checkpoint. Duplicate submissions return 409 and the client reloads the saved state rather than retrying execution. An interrupted process can leave a running claim: the UI reports that outcome as unresolved, with no automatic retry. Deletion/pruning/clearing refuses conversations with running approval claims so an active execution cannot write into deleted history.
+
+**Supported scope** — SDK `Tool` instances implementing `Approvable`, including custom/SDK tools, `McpTool`, `McpServerTool`, and approval before an `AgentTool` delegation. Provider-hosted tools and approvals raised inside a child agent are excluded. No SDK fork, wildcard approval, argument editing, or persistent always-approve setting is added.
 
 **Provider-native tool events** — the Anthropic, OpenAI and xAI gateways yield `Streaming\Events\ProviderToolEvent` for built-in tools like web search, web fetch, file search, and code interpreter (no `InvokingTool` / `ToolInvoked` Laravel events fire for these — they only appear in the stream). Synapse renders them as tool cards visually distinguished from user-defined tools (⚡ `provider / tool_name`) with `$event->type`, `$event->data`, and `$event->status`.
 
@@ -614,6 +618,7 @@ Synapse mirrors Horizon's proven single-page-app structure:
 | `GET` | `/synapse/api/agents` | List discovered agents with card metadata (Feature 1) |
 | `GET` | `/synapse/api/agents/{agent}` | Full agent detail: config, system prompt, tools, middleware (Feature 4) |
 | `POST` | `/synapse/api/chat/{agent}/send` | Send a message (`multipart/form-data`: `message` + optional `attachments[]`, `provider`, `model` overrides); responds with the Vercel-protocol SSE stream (Feature 2) |
+| `POST` | `/synapse/api/chat/{agent}/messages/{message}/approvals` | Submit the current revision and explicit decisions for all pending calls; resumes the original turn over SSE |
 | `GET` | `/synapse/api/attachments/{message}/{index}` | Stream a stored attachment (thumbnails in chat/replay); gated like every other route |
 | `GET` | `/synapse/api/conversations` | Paginated conversation history with aggregates; supports `search`, `agents[]`, `status`, `tools[]`, `from`, `to`, `sort`, `page` query params (Feature 5) |
 | `GET` | `/synapse/api/conversations/{id}` | Full message thread for conversation replay (Feature 5) |
@@ -694,7 +699,7 @@ The `parts` column holds the display sequence in array order. Each block has a s
 
 `status` is `completed`, `paused`, or `failed`; the database defaults to `completed`. `input_tokens` and `output_tokens` promote the inclusive counts in `TextUsage::toArray()`. Cache counts and reasoning counts are optional subsets; totals must not add them again. Existing content, attachments, usage, meta, metadata, duration, timestamps, and indexes remain.
 
-A fourth, self-contained migration transforms empty legacy storage. It refuses any rows in any Synapse table before altering schema, on both upgrade and rollback. It never clears data or accesses SDK tables. Existing installations must stop Synapse traffic and explicitly clear their history/attachments first; see [the reset procedure](DEV.md#laravel-ai-13-storage-reset). A fifth self-contained migration adds nullable model-call and provider fields to observations and makes execution IDs nullable. It refuses rollback while observations exist. The first three published migrations remain unchanged.
+A fourth, self-contained migration transforms empty legacy storage. It refuses any rows in any Synapse table before altering schema, on both upgrade and rollback. It never clears data or accesses SDK tables. Existing installations must stop Synapse traffic and explicitly clear their history/attachments first; see [the reset procedure](DEV.md#laravel-ai-13-storage-reset). A fifth self-contained migration adds nullable model-call and provider fields to observations and makes execution IDs nullable. It refuses rollback while observations exist. The first three published migrations remain unchanged. A sixth additive migration adds nullable `approval_state` and `approval` text columns to messages without resetting existing history. `approval_state` is pending/running or null; private `approval` stores the SDK pending requests, revision, provider/model, and submitted decisions. Only state, revision, and pending requests are projected to the browser. Pre-upgrade paused rows have no checkpoint and are not resumable.
 
 ### Tables
 
@@ -717,6 +722,8 @@ Schema::create('synapse_messages', function (Blueprint $table) {
     $table->text('steps')->nullable();            // private SDK Step::toArray() sequence
     $table->text('parts')->nullable();            // ordered display blocks with stable per-turn IDs
     $table->string('status', 25)->default('completed');
+    $table->string('approval_state')->nullable();
+    $table->text('approval')->nullable();
     $table->text('usage');                        // TextUsage::toArray(), including nullable subsets
     $table->unsignedInteger('input_tokens')->nullable();      // inclusive input count
     $table->unsignedInteger('output_tokens')->nullable();     // inclusive output count
@@ -740,7 +747,7 @@ Schema::create('synapse_tool_invocations', function (Blueprint $table) {
     $table->string('name');                       // tool name, or provider tool type (anthropic.web_search)
     $table->text('arguments');                    // JSON
     $table->text('result')->nullable();           // JSON
-    $table->string('status', 25);                 // pending | success | error (normalized)
+    $table->string('status', 25);                 // pending | paused | success | denied | error (normalized)
     $table->string('provider_status')->nullable(); // the provider's own word for it, unnormalized
     $table->text('error')->nullable();
     $table->unsignedInteger('duration_ms')->nullable();

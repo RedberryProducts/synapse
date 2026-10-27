@@ -414,7 +414,7 @@ it('publishes resources that remain loadable without Synapse classes', function 
     $migrationFiles = File::files(database_path('migrations'));
     $publishedProvider = File::get(app_path('Providers/SynapseServiceProvider.php'));
 
-    expect($migrationFiles)->toHaveCount(5)
+    expect($migrationFiles)->toHaveCount(6)
         ->and($publishedProvider)->toContain('extends ServiceProvider')
         ->and($publishedProvider)->not->toContain('extends SynapseApplicationServiceProvider')
         ->and($publishedProvider)->toContain('in_array($user?->email')

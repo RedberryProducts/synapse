@@ -11,7 +11,7 @@ import { config } from '@/lib/config';
 import { ChatThread } from './ChatThread';
 import { InfoPanel, type InfoTab } from './InfoPanel';
 import type { AgentDetail } from '@/types/agent';
-import type { ChatEntry } from '@/types/chat';
+import type { ApprovalDecision, ChatEntry, PendingTurnApproval } from '@/types/chat';
 
 /**
  * The playground page frame: agent header, chat thread, composer, Info panel.
@@ -22,6 +22,11 @@ export function PlaygroundShell({
     loading,
     error,
     entries,
+    approval,
+    approvalError,
+    decisions,
+    onDecision,
+    onContinueApproval,
     sending,
     totals,
     model,
@@ -41,6 +46,11 @@ export function PlaygroundShell({
     loading: boolean;
     error: string | null;
     entries: ChatEntry[];
+    approval: PendingTurnApproval | null;
+    approvalError: string | null;
+    decisions: Record<string, ApprovalDecision>;
+    onDecision: (id: string, decision: ApprovalDecision) => void;
+    onContinueApproval: () => void;
     sending: boolean;
     totals: { prompt: number; completion: number };
     model: string | null;
@@ -113,7 +123,7 @@ export function PlaygroundShell({
                         <ConversationMenu
                             onNew={onNewConversation}
                             onClear={onClearConversation}
-                            canClear={started}
+                            canClear={started && !sending && approval?.state !== 'running'}
                         />
 
                         {!panelOpen && (
@@ -144,7 +154,16 @@ export function PlaygroundShell({
                 )}
 
                 {agent?.available !== false || started ? (
-                    <ChatThread entries={entries} agentModel={agent?.model} />
+                    <ChatThread entries={entries} agentModel={agent?.model} approvalFor={(entry) => {
+                        if (!approval || entry.kind !== 'tool' || entry.turnId !== approval.messageId) return undefined;
+                        const request = approval.requests.find((request) => request.id === entry.toolCallId);
+                        return request ? {
+                            reason: request.reason,
+                            decision: decisions[request.id],
+                            disabled: sending || approval.state === 'running' || agentMissing || !agent?.available,
+                            onDecide: (decision) => onDecision(request.id, decision),
+                        } : undefined;
+                    }} />
                 ) : (
                     <div className="flex-1" />
                 )}
@@ -152,12 +171,25 @@ export function PlaygroundShell({
                 {agent?.available !== false && (
                     <div className="px-8 pt-2 pb-6">
                         <div className="mx-auto max-w-3xl">
+                            {approval && (
+                                <div data-testid="approval-summary" className="mb-3 flex flex-col gap-2 text-sm text-muted-foreground" role="status">
+                                    <p>{approval.state === 'running'
+                                        ? 'Approval decisions submitted. The run may still be processing. Reload to check its status; do not repeat the action.'
+                                        : 'Review the tool calls above to continue, or start a new conversation.'}</p>
+                                    {approval.requests.length > 1 && approval.state === 'pending' && (
+                                        <Button size="sm" disabled={sending || agentMissing || !approval.requests.every((request) => decisions[request.id])} onClick={onContinueApproval}>
+                                            Continue with decisions
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+                            {approvalError && <p role="alert" className="mb-3 text-sm text-destructive">{approvalError}</p>}
                             <ChatComposer
                                 onSend={onSend}
                                 models={agent?.models ?? []}
                                 model={model}
                                 onModelChange={onModelChange}
-                                disabled={sending || agentMissing}
+                                disabled={sending || agentMissing || Boolean(approval)}
                                 autoFocus={!started}
                             />
                         </div>

@@ -1,5 +1,6 @@
 import { basePath } from './config';
 import type {
+    ApprovalSubmission,
     ChatError,
     CompletedTurn,
     ProviderToolPart,
@@ -28,13 +29,17 @@ export async function streamChat(
         conversation_id?: string | null;
         model?: string | null;
         files?: File[];
+        approval?: ApprovalSubmission;
     },
     handlers: StreamHandlers,
     signal?: AbortSignal,
 ): Promise<void> {
     const hasFiles = (body.files?.length ?? 0) > 0;
 
-    const response = await fetch(`${basePath}/api/chat/${encodeURIComponent(slug)}/send`, {
+    const endpoint = body.approval
+        ? `messages/${encodeURIComponent(body.approval.messageId)}/approvals`
+        : 'send';
+    const response = await fetch(`${basePath}/api/chat/${encodeURIComponent(slug)}/${endpoint}`, {
         method: 'POST',
         signal,
         headers: {
@@ -45,11 +50,12 @@ export async function streamChat(
             'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': csrfToken,
         },
-        body: hasFiles ? toFormData(body) : JSON.stringify(body),
+        body: body.approval ? JSON.stringify(body.approval) : (hasFiles ? toFormData(body) : JSON.stringify(body)),
     });
 
     if (!response.ok || !response.body) {
-        throw new Error(`Synapse chat request failed: ${response.status}`);
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message ?? `Synapse chat request failed: ${response.status}`);
     }
 
     const reader = response.body.getReader();
@@ -148,6 +154,14 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
 
         case 'tool-output-available':
             if (!part.preliminary) handlers.onToolOutput?.(part.toolCallId ?? '', part.output);
+            break;
+
+        case 'tool-approval-request':
+            handlers.onToolApproval?.(part.toolCallId ?? '');
+            break;
+
+        case 'tool-output-denied':
+            handlers.onToolDenied?.(part.toolCallId ?? '');
             break;
 
         case 'tool-output-error':

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Redberry\Synapse\Chat\AgentInvoker;
 use Redberry\Synapse\Chat\AttachmentStore;
 use Redberry\Synapse\Chat\StreamEmitter;
+use Redberry\Synapse\Chat\ToolApprovals;
 use Redberry\Synapse\Discovery\AgentDiscovery;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -24,6 +25,7 @@ class ChatController
         AgentDiscovery $discovery,
         AgentInvoker $invoker,
         AttachmentStore $store,
+        ToolApprovals $approvals,
     ): StreamedResponse {
         $validated = $request->validate([
             'message' => ['required', 'string'],
@@ -41,6 +43,7 @@ class ChatController
         $discovered = $discovery->find($agent);
 
         abort_if($discovered === null, 404, 'Agent not found.');
+        $approvals->assertCanSend($validated['conversation_id'] ?? null);
 
         // Uploads are moved to the disk before the stream opens: once the
         // response is being sent there is no way to report a storage failure
@@ -80,5 +83,34 @@ class ChatController
                 'X-Accel-Buffering' => 'no',
             ],
         );
+    }
+
+    public function approve(
+        Request $request,
+        string $agent,
+        string $message,
+        AgentDiscovery $discovery,
+        ToolApprovals $approvals,
+        AgentInvoker $invoker,
+    ): StreamedResponse {
+        $validated = $request->validate([
+            'revision' => ['required', 'uuid'],
+            'decisions' => ['required', 'array', 'min:1'],
+            'decisions.*' => ['required', 'in:approve,deny'],
+        ]);
+        $discovered = $discovery->find($agent);
+        abort_if($discovered === null, 404, 'Agent not found.');
+        $paused = $approvals->claim($message, $discovered->class, $validated['revision'], $validated['decisions']);
+
+        return response()->stream(function () use ($invoker, $discovered, $paused): void {
+            ignore_user_abort(true);
+            $invoker->handle($discovered, '', $paused->conversation_id, new StreamEmitter, resuming: $paused);
+        }, headers: [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache, no-transform',
+            'Connection' => 'keep-alive',
+            'x-vercel-ai-ui-message-stream' => 'v1',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 }

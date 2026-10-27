@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteConversation, getConversation } from '@/lib/api';
 import { streamChat } from '@/lib/stream';
 import type {
+    ApprovalSubmission,
+    PendingTurnApproval,
     AssistantEntry,
     ChatEntry,
     Conversation,
@@ -28,6 +30,8 @@ import type {
  * refresh lands back on the same thread.
  */
 export function useConversation(slug: string | undefined, conversationId: string | null) {
+    const [approval, setApproval] = useState<PendingTurnApproval | null>(null);
+    const [approvalError, setApprovalError] = useState<string | null>(null);
     const [entries, setEntries] = useState<ChatEntry[]>([]);
     const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -51,6 +55,8 @@ export function useConversation(slug: string | undefined, conversationId: string
     useEffect(() => {
         abort.current?.abort();
         setEntries([]);
+        setApproval(null);
+        setApprovalError(null);
         loaded.current = null;
         provider.current = null;
     }, [slug]);
@@ -59,6 +65,8 @@ export function useConversation(slug: string | undefined, conversationId: string
     useEffect(() => {
         if (!conversationId) {
             setEntries([]);
+            setApproval(null);
+            setApprovalError(null);
             loaded.current = null;
 
             return;
@@ -79,6 +87,7 @@ export function useConversation(slug: string | undefined, conversationId: string
             .then((conversation) => {
                 loaded.current = conversation.id;
                 setEntries(replay(conversation));
+                setApproval(pendingApproval(conversation));
             })
             .catch(() => {
                 // A deleted or unknown id just leaves an empty playground.
@@ -94,11 +103,11 @@ export function useConversation(slug: string | undefined, conversationId: string
         async (
             message: string,
             onConversation: (id: string) => void,
-            options: { files?: File[]; model?: string | null } = {},
+            options: { files?: File[]; model?: string | null; approval?: ApprovalSubmission } = {},
         ) => {
             const files = options.files ?? [];
 
-            if (!slug || sending || (message.trim() === '' && files.length === 0)) {
+            if (!slug || loading || sending || abort.current || (!options.approval && (approval || (message.trim() === '' && files.length === 0)))) {
                 return;
             }
 
@@ -106,30 +115,39 @@ export function useConversation(slug: string | undefined, conversationId: string
             abort.current = controller;
 
             setSending(true);
+            setApprovalError(null);
 
-            const turnId = `turn-${Date.now()}`;
+            const turnId = options.approval?.messageId ?? `turn-${Date.now()}`;
 
-            setEntries((current) => [
-                ...current,
-                {
-                    kind: 'user',
-                    id: `${turnId}-user`,
-                    content: message,
-                    // Shown from the local file until the turn is replayed from
-                    // the server, which is when a real URL exists.
-                    attachments: files.map((file) => ({
-                        type: file.type,
-                        name: file.name,
-                        url: URL.createObjectURL(file),
-                    })),
-                },
-                pendingAssistant(turnId),
-            ]);
+            if (options.approval) {
+                setApproval((current) => current ? { ...current, state: 'running' } : null);
+                setEntries((current) => current.map((entry) =>
+                    entry.kind === 'tool' && entry.turnId === turnId && entry.toolCallId && options.approval?.decisions[entry.toolCallId] === 'approve'
+                        ? { ...entry, status: 'pending' } : entry,
+                ));
+            } else {
+                setEntries((current) => [
+                    ...current,
+                    {
+                        kind: 'user',
+                        id: `${turnId}-user`,
+                        content: message,
+                        // Shown from the local file until the turn is replayed from
+                        // the server, which is when a real URL exists.
+                        attachments: files.map((file) => ({
+                            type: file.type,
+                            name: file.name,
+                            url: URL.createObjectURL(file),
+                        })),
+                    },
+                    pendingAssistant(turnId),
+                ]);
+            }
 
             try {
                 await streamChat(
                     slug,
-                    { message, conversation_id: conversationId, model: options.model, files },
+                    { message, conversation_id: conversationId, model: options.model, files, approval: options.approval },
                     {
                         onConversation: (id) => {
                             // Claim it before the URL changes, so the load
@@ -164,6 +182,7 @@ export function useConversation(slug: string | undefined, conversationId: string
                                 {
                                     kind: 'tool',
                                     id: `${turnId}:${toolCallId}`,
+                                    turnId, toolCallId,
                                     type: 'tool',
                                     name,
                                     provider: null,
@@ -178,7 +197,7 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onToolOutput: (toolCallId, output) =>
                             setEntries((current) =>
-                                updateTool(dropPendingAssistant(current, turnId), `${turnId}:${toolCallId}`, (entry) => ({
+                                updateTool(dropPendingAssistant(current, turnId), toolEntryId(current, turnId, toolCallId), (entry) => ({
                                     ...entry,
                                     status: 'success',
                                     result: output,
@@ -187,12 +206,18 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         onToolError: (toolCallId, errorText) =>
                             setEntries((current) =>
-                                updateTool(dropPendingAssistant(current, turnId), `${turnId}:${toolCallId}`, (entry) => ({
+                                updateTool(dropPendingAssistant(current, turnId), toolEntryId(current, turnId, toolCallId), (entry) => ({
                                     ...entry,
                                     status: 'error',
                                     error: errorText,
                                 })),
                             ),
+
+                        onToolApproval: (toolCallId) => setEntries((current) =>
+                            updateTool(current, toolEntryId(current, turnId, toolCallId), (entry) => ({ ...entry, status: 'paused' }))),
+
+                        onToolDenied: (toolCallId) => setEntries((current) =>
+                            updateTool(current, toolEntryId(current, turnId, toolCallId), (entry) => ({ ...entry, status: 'denied' }))),
 
                         // Held in a ref rather than state: nothing renders it on
                         // its own, and it is read while folding a later event.
@@ -262,17 +287,28 @@ export function useConversation(slug: string | undefined, conversationId: string
                                 },
                             ]),
 
-                        onFinish: (assistantMessageId, usage, durationMs, turn) =>
+                        onFinish: (assistantMessageId, usage, durationMs, turn) => {
+                            setApproval(turn?.message.approval ? { ...turn.message.approval, messageId: turn.message.id } : null);
                             setEntries((current) =>
-                                turn ? completeTurn(current, turnId, turn) : settleTurn(current, turnId, assistantMessageId, usage, durationMs),
-                            ),
+                                turn ? completeTurn(current, turnId, turn, Boolean(options.approval)) : settleTurn(current, turnId, assistantMessageId, usage, durationMs),
+                            );
+                        },
                     },
                     controller.signal,
                 );
             } catch (error) {
                 // Anything the agent itself throws already arrived as an error
                 // part; this is the transport failing (network, aborted, 5xx).
-                if (!controller.signal.aborted) {
+                if (!controller.signal.aborted && options.approval && conversationId) {
+                    // The server may already have claimed or completed the run.
+                    // Reload its state instead of offering a blind retry.
+                    setApprovalError(error instanceof Error ? error.message : 'The approval request failed.');
+                    const saved = await getConversation(conversationId, controller.signal).catch(() => null);
+                    if (saved) {
+                        setEntries(replay(saved));
+                        setApproval(pendingApproval(saved));
+                    }
+                } else if (!controller.signal.aborted) {
                     setEntries((current) => [
                         ...dropPendingAssistant(current, turnId),
                         {
@@ -294,12 +330,14 @@ export function useConversation(slug: string | undefined, conversationId: string
                 abort.current = null;
             }
         },
-        [slug, sending, conversationId],
+        [slug, loading, sending, conversationId, approval],
     );
 
     const reset = useCallback(() => {
         abort.current?.abort();
         setEntries([]);
+        setApproval(null);
+        setApprovalError(null);
     }, []);
 
     const clear = useCallback(async () => {
@@ -312,9 +350,11 @@ export function useConversation(slug: string | undefined, conversationId: string
         }
 
         setEntries([]);
+        setApproval(null);
+        setApprovalError(null);
     }, [conversationId]);
 
-    return { entries, sending, loading, send, reset, clear, totals: totalsOf(entries) };
+    return { entries, approval, approvalError, sending, loading, send, reset, clear, totals: totalsOf(entries) };
 }
 
 /* ── Assistant text ───────────────────────────────────────────────────────── */
@@ -600,7 +640,7 @@ function replayMessage(message: ConversationMessage, tools: Map<string, Conversa
         const id = `${message.id}:${part.id}`;
         if (part.type === 'tool') {
             const tool = tools.get(part.tool_invocation_id);
-            if (tool) entries.push(toToolEntry(tool));
+            if (tool) entries.push({ ...toToolEntry(tool), turnId: message.id });
         } else if (part.type === 'notice') {
             entries.push({ kind: 'notice', id, message: part.message });
         } else {
@@ -626,8 +666,10 @@ function replayMessage(message: ConversationMessage, tools: Map<string, Conversa
     }));
 }
 
-function completeTurn(entries: ChatEntry[], turnId: string, turn: CompletedTurn): ChatEntry[] {
-    const user = entries.findIndex((entry) => entry.id === `${turnId}-user`);
+function completeTurn(entries: ChatEntry[], turnId: string, turn: CompletedTurn, resuming: boolean): ChatEntry[] {
+    const user = resuming
+        ? entries.map((entry) => entry.kind).lastIndexOf('user')
+        : entries.findIndex((entry) => entry.id === `${turnId}-user`);
     if (user < 0) return entries;
     const tools = new Map(turn.tool_invocations.map((tool) => [tool.id, tool]));
     return [
@@ -639,7 +681,7 @@ function completeTurn(entries: ChatEntry[], turnId: string, turn: CompletedTurn)
 
 function toToolEntry(invocation: ConversationToolInvocation): ToolEntry {
     return {
-        kind: 'tool', id: invocation.id, type: invocation.type, name: invocation.name,
+        kind: 'tool', toolCallId: invocation.tool_call_id, id: invocation.id, type: invocation.type, name: invocation.name,
         provider: invocation.provider, arguments: invocation.arguments,
         result: invocation.result, status: invocation.status, providerStatus: invocation.provider_status,
         error: invocation.error, durationMs: invocation.duration_ms,
@@ -703,4 +745,13 @@ function totalsOf(entries: ChatEntry[]) {
         },
         { prompt: 0, completion: 0 },
     );
+}
+
+function pendingApproval(conversation: Conversation): PendingTurnApproval | null {
+    const message = conversation.messages.find((message) => Boolean(message.approval));
+    return message?.approval ? { ...message.approval, messageId: message.id } : null;
+}
+
+function toolEntryId(entries: ChatEntry[], turnId: string, callId: string): string {
+    return entries.find((entry) => entry.kind === 'tool' && entry.turnId === turnId && entry.toolCallId === callId)?.id ?? `${turnId}:${callId}`;
 }

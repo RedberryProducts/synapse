@@ -30,6 +30,7 @@ Route::prefix('api')->group(function (): void {
 
     // Feature 2 — Chat playground (SSE)
     Route::post('/chat/{agent}/send', [ChatController::class, 'send']);
+    Route::post('/chat/{agent}/messages/{message}/approvals', [ChatController::class, 'approve']);
 
     // Attachments
     Route::get('/attachments/{message}/{index}', [AttachmentsController::class, 'show']);

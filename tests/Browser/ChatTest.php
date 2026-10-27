@@ -13,8 +13,10 @@ use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
+use Redberry\Synapse\Tests\Fixtures\ApprovalResumeAgent;
 use Redberry\Synapse\Tests\Fixtures\ApprovalSearchTool;
 use Redberry\Synapse\Tests\Fixtures\InterruptedAnswerAgent;
 use Redberry\Synapse\Tests\Fixtures\StepSequenceAgent;
@@ -646,16 +648,15 @@ it('shows an approval pause without leaving the composer loading', function () {
     $page = visit('/synapse/playground/workbench.app.agents.support-agent');
     $page->type('@composer-input', 'Search')->click('Send');
     $page->assertPresent('[data-tool-status=paused]')
-        ->assertSee('Synapse does not support approvals yet')
+        ->assertPresent('@tool-approval')
         ->assertMissing('@message-assistant-loading')
-        ->click('[aria-label="ApprovalSearchTool tool call"]')
-        ->assertSeeIn('@tool-card', 'This tool has not run');
+        ->assertSeeIn('@tool-approval', 'Approval required');
     $page->type('@composer-input', 'Another question');
-    expect($page->script("document.querySelector('[aria-label=\"Send message\"]').disabled"))->toBeFalse();
+    expect($page->script("document.querySelector('[aria-label=\"Send message\"]').disabled"))->toBeTrue();
     $id = SynapseConversation::sole()->id;
     visit("/synapse/playground/workbench.app.agents.support-agent?c={$id}")
         ->assertPresent('[data-tool-status=paused]')
-        ->assertSee('Synapse does not support approvals yet')
+        ->assertPresent('@tool-approval')
         ->assertNoJavaScriptErrors();
 });
 
@@ -683,7 +684,14 @@ it('keeps usage visible when a tool-only turn stops', function (string $status) 
     app()->instance(SupportAgent::class, new StepSequenceAgent([
         new StepResponse('Recovered.', [], FinishReason::Stop, new TextUsage(50, 10), new Meta('openai', 'test')),
     ]));
-    $page->type('@composer-input', 'Continue without tools')->click('Send');
+    if ($status === 'paused') {
+        app()->instance(SupportAgent::class, new ApprovalResumeAgent([
+            new ToolResult('counted-tool', $name, ['query' => 'hoodie', 'entry' => '42'], 'The user declined this action.', denied: true),
+        ], 'Recovered.', new TextUsage(50, 10)));
+        $page->click('Deny');
+    } else {
+        $page->type('@composer-input', 'Continue without tools')->click('Send');
+    }
     $page->assertSee('Recovered.')
         ->assertSeeIn('@conversation-tokens', 'Total 180')
         ->assertNoJavaScriptErrors();

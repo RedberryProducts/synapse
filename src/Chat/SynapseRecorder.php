@@ -21,6 +21,7 @@ use Laravel\Ai\Streaming\Events\StreamEvent;
 use Laravel\Ai\Streaming\Events\StreamStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\ToolCall as ToolCallEvent;
+use Laravel\Ai\Streaming\Events\ToolResult as ToolResultEvent;
 use Laravel\Ai\Tools\ToolNameResolver;
 use Redberry\Synapse\Models\SynapseToolInvocation;
 use Throwable;
@@ -62,7 +63,24 @@ class SynapseRecorder
 
     protected ?string $lastBlock = null;
 
-    public function __construct(protected string $conversationId, protected bool $streaming = true) {}
+    /** @var array<string, true> */
+    protected array $resumedExecutions = [];
+
+    public function __construct(
+        protected string $conversationId,
+        protected bool $streaming = true,
+        protected ?ApprovalContinuation $continuation = null,
+    ) {
+        $this->parts = array_map(fn (array $part): array => $part['type'] === 'notice' && $part['message'] === AgentInvoker::APPROVAL_NOTICE
+            ? [...$part, 'message' => 'Tool approval decisions submitted.'] : $part,
+            $continuation?->message->parts ?? []);
+    }
+
+    /** @return array{provider: string, model: string} */
+    public function providerAndModel(): array
+    {
+        return ['provider' => $this->provider, 'model' => $this->model];
+    }
 
     public function begin(string $invocationId, string $provider, string $model): void
     {
@@ -121,6 +139,8 @@ class SynapseRecorder
             $this->delta('reasoning', $event->reasoningId, $event->delta);
         } elseif ($event instanceof ToolCallEvent) {
             $this->call($event->toolCall);
+        } elseif ($event instanceof ToolResultEvent && ! $event->preliminary) {
+            $this->continuation?->capture($event->toolResult);
         } elseif ($event instanceof ProviderToolEvent) {
             $row = (new ProviderToolRecorder($this->conversationId))->record($event, $this->invocationId);
             $key = 'provider:'.$this->group().':'.$row->id;
@@ -170,7 +190,12 @@ class SynapseRecorder
 
     public function toolInvoking(InvokingTool $event): void
     {
-        $this->executions[$event->toolInvocationId] = SynapseToolInvocation::query()->create([
+        $row = $this->continuation?->invoking($event);
+        if ($row !== null) {
+            $this->resumedExecutions[$event->toolInvocationId] = true;
+        }
+        $row ??= new SynapseToolInvocation;
+        $row->forceFill([
             'conversation_id' => $this->conversationId,
             'invocation_id' => $event->invocationId,
             'tool_invocation_id' => $event->toolInvocationId,
@@ -181,6 +206,8 @@ class SynapseRecorder
             'status' => 'pending',
             'started_at' => now(),
         ]);
+        $row->save();
+        $this->executions[$event->toolInvocationId] = $row;
         $this->groups[$event->toolInvocationId] = $this->group();
     }
 
@@ -245,7 +272,7 @@ class SynapseRecorder
         }
         $usage = $steps->reduce(fn (TextUsage $total, Step $step): TextUsage => $total->add($step->usage), new TextUsage);
         $text = implode("\n\n", array_filter($this->text, fn (string $text): bool => trim($text) !== ''));
-        $reasoning = collect($this->parts)->where('type', 'reasoning')->pluck('text')->implode("\n\n");
+        $reasoning = collect(array_slice($this->parts, count($this->continuation?->message->parts ?? [])))->where('type', 'reasoning')->pluck('text')->implode("\n\n");
         $meta = $steps->last()->meta ?? new Meta($this->provider, $this->model);
 
         $response = new AgentResponse($this->invocationId ?? '', $text, $usage, $meta);
@@ -279,7 +306,7 @@ class SynapseRecorder
             }
         }
 
-        $used = [];
+        $used = $this->resumedExecutions;
         foreach ($this->calls as $key => $entry) {
             $call = $entry['call'];
             $result = $results[$key] ?? null;
@@ -300,7 +327,7 @@ class SynapseRecorder
                     'tool_call_id' => $call->id, 'provider' => $entry['provider'],
                     'type' => 'tool', 'name' => $call->name, 'arguments' => $call->arguments,
                     'result' => $result?->result,
-                    'status' => $result !== null ? ($result->successful() ? 'success' : 'error') : ($status === 'paused' ? 'paused' : 'error'),
+                    'status' => $result !== null ? ($result->denied ? 'denied' : ($result->successful() ? 'success' : 'error')) : ($status === 'paused' ? 'paused' : 'error'),
                     'error' => $result !== null ? $result->error() : ($status === 'paused' ? null : 'The tool call ended without a recorded result.'),
                     'finished_at' => $status === 'paused' && $result === null ? null : now(),
                 ]);
@@ -318,6 +345,10 @@ class SynapseRecorder
         SynapseToolInvocation::query()->where('conversation_id', $this->conversationId)
             ->where('invocation_id', $this->invocationId)->where('type', 'provider_tool')->where('status', 'pending')
             ->when($status !== 'paused', fn ($query) => $query->update(['status' => 'error', 'error' => $failure?->getMessage() ?? 'The provider ended without a tool result.', 'finished_at' => now()]));
+
+        if ($status === 'failed') {
+            $this->continuation?->fail();
+        }
 
         return array_map(function (array $part): array {
             if (! isset($part['call_key'])) {
