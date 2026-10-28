@@ -5,6 +5,11 @@
  * AI SDK's Vercel protocol uses — plus Synapse's completion and diagnostic parts.
  */
 
+export interface CitationSource {
+    url: string;
+    title: string | null;
+}
+
 export interface Usage {
     input_tokens: number;
     output_tokens: number;
@@ -25,6 +30,8 @@ export interface MessageMetaData {
 
 export interface StreamPart {
     type: string;
+    url?: string;
+    title?: string | null;
     /** Text parts key their deltas by message id — one per generation step. */
     id?: string;
     messageId?: string;
@@ -39,6 +46,7 @@ export interface StreamPart {
 }
 
 export interface StreamHandlers {
+    onSource?: (source: CitationSource) => void;
     onConversation?: (conversationId: string, userMessageId: string) => void;
     onTextDelta?: (id: string, delta: string) => void;
     onError?: (error: ChatError) => void;
@@ -101,6 +109,7 @@ export interface UserEntry {
 }
 
 export interface AssistantEntry {
+    sources: CitationSource[];
     kind: 'assistant';
     id: string;
     /**
@@ -164,6 +173,7 @@ export type ChatEntry = UserEntry | AssistantEntry | ErrorEntry | NoticeEntry | 
 /* ── Replay payload (GET /api/conversations/{id}) ──────────────────────────── */
 
 export interface ConversationMessage {
+    sources: CitationSource[];
     id: string;
     role: 'user' | 'assistant' | 'error';
     status: 'completed' | 'paused' | 'failed';

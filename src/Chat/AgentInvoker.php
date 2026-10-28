@@ -144,7 +144,7 @@ class AgentInvoker
                     $status = $paused ? 'paused' : 'failed';
                     $parts = $recorder->finish($status, $e);
                     $partial = $recorder->snapshot();
-                    if ($resuming !== null || $partial->text !== '' || $partial->reasoning !== '' || $partial->steps->isNotEmpty() || $parts !== []) {
+                    if ($resuming !== null || $partial->text !== '' || $partial->reasoning !== '' || $partial->steps->isNotEmpty() || $partial->meta->citations->isNotEmpty() || $parts !== []) {
                         $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status, existing: $resuming);
                         $recorder->linkToMessage($assistant->id);
                         $turn = $this->presenter->turn($assistant);

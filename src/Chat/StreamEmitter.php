@@ -2,7 +2,6 @@
 
 namespace Redberry\Synapse\Chat;
 
-use Laravel\Ai\Responses\Data\UrlCitation;
 use Laravel\Ai\Streaming\Events\Citation;
 use Laravel\Ai\Streaming\Events\ProviderToolEvent;
 use Laravel\Ai\Streaming\Events\ReasoningDelta;
@@ -144,7 +143,7 @@ class StreamEmitter
                 ? ['type' => 'tool-output-error', 'toolCallId' => $event->toolResult->id, 'errorText' => $event->error ?? 'The tool failed.']
                 : ['type' => 'tool-output-available', 'toolCallId' => $event->toolResult->id, 'output' => $event->toolResult->result],
             $event instanceof ProviderToolEvent => ['type' => 'data-provider-tool', 'data' => $event->toArray()],
-            $event instanceof Citation && $event->citation instanceof UrlCitation => ['type' => 'source-url', 'sourceId' => $event->citation->url, 'url' => $event->citation->url, 'title' => $event->citation->title],
+            $event instanceof Citation => ($source = CitationSources::source($event->citation)) === null ? null : ['type' => 'source-url', 'sourceId' => $source['url'], ...$source],
             default => null,
         };
         if ($part === null) {

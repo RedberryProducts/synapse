@@ -124,6 +124,10 @@ function dispatch(part: StreamPart, handlers: StreamHandlers): void {
             );
             break;
 
+        case 'source-url':
+            if (typeof part.url === 'string') handlers.onSource?.({ url: part.url, title: typeof part.title === 'string' ? part.title : null });
+            break;
+
         case 'text-delta':
             handlers.onTextDelta?.(part.id ?? 'text', part.delta ?? '');
             break;

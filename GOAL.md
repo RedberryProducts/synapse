@@ -203,6 +203,7 @@ When the SDK retries with another provider, successful tools from the earlier at
 - **Streaming text** — the answer as it arrives.
 - **Pending response state** — right after you send, a `Loading...` row appears where the reply will land and stays there until the first reasoning step, tool event, notice, answer text, or error arrives. Reasoning already received remains visible when later tools, notices, or errors arrive.
 - **Reasoning** — for models with extended thinking (Anthropic, OpenAI o-series, DeepSeek), `✦ Thinking…` appears while the model works, then collapses into a "Thinking" pane above the answer, with its own reasoning-token count in the per-message counts. Collapsed by default so it never gets in the way — and kept, so reopening the conversation later shows the same thinking you watched.
+- **Sources** — when the SDK reports URL citations, a Sources list appears below the assistant's answer, with clickable titles and hostname fallbacks. It updates as citations arrive, combines duplicate URLs once per turn, and survives refreshes, approval continuations, and partial failures. Sources reflect provider-reported citations, not proof that an answer is correct; ordinary answer links and tool results do not become citations. Empty lists stay hidden. SDK 1.3 reports citations for supported responses from OpenAI, Anthropic, Gemini, OpenRouter, and xAI, sometimes only near the end of generation. Inline citation highlighting is not included. Existing history shows sources only where citation data was actually retained.
 - **Tool calls** — inline cards, in the order they happened (see [Tool inspection](#tool-inspection)). Reloading preserves the same text, reasoning, and tool sequence.
 - **Approval requests** — when the SDK asks for permission, Synapse pauses and shows the tool arguments, approval reason, and Approve/Deny controls. A single decision continues immediately; multiple requests require a decision for each and a Continue action. Denied tools never run. Refreshing keeps pending decisions available, and continuation updates the same answer and tool cards. Resolve the requests or start a new conversation; sending and model selection stay disabled during the pause. Repeated clicks cannot start the same continuation again.
 - **Approval scope** — custom and SDK tools using `Approvable`, SDK MCP wrappers, and approval before sub-agent delegation are supported. Provider-hosted tools and approvals originating inside a sub-agent are excluded. Stateless and structured agents only receive their current paused turn when resuming. Old paused turns saved before approval support remain readable but cannot be resumed.
@@ -550,26 +551,6 @@ Synapse is focused on the **build/test/debug loop for text agents**. The followi
 - **No auto-generated titles.** Conversation titles come from your first message (or a name you set). Synapse never makes an extra model call just to title a chat.
 
 These may be revisited once the core loop is solid.
-
----
-
-## Planned
-
-Not in this release, and named here so you know they're missing rather than
-hidden.
-
-**Citations.** When an agent uses provider-native web search, the SDK reports
-which sources backed which parts of the answer — `laravel/ai` models this as a
-`Citation` event carrying a URL, a title, and the character range of the answer
-that source supports. That range is the valuable part: it separates an agent that
-searched and *used* what it found from one that searched, ignored the results,
-and wrote something plausible. Both read identically in a transcript.
-
-Synapse doesn't surface them yet. Two things make it a real piece of work rather
-than a patch:
-
-- Of the SDK's gateways, only **Anthropic** and **OpenRouter** emit citations while streaming. OpenAI, Gemini and xAI parse them only on the non-streaming path, so a citations panel would sit empty for a lot of setups today.
-- The SDK's Vercel serialization keeps only the bare URL and drops the title and the character range, so getting the useful part means carrying the raw event — the same kind of workaround Synapse already applies to two other events the serializer flattens.
 
 ---
 

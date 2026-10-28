@@ -379,3 +379,25 @@ it('checkpoints results before application continuation middleware can fail', fu
         ->and(SynapseMessage::where('role', 'error')->sole()->content)->toBe('Application middleware failed');
     Http::assertSentCount(1);
 });
+
+it('merges cited sources across approval continuation', function (string $decision, bool $fails) {
+    $slug = approvalAgent(ExtractorAgent::class, $this->tool);
+    $cited = fn (string $url): array => ['type' => 'text', 'text' => '{"name":"Ada"}', 'citations' => [
+        ['type' => 'web_search_result_location', 'url' => $url, 'title' => $url === 'https://example.com/first' ? 'First source' : 'Next source'],
+    ]];
+    $sequence = Http::sequence()->push(approvalHttpStep([$cited('https://example.com/first'), approvalCall()], false, 'tool_use'));
+    if ($fails) {
+        $sequence->push(['error' => ['message' => 'Continuation failed']], 400);
+    } else {
+        $sequence->push(approvalHttpStep([$cited('https://example.com/next')], false));
+    }
+    Http::fake(['api.anthropic.com/*' => $sequence]);
+    sendMessage($slug, 'Find Ada');
+    $paused = SynapseMessage::where('role', 'assistant')->sole();
+    $response = resolveApproval($slug, $paused, ['call_approval' => $decision]);
+    $message = chatPart($response, 'data-synapse-end')['data']['turn']['message'];
+    expect(array_column($message['sources'], 'title'))->toBe($fails ? ['First source'] : ['First source', 'Next source'])
+        ->and($message['id'])->toBe($paused->id)
+        ->and($this->tool->executions)->toBe($decision === 'approve' ? 1 : 0);
+    $this->getJson('/synapse/api/conversations/'.$paused->conversation_id)->assertJsonPath('messages.1.sources', $message['sources']);
+})->with([['approve', false], ['deny', false], ['approve', true]]);

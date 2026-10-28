@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteConversation, getConversation } from '@/lib/api';
+import { mergeSources } from '@/lib/sources';
 import { streamChat } from '@/lib/stream';
 import type {
+    CitationSource,
     ApprovalSubmission,
     PendingTurnApproval,
     AssistantEntry,
@@ -158,6 +160,8 @@ export function useConversation(slug: string | undefined, conversationId: string
 
                         // One entry per generation step, so text that arrives
                         // after a tool call renders after its card.
+                        onSource: (source) => setEntries((current) => addSources(current, turnId, [source])),
+
                         onTextDelta: (blockId, delta) =>
                             setEntries((current) => appendText(current, turnId, blockId, delta)),
 
@@ -391,7 +395,7 @@ function appendText(
         );
     }
 
-    return [...entries, { ...emptyAssistant(turnId, id), text: delta }];
+    return addSources([...entries, { ...emptyAssistant(turnId, id), text: delta }], turnId);
 }
 
 /**
@@ -420,18 +424,43 @@ function openAssistant(
 ): ChatEntry[] {
     const pendingId = pendingAssistantId(turnId);
 
-    return entries.some((entry) => entry.kind === 'assistant' && entry.id === pendingId)
+    return addSources(entries.some((entry) => entry.kind === 'assistant' && entry.id === pendingId)
         ? entries.map((entry) =>
               entry.kind === 'assistant' && entry.id === pendingId
                   ? { ...entry, id, pending: false, ...overrides }
                   : entry,
           )
-        : [...entries, { ...emptyAssistant(turnId, id), ...overrides }];
+        : [...entries, { ...emptyAssistant(turnId, id), ...overrides }], turnId);
+}
+
+function addSources(entries: ChatEntry[], turnId: string, incoming: CitationSource[] = []): ChatEntry[] {
+    const sources = mergeSources(...entries.flatMap((entry) =>
+        entry.kind === 'assistant' && entry.turnId === turnId ? [entry.sources] : []), incoming);
+    if (sources.length === 0) return entries;
+    const sourceId = `${turnId}:sources`;
+    const target = lastAssistantId(entries, turnId) ?? sourceId;
+    const current = entries.some((entry) => entry.id === target)
+        ? entries : [...entries, emptyAssistant(turnId, target)];
+    return current.flatMap((entry): ChatEntry[] => {
+        if (entry.kind !== 'assistant' || entry.turnId !== turnId) return [entry];
+        const updated = {
+            ...entry,
+            // A source footer must not remain a reusable loading placeholder across tool events.
+            id: entry.id === pendingAssistantId(turnId) ? sourceId : entry.id,
+            pending: false,
+            sources: entry.id === target ? sources : [],
+        };
+        if (updated.id === sourceId && updated.sources.length === 0 && updated.text === ''
+            && updated.reasoning === '' && !updated.reasoningStreaming
+            && updated.structured === null && updated.usage === null) return [];
+        return [updated];
+    });
 }
 
 function emptyAssistant(turnId: string, id: string): AssistantEntry {
     return {
         kind: 'assistant',
+        sources: [],
         id,
         turnId,
         text: '',
@@ -539,7 +568,8 @@ function stopStreaming(entries: ChatEntry[], turnId: string): ChatEntry[] {
                 entry.text !== '' ||
                 entry.reasoning !== '' ||
                 entry.structured !== null ||
-                entry.usage !== null,
+                entry.usage !== null ||
+                entry.sources.length > 0,
         );
 }
 
@@ -657,11 +687,11 @@ function replayMessage(message: ConversationMessage, tools: Map<string, Conversa
         }
     }
     // A tool-only turn can still have billable usage and needs one metadata row.
-    if (!entries.some((entry) => entry.kind === 'assistant') && (message.usage || message.meta?.structured || message.content)) {
+    if (!entries.some((entry) => entry.kind === 'assistant') && (message.usage || message.meta?.structured || message.content || message.sources?.length)) {
         entries.push({ ...emptyAssistant(message.id, message.id), text: message.meta?.structured ? '' : (message.content ?? ''), streaming: false });
     }
     return updateLastAssistant(entries, message.id, (entry) => ({
-        ...entry, usage: message.usage, durationMs: message.duration_ms,
+        ...entry, sources: mergeSources(message.sources ?? []), usage: message.usage, durationMs: message.duration_ms,
         meta: message.meta, structured: message.meta?.structured ?? null,
     }));
 }
@@ -713,6 +743,7 @@ function toEntry(message: ConversationMessage): ChatEntry {
 
     return {
         kind: 'assistant',
+        sources: mergeSources(message.sources ?? []),
         id: message.id,
         turnId: message.id,
         // A structured agent's text *is* its JSON; the card renders the parsed

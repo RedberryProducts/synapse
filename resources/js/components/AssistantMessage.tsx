@@ -1,3 +1,4 @@
+import { SourcesList } from '@/components/SourcesList';
 import { Markdown } from '@/elements/Markdown';
 import { MessageMeta } from './MessageMeta';
 import { ReasoningPane } from './ReasoningPane';
@@ -52,6 +53,8 @@ export function AssistantMessage({
             )}
 
             {entry.structured && <StructuredOutputCard data={entry.structured} />}
+
+            <SourcesList sources={entry.sources} />
 
             {!entry.streaming && entry.usage && (
                 <MessageMeta

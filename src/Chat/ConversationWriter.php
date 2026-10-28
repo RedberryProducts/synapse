@@ -109,6 +109,7 @@ class ConversationWriter
             durationMs: ($existing->duration_ms ?? 0) + $durationMs,
             meta: array_filter([
                 ...$response->meta->toArray(),
+                'citations' => CitationSources::merge($existing === null ? [] : CitationSources::forMessage($existing), $response->meta->citations),
                 'reasoning' => implode("\n\n", array_filter([$existing?->meta['reasoning'] ?? null, $response->reasoning])) ?: null,
                 'structured' => $structured,
             ], fn (mixed $value): bool => $value !== null),
