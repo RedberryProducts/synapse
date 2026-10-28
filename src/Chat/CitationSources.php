@@ -2,7 +2,9 @@
 
 namespace Redberry\Synapse\Chat;
 
+use Illuminate\Support\Uri;
 use Laravel\Ai\Responses\Data\UrlCitation;
+use League\Uri\Contracts\UriException;
 use Redberry\Synapse\Models\SynapseMessage;
 
 class CitationSources
@@ -41,8 +43,15 @@ class CitationSources
         }
         $parts = parse_url($url);
         if (! preg_match('~\Ahttps?://~i', $url) || preg_match('/[\x00-\x20\x7f\\\\]/', $url)
-            || $parts === false || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])
-            || filter_var($url, FILTER_VALIDATE_URL) === false) {
+            || $parts === false || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
+            return null;
+        }
+        try {
+            // Validate the ASCII URI while preserving the SDK's exact URL for display and deduplication.
+            if (filter_var(Uri::of($url)->toString(), FILTER_VALIDATE_URL) === false) {
+                return null;
+            }
+        } catch (UriException) {
             return null;
         }
         $title = is_string($data['title'] ?? null) ? trim($data['title']) : '';

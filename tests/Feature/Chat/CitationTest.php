@@ -38,6 +38,25 @@ it('preserves streamed sources through completion and reload', function () {
     $this->getJson('/synapse/api/conversations/'.$message->conversation_id)->assertJsonPath('messages.1.sources', $sources);
 });
 
+it('preserves Unicode citation URLs in streaming and saved projections', function (string $url) {
+    fakeAgent(SupportAgent::class);
+    app()->instance(SupportAgent::class, new StreamSequenceAgent([
+        new Citation('c', 'text', new UrlCitation($url, 'Unicode source'), time()),
+        new Error('e', 'failed', 'Provider failed.', false, time()),
+    ]));
+    $response = sendMessage('workbench.app.agents.support-agent', 'Explain');
+    $sources = [['url' => $url, 'title' => 'Unicode source']];
+    expect(chatPart($response, 'source-url')['url'] ?? null)->toBe($url)
+        ->and(chatPart($response, 'data-synapse-end')['data']['turn']['message']['sources'] ?? null)->toBe($sources);
+    $message = SynapseMessage::where('role', 'assistant')->sole();
+    $this->getJson('/synapse/api/conversations/'.$message->conversation_id)->assertJsonPath('messages.1.sources', $sources);
+})->with([
+    'Unicode path' => 'https://example.com/ქართული',
+    'internationalized hostname' => 'https://მაგალითი.გე/ქართული',
+    'Unicode query and fragment' => 'https://example.com/search?q=ქართული#წყარო',
+    'IPv6 with Unicode path' => 'https://[::1]/ქართული',
+]);
+
 it('retains citation-only output when the provider fails', function () {
     fakeAgent(SupportAgent::class);
     app()->instance(SupportAgent::class, new StreamSequenceAgent([

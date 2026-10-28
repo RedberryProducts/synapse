@@ -44,6 +44,18 @@ it('renders safe sources in both themes with reload parity', function (string $t
     expect($page->script('document.documentElement.scrollWidth <= window.innerWidth'))->toBeTrue();
 })->with(['Dark', 'Light']);
 
+it('renders Unicode citation links after refresh', function (string $url) {
+    fakeAgent(SupportAgent::class, [new TextResponse('A cited answer.', new TextUsage, new Meta('openai', 'test', collect([
+        new UrlCitation($url, 'ქართული წყარო'),
+    ])))]);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $page->type('@composer-input', 'Explain')->click('Send')->assertPresent('@sources')
+        ->assertSeeIn('@sources', 'ქართული წყარო');
+    expect($page->script("document.querySelector('[data-testid=sources] a').getAttribute('href')"))->toBe($url);
+    $page->refresh()->assertPresent('@sources')->assertSeeIn('@sources', 'ქართული წყარო')->assertNoJavaScriptErrors();
+    expect($page->script("document.querySelector('[data-testid=sources] a').getAttribute('href')"))->toBe($url);
+})->with(['https://example.com/ქართული', 'https://მაგალითი.გე/ქართული']);
+
 it('keeps sources on a citation-only failed turn after refresh', function () {
     fakeAgent(SupportAgent::class);
     app()->instance(SupportAgent::class, new StreamSequenceAgent([
