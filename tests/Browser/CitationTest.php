@@ -68,6 +68,50 @@ it('keeps sources on a citation-only failed turn after refresh', function () {
     $page->refresh()->assertPresent('@sources')->assertSeeIn('@sources', 'Partial source')->assertNoJavaScriptErrors();
 });
 
+it('keeps later answers after intervening events when citations arrive first', function (array $event, string $selector, array $answer) {
+    fakeAgent(SupportAgent::class);
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent');
+    $parts = json_encode([
+        ['type' => 'source-url', 'url' => 'https://example.com/source', 'title' => 'Early source'],
+        $event,
+        $answer,
+    ]);
+    $page->script(<<<JS
+        (() => {
+            const originalFetch = window.fetch;
+            window.fetch = (url, options) => {
+                if (!String(url).includes('/api/chat/')) return originalFetch(url, options);
+                return Promise.resolve(new Response(new ReadableStream({
+                    start(controller) {
+                        window.citationStream = controller;
+                        const body = {$parts}.map(part => 'data: ' + JSON.stringify(part) + '\\n\\n').join('');
+                        controller.enqueue(new TextEncoder().encode(body));
+                    }
+                }), { headers: { 'Content-Type': 'text/event-stream' } }));
+            };
+        })()
+    JS);
+    $page->type('@composer-input', 'Explain')->click('Send')->assertPresent('@sources')
+        ->assertSeeIn('@message-assistant', 'Answer after the event.')->assertSeeIn('@sources', 'Early source');
+    $order = "Boolean(document.querySelector('{$selector}').compareDocumentPosition(document.querySelector('[data-testid=message-assistant]')) & Node.DOCUMENT_POSITION_FOLLOWING)";
+    expect($page->script($order))->toBeTrue();
+    $page->assertCount('@message-assistant', 1)->assertCount('@sources', 1)->assertMissing('@message-assistant-loading');
+
+    // End without a saved completion so server replay cannot conceal incorrect live ordering.
+    $page->script('window.citationStream.close()');
+    $page->assertPresent('@error-card')->assertSeeIn('@error-card', 'The stream ended before the response was saved.')
+        ->assertSeeIn('@message-assistant', 'Answer after the event.')->assertSeeIn('@sources', 'Early source');
+    expect($page->script($order))->toBeTrue();
+    $page->assertCount('@message-assistant', 1)->assertCount('@sources', 1)->assertNoJavaScriptErrors();
+})->with([
+    'custom tool' => [['type' => 'tool-input-available', 'toolCallId' => 'lookup', 'toolName' => 'Lookup', 'input' => []], '[data-testid=tool-card]'],
+    'provider tool' => [['type' => 'data-provider-tool', 'data' => ['item_id' => 'lookup', 'type' => 'web_search', 'status' => 'completed', 'data' => []]], '[data-testid=tool-card]'],
+    'notice' => [['type' => 'data-synapse-notice', 'data' => ['message' => 'Retrying.']], '[data-testid=chat-notice]'],
+])->with([
+    'text answer' => [['type' => 'text-delta', 'id' => 'answer', 'delta' => 'Answer after the event.']],
+    'structured answer' => [['type' => 'data-structured-output', 'data' => ['answer' => 'Answer after the event.']]],
+]);
+
 it('does not invent a sources section from answer links', function () {
     fakeAgent(SupportAgent::class, ['See [Example](https://example.com).']);
     $page = visit('/synapse/playground/workbench.app.agents.support-agent');

@@ -437,11 +437,24 @@ function addSources(entries: ChatEntry[], turnId: string, incoming: CitationSour
     const sources = mergeSources(...entries.flatMap((entry) =>
         entry.kind === 'assistant' && entry.turnId === turnId ? [entry.sources] : []), incoming);
     if (sources.length === 0) return entries;
-    const target = lastAssistantId(entries, turnId) ?? pendingAssistantId(turnId);
+    const sourceId = `${turnId}:sources`;
+    const target = lastAssistantId(entries, turnId) ?? sourceId;
     const current = entries.some((entry) => entry.id === target)
         ? entries : [...entries, emptyAssistant(turnId, target)];
-    return current.map((entry) => entry.kind === 'assistant' && entry.turnId === turnId
-        ? { ...entry, pending: false, sources: entry.id === target ? sources : [] } : entry);
+    return current.flatMap((entry): ChatEntry[] => {
+        if (entry.kind !== 'assistant' || entry.turnId !== turnId) return [entry];
+        const updated = {
+            ...entry,
+            // A source footer must not remain a reusable loading placeholder across tool events.
+            id: entry.id === pendingAssistantId(turnId) ? sourceId : entry.id,
+            pending: false,
+            sources: entry.id === target ? sources : [],
+        };
+        if (updated.id === sourceId && updated.sources.length === 0 && updated.text === ''
+            && updated.reasoning === '' && !updated.reasoningStreaming
+            && updated.structured === null && updated.usage === null) return [];
+        return [updated];
+    });
 }
 
 function emptyAssistant(turnId: string, id: string): AssistantEntry {

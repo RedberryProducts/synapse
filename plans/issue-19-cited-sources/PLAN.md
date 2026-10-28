@@ -115,6 +115,12 @@ All five steps are implemented. Sources use the existing message metadata, with 
 - A separate, user-authorized live smoke test used a local `WebResearchAgent` with OpenAI `gpt-4.1-mini` and the SDK's hosted `WebSearch` tool. The request completed with a recorded search call, three citations to one URL displayed as one source, and unchanged sources after reload. The agent and credentials remain in the ignored local testing app; automated suites continue to use fakes.
 - `git diff --check`: passed.
 
+## Review fixes — 2026-10-28
+
+- Unicode URLs: four regressions reproduced discarded Georgian paths, internationalized hostnames, query/fragment text, and IPv6 URLs with Unicode paths. Validation now uses Laravel's URI serialization to obtain an ASCII representation while preserving the exact original URL. Existing unsafe-URL checks remain in place; browser tests confirm Unicode links survive reload.
+- Live ordering: browser-controlled streams reproduced answers appearing above custom tools, provider tools, and notices when a citation arrived first. Source-only entries now have a separate identity, and empty footers are removed when their sources transfer. Six browser regressions check text/structured answers both before completion and after interrupted transport, where saved replay cannot mask the live ordering.
+- Final checks: `composer check` passed (345 tests, 1,194 assertions); `composer test:e2e` passed (105 tests, 563 assertions); TypeScript, production build, and diff whitespace checks passed. Feature and browser suites ran sequentially. These regressions use fakes and make no provider requests.
+
 ## References
 
 - [SDK aggregate streaming citations](https://github.com/laravel/ai/blob/v1.3.0/src/Responses/StreamedAgentResponse.php)
