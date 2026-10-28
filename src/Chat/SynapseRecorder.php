@@ -15,6 +15,8 @@ use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\UrlCitation;
+use Laravel\Ai\Streaming\Events\Citation;
 use Laravel\Ai\Streaming\Events\ProviderToolEvent;
 use Laravel\Ai\Streaming\Events\ReasoningDelta;
 use Laravel\Ai\Streaming\Events\StreamEvent;
@@ -29,6 +31,9 @@ use Throwable;
 class SynapseRecorder
 {
     public ?string $invocationId = null;
+
+    /** @var list<array{url: string, title: string|null}> */
+    protected array $sources = [];
 
     protected int $attempt = -1;
 
@@ -105,6 +110,7 @@ class SynapseRecorder
     public function stepCompleted(StepCompleted $event): void
     {
         $response = $event->response;
+        $this->sources = CitationSources::merge($this->sources, $response->meta->citations);
         $this->attempts[$this->attempt][$event->stepNumber] = new Step(
             $response->text, $response->toolCalls, [], $response->finishReason,
             $response->usage, $response->meta, $response->reasoning,
@@ -133,6 +139,8 @@ class SynapseRecorder
         if ($event instanceof StreamStart) {
             $this->step = ++$this->streamStep;
             $this->lastBlock = null;
+        } elseif ($event instanceof Citation) {
+            $this->sources = CitationSources::merge($this->sources, [$event->citation]);
         } elseif ($event instanceof TextDelta) {
             $this->delta('text', $event->messageId, $event->delta);
         } elseif ($event instanceof ReasoningDelta) {
@@ -245,6 +253,7 @@ class SynapseRecorder
     public function capture(AgentResponse $response): void
     {
         foreach ($response->steps as $number => $step) {
+            $this->sources = CitationSources::merge($this->sources, $step->meta->citations);
             if (! $this->streaming && ! isset($this->attempts[$this->attempt][$number])) {
                 $this->step = $number;
                 $this->lastBlock = null;
@@ -256,6 +265,7 @@ class SynapseRecorder
                 }
             }
         }
+        $this->sources = CitationSources::merge($this->sources, $response->meta->citations);
         $this->attempts[$this->attempt] = $response->steps->map(fn (Step $step): Step => clone $step)->all();
     }
 
@@ -275,6 +285,10 @@ class SynapseRecorder
         $reasoning = collect(array_slice($this->parts, count($this->continuation?->message->parts ?? [])))->where('type', 'reasoning')->pluck('text')->implode("\n\n");
         $meta = $steps->last()->meta ?? new Meta($this->provider, $this->model);
 
+        $meta = new Meta($meta->provider, $meta->model);
+        foreach ($this->sources as $source) {
+            $meta->citations->push(new UrlCitation($source['url'], $source['title']));
+        }
         $response = new AgentResponse($this->invocationId ?? '', $text, $usage, $meta);
         $response->withSteps($steps)->withReasoning($reasoning);
 

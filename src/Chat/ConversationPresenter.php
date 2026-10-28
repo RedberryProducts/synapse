@@ -20,8 +20,11 @@ class ConversationPresenter
     /** @return array<string, mixed> */
     public function message(SynapseMessage $message): array
     {
+        $sources = CitationSources::forMessage($message);
+
         return [
             'id' => $message->id,
+            'sources' => $sources,
             'role' => $message->role,
             'status' => $message->status,
             'approval' => $message->approval === null ? null : [
@@ -34,7 +37,7 @@ class ConversationPresenter
             'attachments' => $this->attachments($message),
             'usage' => $message->usage ?: null,
             'duration_ms' => $message->duration_ms,
-            'meta' => $message->meta ?: null,
+            'meta' => $message->meta ? [...$message->meta, 'citations' => $sources] : null,
             'metadata' => $message->metadata ?: null,
             'created_at' => $message->created_at?->toIso8601String(),
         ];
