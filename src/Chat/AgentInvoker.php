@@ -133,7 +133,7 @@ class AgentInvoker
             $assistant = $this->writer->storeAssistantMessage(
                 $conversation, $recorder->snapshot(), $this->elapsedMs($startedAt), $parts, $status,
                 $structuredOutput,
-                $this->approvals->checkpoint($response, $recorder), $resuming, $finishReason,
+                $this->approvals->checkpoint($response, $recorder), $resuming, $finishReason, $recorder->stepObservations(),
             );
             $recorder->linkToMessage($assistant->id);
             $turn = $this->presenter->turn($assistant);
@@ -155,7 +155,7 @@ class AgentInvoker
                     $parts = $recorder->finish($status, $e);
                     $partial = $recorder->snapshot();
                     if ($resuming !== null || $partial->text !== '' || $partial->reasoning !== '' || $partial->steps->isNotEmpty() || $partial->meta->citations->isNotEmpty() || $parts !== []) {
-                        $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status, structured: $structuredOutput, existing: $resuming, finishReason: $finishReason);
+                        $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status, structured: $structuredOutput, existing: $resuming, finishReason: $finishReason, stepObservations: $recorder->stepObservations());
                         $recorder->linkToMessage($assistant->id);
                         $turn = $this->presenter->turn($assistant);
                     }

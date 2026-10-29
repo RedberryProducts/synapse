@@ -20,6 +20,39 @@ export interface Usage {
     reasoning_tokens: number | null;
 }
 
+export interface StepTool {
+    observation_id: string | null;
+    call_id: string | null;
+    type: 'tool' | 'provider_tool';
+    name: string | null;
+    arguments: unknown;
+    result: unknown;
+    status: ToolStatus | 'unavailable';
+    duration_ms: number | null;
+    error: string | null;
+}
+
+export interface ModelStep {
+    number: number;
+    completion: 'completed' | 'response' | 'incomplete' | 'unverified';
+    provider: string | null;
+    model: string | null;
+    text: string | null;
+    reasoning: string | null;
+    finish_reason: FinishReason | null;
+    model_duration_ms: number | null;
+    usage: { [K in keyof Usage]: number | null };
+    tools: StepTool[];
+}
+
+export interface StepInspectorEntry {
+    kind: 'steps';
+    id: string;
+    turnId: string;
+    steps: ModelStep[];
+    durationMs: number | null;
+}
+
 export interface MessageMetaData {
     provider: string | null;
     model: string | null;
@@ -172,11 +205,12 @@ export interface ToolEntry {
     durationMs: number | null;
 }
 
-export type ChatEntry = UserEntry | AssistantEntry | ErrorEntry | NoticeEntry | ToolEntry;
+export type ChatEntry = UserEntry | AssistantEntry | ErrorEntry | NoticeEntry | ToolEntry | StepInspectorEntry;
 
 /* ── Replay payload (GET /api/conversations/{id}) ──────────────────────────── */
 
 export interface ConversationMessage {
+    step_details: ModelStep[];
     finish_reason: FinishReason | null;
     sources: CitationSource[];
     id: string;

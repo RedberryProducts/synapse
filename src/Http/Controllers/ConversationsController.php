@@ -9,6 +9,7 @@ use Redberry\Synapse\Chat\ConversationPresenter;
 use Redberry\Synapse\Discovery\AgentDiscovery;
 use Redberry\Synapse\Discovery\AgentSlug;
 use Redberry\Synapse\Models\SynapseConversation;
+use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Repositories\ConversationQuery;
 use Redberry\Synapse\Repositories\ConversationRepository;
 
@@ -84,6 +85,7 @@ class ConversationsController
 
         // uuid7 keys are k-sortable, so id order is chronological.
         $messages = $conversation->messages()->orderBy('id')->get();
+        $tools = $conversation->toolInvocations()->orderBy('id')->get()->map($presenter->tool(...))->all();
 
         return response()->json([
             'id' => $conversation->id,
@@ -100,8 +102,8 @@ class ConversationsController
                 'output_tokens' => (int) $messages->sum('output_tokens'),
                 'total_tokens' => (int) ($messages->sum('input_tokens') + $messages->sum('output_tokens')),
             ],
-            'tool_invocations' => $conversation->toolInvocations()->orderBy('id')->get()->map($presenter->tool(...))->all(),
-            'messages' => $messages->map($presenter->message(...))->all(),
+            'tool_invocations' => $tools,
+            'messages' => $messages->map(fn (SynapseMessage $message): array => $presenter->message($message, array_values(array_filter($tools, fn (array $tool): bool => $tool['message_id'] === $message->id))))->all(),
         ]);
     }
 

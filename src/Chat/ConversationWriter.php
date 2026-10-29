@@ -87,6 +87,7 @@ class ConversationWriter
         ?array $approval = null,
         ?SynapseMessage $existing = null,
         ?FinishReason $finishReason = null,
+        array $stepObservations = [],
     ): SynapseMessage {
         $hasUsage = ! empty($existing->usage) || $status !== 'failed' || $response->steps->contains(
             fn (Step $step): bool => $step->finishReason !== FinishReason::Unknown,
@@ -102,6 +103,7 @@ class ConversationWriter
             steps: array_map(fn (array $step): array => [
                 ...$step, 'replay_blocks' => $status === 'paused' ? $step['replay_blocks'] : [],
             ], $steps),
+            stepObservations: [...($existing->step_observations ?? array_fill(0, count($existing->steps ?? []), [])), ...$stepObservations],
             parts: $parts,
             status: $status,
             usage: $hasUsage ? $usage->toArray() : [],
@@ -156,6 +158,7 @@ class ConversationWriter
         ?string $content = null,
         array $attachments = [],
         array $steps = [],
+        array $stepObservations = [],
         array $parts = [],
         string $status = 'completed',
         array $usage = [],
@@ -174,6 +177,7 @@ class ConversationWriter
             'content' => $content,
             'attachments' => $attachments,
             'steps' => $steps,
+            'step_observations' => $stepObservations,
             'parts' => $parts,
             'status' => $status,
             'usage' => $usage,
