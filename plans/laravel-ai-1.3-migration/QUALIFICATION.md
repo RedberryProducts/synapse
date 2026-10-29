@@ -1,5 +1,7 @@
 # Step 8 qualification — 2026-10-23
 
+The final implementation candidate was revalidated on **2026-10-26**: all eight compatibility rows, 290 PHP tests, 86 browser tests on both Laravel majors, and fresh live OpenAI smoke tests passed. See [RELEASE-VALIDATION.md](RELEASE-VALIDATION.md) for current results; the dated evidence below records the original qualification.
+
 Deterministic qualification passed for the migration working tree on `codex/laravel-ai-13-migration`. Real-provider testing was initially deferred; the subsequent authorized [live OpenAI browser session](LIVE-PROVIDER-TEST.md) exercised all 11 test agents and identified two UI gaps that were subsequently fixed and rechecked. No provider credentials were used for the deterministic gates below, and no tag or release was created. The planned breaking pre-1.0 release is **0.2.0**; see [CHANGELOG.md](../../CHANGELOG.md) and [UPGRADE.md](../../UPGRADE.md).
 
 ## Compatibility matrix

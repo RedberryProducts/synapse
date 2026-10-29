@@ -244,7 +244,7 @@ it('returns you to the conversation you were last in', function () {
 
     // Leave and come back the way you would from Discovery.
     $page->click('Discovery');
-    $page->click('SupportAgent');
+    $page->click('[data-testid=agent-card]:has([data-testid=agent-card-name]:text-is("SupportAgent"))');
 
     $page->assertSeeIn('@message-user', 'Find me a hoodie')->assertNoJavaScriptErrors();
 });
@@ -262,7 +262,7 @@ it('stays blank when a fresh thread is what you chose', function () {
 
     // A deliberately blank page must stay blank on return.
     $page->click('Discovery');
-    $page->click('SupportAgent');
+    $page->click('[data-testid=agent-card]:has([data-testid=agent-card-name]:text-is("SupportAgent"))');
 
     $page->assertPresent('@chat-empty')->assertNoJavaScriptErrors();
 });

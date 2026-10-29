@@ -122,7 +122,7 @@ Mostly automated by the hook (`composer hooks`):
 4. Verify both supported Laravel majors on actual PHP 8.3 and 8.4, at the declared framework/SDK minimums and latest allowed stable resolutions
 5. Smoke-test fresh installation, repeated installation, configured storage, and production boot/migrations after removing dev dependencies
 6. Measure real HTTP streaming with output buffering enabled and a deterministic slow tool
-7. Review [UPGRADE.md](UPGRADE.md), [CHANGELOG.md](CHANGELOG.md), and the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md); complete separately scheduled real-provider checks
+7. Review [UPGRADE.md](UPGRADE.md), [CHANGELOG.md](CHANGELOG.md), and the [current release validation report](plans/release-v0.3.0/VALIDATION.md); complete the real-provider checks in [docs/RELEASE.md](docs/RELEASE.md)
 8. Commit/tag/publish only when explicitly requested
 
 ## CI
@@ -133,7 +133,7 @@ Compatibility should be checked on both supported Laravel majors (12 and 13), in
 
 ## Laravel AI 1.3 storage reset
 
-The migration branch is not a published release. [UPGRADE.md](UPGRADE.md) is the release-facing guide. Existing installations must follow this order:
+This reset applies only to the legacy 0.1.x → 0.2.0 storage migration. Upgrades from 0.2.0 to 0.3.0 preserve history and need only the additive migrations; see [UPGRADE.md](UPGRADE.md). For the legacy reset, follow this order:
 
 1. Back up any Synapse history you need and stop requests/jobs that can write to Synapse. Keep traffic stopped until the upgrade is complete.
 2. On the existing installation, with its existing storage configuration, run `php artisan synapse:clear`. This explicitly deletes Synapse conversations, messages, tool observations, and uploaded attachments. It does not delete SDK conversation data.
@@ -143,7 +143,7 @@ The migration branch is not a published release. [UPGRADE.md](UPGRADE.md) is the
 
 The migration refuses nonempty Synapse storage and leaves it untouched. It also refuses a rollback with data. There is no historical-data backfill or old-format reader. If a damaged installation contains orphan message/tool rows after `synapse:clear`, back up and explicitly remove those orphan Synapse rows on the configured connection before retrying. Never use `migrate:fresh` on the host application for this upgrade.
 
-Fresh installations run all five published migrations. The host application's own Laravel AI conversation migration is separate; follow the [SDK upgrade guide](https://github.com/laravel/ai/blob/v1.3.0/UPGRADE.md) for that data.
+The 0.2.0 release had five migrations; current fresh installations run all seven published migrations. The host application's own Laravel AI conversation migration is separate; follow the [SDK upgrade guide](https://github.com/laravel/ai/blob/v1.3.0/UPGRADE.md) for that data.
 
 For the steps 1–7 milestone, run the focused tests with:
 

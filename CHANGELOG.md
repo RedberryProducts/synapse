@@ -5,9 +5,30 @@ All notable changes to `redberry/synapse` are documented here.
 This project follows [Semantic Versioning](https://semver.org/). While the
 version is below `1.0.0`, minor releases may contain breaking changes.
 
-## Unreleased — planned 0.2.0
+## Unreleased — planned v0.3.0
 
-Breaking migration to Laravel AI **^1.3**, requiring PHP **8.3+** and Laravel **12.62+ / 13.15+**. Use current patched framework versions for deployment. Existing installations must clear Synapse history and attachments **before upgrading**; follow [UPGRADE.md](UPGRADE.md).
+### Added
+
+- **Tool approvals** — review SDK approval requests in the playground, approve or deny each call, and resume after all decisions are made. Pending approvals survive reload; continuation updates the original turn. Supports custom/SDK tools, SDK MCP wrappers, and approval before sub-agent delegation (#1, PR #18).
+- **Cited sources** — clickable SDK-reported sources under assistant responses, deduplicated per turn and preserved through reload, approval continuation, and partial failures (#19, PR #24).
+- **Completion explanations** — notices for output token limits, content filtering, and explicitly reported cancellation, without treating those outcomes as invocation failures (#20, PR #25).
+- **Step inspector** — a collapsed Steps control for each saved assistant turn with recorded steps. Compact, expandable rows show model rounds, output, reasoning, token usage, finish reason, tool results, and available model-call timing (#21, PR #26).
+
+### Fixed
+
+- Validate citation URLs with Laravel's shared URI API so sources work on both Laravel 12 and 13.
+- Preserve valid Unicode citation URLs while retaining URL safety checks.
+- Keep later answer text after intervening tools when citations arrive before the answer, including interrupted streams.
+
+### Upgrade
+
+From **0.2.0**, publish and run the two additive migrations for approvals and step observations; existing history and attachments are preserved. Do not clear history for this upgrade. Older paused turns cannot be resumed, and historical timing/citation data cannot be reconstructed where it was not stored. Requirements are unchanged.
+
+See [UPGRADE.md](UPGRADE.md#upgrading-from-020-to-030) and the [v0.3.0 release notes](docs/releases/v0.3.0.md). The legacy 0.1.x storage reset applies only when upgrading from that older format.
+
+## v0.2.0 — 2026-10-26
+
+Breaking migration to Laravel AI **^1.3**, requiring PHP **8.3+** and Laravel **12.62+ / 13.15+**. Use current patched framework versions for deployment. Installations upgrading from **0.1.x** must clear Synapse history and attachments **before upgrading to 0.2.0**; follow [UPGRADE.md](UPGRADE.md#upgrading-from-01x).
 
 ### Changed
 
@@ -36,7 +57,7 @@ Breaking migration to Laravel AI **^1.3**, requiring PHP **8.3+** and Laravel **
 
 ### Qualification
 
-See [the release qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) for actual PHP/Laravel combinations, test counts, installation/deployment evidence, and remaining real-provider checks. No release or tag has been created.
+Published as [v0.2.0](https://github.com/RedberryProducts/synapse/releases/tag/v0.2.0). The [2026-10-26 validation record](plans/laravel-ai-1.3-migration/RELEASE-VALIDATION.md) covers the tested migration candidate; its eight-runtime matrix and live OpenAI results are historical evidence, not validation of later releases.
 
 ## v0.1.4
 
@@ -105,7 +126,7 @@ First public release. A development dashboard for AI agents built with the
 Laravel AI SDK — discover your agents, chat with them in the browser, and
 inspect every tool call, token, reasoning step and error.
 
-See the [release notes](docs/releases/v0.1.0.md) for the full picture.
+See the [release notes](https://github.com/RedberryProducts/synapse/releases/tag/v0.1.0) for the full picture.
 
 ### Added
 

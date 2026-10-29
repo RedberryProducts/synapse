@@ -37,7 +37,7 @@ Think of it as the missing UI for `laravel/ai`, in the same spirit as Telescope,
 
 ---
 
-> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Live OpenAI flows have also been exercised; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
+> **Upgrading:** v0.3.0 adds approvals, sources, completion explanations, and step inspection. Upgrades from 0.2.0 preserve history and require two additive migrations. The older 0.1.x → 0.2.0 storage migration requires a reset. Follow the version-specific [upgrade guide](UPGRADE.md).
 
 ## Requirements
 

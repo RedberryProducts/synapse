@@ -56,6 +56,10 @@ canonical, outranks Packagist, and silently pins whatever is on disk.
 
 Update `CHANGELOG.md`. For anything user-visible, write release notes in
 `docs/releases/vX.Y.Z.md` — features and what they're for, not a commit log.
+Compare against the latest published tag so every unreleased feature is included.
+Keep version-specific upgrade paths in `UPGRADE.md`: additive migrations must
+not inherit the legacy 0.1.x storage-reset instructions. Review README and GOAL
+for stale release-status notices and verify any migration counts.
 
 ## 6. Clean-app smoke test
 
@@ -85,8 +89,9 @@ Then, following only the README:
 
 ## 7. Manual pass
 
-All six feature epics, in both themes: discovery, info panel, chat, tool
-inspection, attachments/structured/reasoning, history. Epic 6's manual pass
+Cover discovery, info panel, chat, tool inspection, attachments/structured/reasoning,
+history, approvals, cited sources, completion explanations, and the step inspector
+in both themes. Include reload and approval continuation. Epic 6's manual pass
 found three bugs in code that had been green for weeks.
 
 ## 8. Publish from GitHub
