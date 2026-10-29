@@ -13,8 +13,7 @@ import type { ErrorEntry } from '@/types/chat';
  * screen or a raw 500, because a debugging tool that hides the failure is worse
  * than no tool at all.
  *
- * No Figma component exists for this; the PRD lists it under "implement without
- * dedicated designs", so it follows the tool card's failed-result treatment.
+ * Follows the tool card's failed-result treatment.
  */
 export function ErrorCard({ entry }: { entry: ErrorEntry }) {
     return (

@@ -1,16 +1,19 @@
 # SDK opportunities to revisit
 
-Last reviewed: 2026-10-27, against Laravel AI v1.3.0 and Synapse after the tool-approval PR (#18).
+Backlog reconciled: 2026-10-29, after Synapse v0.3.0. SDK capability research below dates from 2026-10-27 against Laravel AI v1.3.0; it is not a fresh SDK release review.
 
 Internal planning notes only. These are candidates for future reassessment, not committed product scope or requests to create GitHub issues. Recheck the latest stable SDK and current Synapse implementation before scheduling any of them. Effort estimates are relative and provisional.
 
-## Already tracked on GitHub
+## Open maintenance work
 
-Keep these out of the deferred backlog to avoid duplicate work:
+Track these in GitHub rather than duplicating their acceptance criteria here:
 
-- [#19 — Show cited sources on agent responses](https://github.com/RedberryProducts/synapse/issues/19)
-- [#20 — Explain why an agent response stopped](https://github.com/RedberryProducts/synapse/issues/20)
-- [#21 — Add a per-response model step inspector](https://github.com/RedberryProducts/synapse/issues/21)
+- [#2 — PR checks and asset freshness](https://github.com/RedberryProducts/synapse/issues/2)
+- [#3 — Lowest/latest SDK compatibility CI](https://github.com/RedberryProducts/synapse/issues/3)
+- [#4 — Dependabot and a committed npm lockfile](https://github.com/RedberryProducts/synapse/issues/4)
+- [#22 — Reactivate the Maestro workflow when needed](https://github.com/RedberryProducts/synapse/issues/22)
+
+The older CI issues contain pre-1.0 SDK assumptions; reconcile them with the current manifest before implementation. This cleanup does not enable workflows or change dependencies.
 
 ## Candidates to recheck
 
@@ -60,7 +63,7 @@ Goal: allow structured-output agents that also implement Conversational to use p
 
 Synapse deliberately keeps structured agents single-shot today. The SDK's non-streaming prompt path can receive conversation messages, but structured streaming is explicitly unsupported in v1.3.0. Treat history support and structured streaming as different proposals.
 
-Recheck: schema fidelity, strict mode, original agent capabilities, attachments, tool results, and approval continuation. Preserve stateless behavior and Synapse-only storage. Reconcile GOAL/PRD before changing the documented single-shot exception; only reconsider streaming if a stable SDK release supports it.
+Recheck: schema fidelity, strict mode, original agent capabilities, attachments, tool results, and approval continuation. Preserve stateless behavior and Synapse-only storage. Agree on acceptance criteria and update README before changing the documented single-shot exception; only reconsider streaming if a stable SDK release supports it.
 
 References: [SDK prompt path](https://github.com/laravel/ai/blob/v1.3.0/src/Providers/Concerns/GeneratesText.php), [SDK streaming restriction](https://github.com/laravel/ai/blob/v1.3.0/src/Providers/Concerns/StreamsText.php).
 
@@ -78,3 +81,8 @@ References: [SDK prompt path](https://github.com/laravel/ai/blob/v1.3.0/src/Prov
 3. Establish a small user-facing goal, SDK support boundaries, and testable acceptance criteria.
 4. Preserve existing feature/browser coverage, SDK-shaped replay, and Synapse-owned storage.
 5. Create a GitHub issue only when requested or when the feature is selected for implementation.
+
+## Other deferred ideas
+
+- **Conversation export:** JSON/Markdown export remains unimplemented. Recheck demand and define what happens to attachments and private replay data before proposing it.
+- **Additional runtime qualification:** Sail remains expected rather than directly verified; Apache/mod_php has not been qualified. Octane remains unsupported. Reassess runtime demand and verify real HTTP behavior before expanding support claims.

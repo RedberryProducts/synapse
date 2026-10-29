@@ -106,7 +106,7 @@ php artisan vendor:publish --tag=synapse-migrations
 php artisan migrate
 ```
 
-Use these commands once v0.3.0 is published. Existing history and attachments are retained; no reset is needed. Older paused turns cannot be resumed, and historical steps have no model-call timing where it was never recorded. See [UPGRADE.md](UPGRADE.md) for verification and the separate legacy 0.1.x migration, and [release notes](docs/releases/v0.3.0.md) for all new features.
+Existing history and attachments are retained; no reset is needed. Older paused turns cannot be resumed, and historical steps have no model-call timing where it was never recorded. See [UPGRADE.md](UPGRADE.md) for verification and the separate legacy 0.1.x migration, and [release notes](docs/releases/v0.3.0.md) for all new features.
 
 ## Configuration
 
@@ -141,16 +141,32 @@ The playground streams replies as the model produces them, which needs PHP to be
 
 | Runtime | Streaming |
 |---|---|
-| `php artisan serve` | ✅ Verified |
-| nginx + PHP-FPM (Herd, Valet, Forge) | ✅ Verified |
+| `php artisan serve` | ✅ Verified for v0.3.0 |
+| nginx + PHP-FPM (Herd, Valet, Forge) | Previously exercised; not requalified for v0.3.0 |
 | Laravel Sail | ✅ Expected — same stack |
-| FrankenPHP | ✅ Verified |
+| FrankenPHP | Previously exercised; not requalified for v0.3.0 |
 | **Laravel Octane** | ❌ Not supported |
 
 Octane's workers run under PHP's CLI interface, where output cannot be pushed to a client mid-request, so replies arrive complete instead of streaming. Nothing breaks — Synapse detects it and says so in the playground rather than leaving you looking at a blank thread. It isn't tested per release yet, so it isn't claimed as supported.
 
 
-> _**[GOAL.md](GOAL.md)** is the full manual — every feature, every config key, access control, where your data lives, and a troubleshooting section._
+## Conversation behavior and data
+
+Conversational agents receive the previous Synapse turns. Stateless agents receive only the current message, while the dashboard still displays their turns together. Structured-output agents use a single-shot request and render the result as JSON; they do not receive previous turns. Approval continuation resumes the paused turn.
+
+Synapse records only playground invocations in `synapse_conversations`, `synapse_messages`, and `synapse_tool_invocations`. It never reads or writes the SDK's conversation tables. Everyone authorized to use a dashboard shares its history. To isolate storage, define a Laravel database connection and select it with `SYNAPSE_DB_CONNECTION` before installation.
+
+Uploaded images, audio, and documents are stored on `storage.attachments_disk` and served through authorized routes. Provider/model support determines which inputs work. Video, remote attachment URLs, and provider-hosted file references are not supported by the playground.
+
+History deletion, `synapse:prune`, and `synapse:clear` remove the associated attachments too. Automatic pruning is off by default; enabling `SYNAPSE_AUTO_PRUNE` schedules a daily prune and requires Laravel's scheduler to run. Deleting history is blocked while a tool approval is running.
+
+## Troubleshooting
+
+- **Agent missing:** check that its class implements the SDK's `Agent` contract, lives in a configured `discovery.paths` directory, and is not in `discovery.ignore`. The default paths are `app/Ai/Agents` and `app/Agents`. Constructor failures appear as unavailable-agent diagnostics.
+- **Earlier messages ignored:** check whether the agent implements `Conversational`. Stateless and structured-output agents intentionally start each new prompt without earlier turns.
+- **Dashboard denied outside local:** register the published application provider and configure its `viewSynapse` gate. Production also requires explicitly enabling Synapse while the package is installed.
+- **New columns missing after an update:** publish migrations with `php artisan vendor:publish --tag=synapse-migrations`, then run `php artisan migrate`. Follow [UPGRADE.md](UPGRADE.md) for your version; frontend assets never need publishing.
+- **Approval stays unresolved after interruption:** reload to inspect its stored state. Synapse does not automatically retry a claimed tool execution, because it may already have produced side effects.
 
 ## Development
 

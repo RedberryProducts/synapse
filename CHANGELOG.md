@@ -5,7 +5,7 @@ All notable changes to `redberry/synapse` are documented here.
 This project follows [Semantic Versioning](https://semver.org/). While the
 version is below `1.0.0`, minor releases may contain breaking changes.
 
-## Unreleased — planned v0.3.0
+## v0.3.0 — 2026-10-29
 
 ### Added
 
@@ -57,7 +57,7 @@ Breaking migration to Laravel AI **^1.3**, requiring PHP **8.3+** and Laravel **
 
 ### Qualification
 
-Published as [v0.2.0](https://github.com/RedberryProducts/synapse/releases/tag/v0.2.0). The [2026-10-26 validation record](plans/laravel-ai-1.3-migration/RELEASE-VALIDATION.md) covers the tested migration candidate; its eight-runtime matrix and live OpenAI results are historical evidence, not validation of later releases.
+Published as [v0.2.0](https://github.com/RedberryProducts/synapse/releases/tag/v0.2.0). Candidate validation is retained in the merged [migration PR](https://github.com/RedberryProducts/synapse/pull/17).
 
 ## v0.1.4
 

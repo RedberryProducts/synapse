@@ -5,7 +5,7 @@ description: Best practices for developing the Synapse Laravel package (and Lara
 
 # Laravel Package Development (Synapse)
 
-Distilled from the [Laravel 13 package docs](https://laravel.com/docs/13.x/packages), [laravelpackage.com](https://www.laravelpackage.com), and Synapse's own scaffolding. When these conflict with the repo's existing patterns, **follow the repo** — the conventions below already match it.
+Distilled from the [Laravel 13 package docs](https://laravel.com/docs/13.x/packages), [laravelpackage.com](https://www.laravelpackage.com), and Synapse's implementation. When these conflict with the repo's existing patterns, **follow the repo** — the conventions below already match it.
 
 ## Golden rules
 
@@ -13,7 +13,7 @@ Distilled from the [Laravel 13 package docs](https://laravel.com/docs/13.x/packa
 2. **Config must be cache-safe.** No closures in config files (breaks `config:cache`). Never call `env()` at runtime outside a config file — bake env-derived logic into the config's default value and read `config()` everywhere else. (Synapse's production route-guard does exactly this: `'enabled' => (bool) env('SYNAPSE_ENABLED', env('APP_ENV') !== 'production')`.)
 3. **`mergeConfigFrom` merges only the first level.** Don't rely on deep-merging nested config a user partially overrode.
 4. **Guard console-only work.** Register commands and publish groups inside `if ($this->app->runningInConsole())`.
-5. **Everything user-facing is publishable, and tagged.** Separate tags so users can publish config without assets, etc.
+5. **Publish host-owned resources with separate tags.** Config, migrations, and the application provider are publishable. Compiled dashboard assets stay inside the package and are never published.
 6. **Package discovery, not manual registration.** The provider is auto-loaded via `extra.laravel.providers` in `composer.json`.
 
 ## Service provider anatomy
@@ -37,7 +37,7 @@ public function boot(): void
 }
 ```
 
-Resource-loading methods (all called from `boot`):
+Service-provider methods (lifecycle noted below):
 
 | Method | Purpose |
 |--------|---------|
@@ -113,7 +113,7 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
 - Vite builds `resources/js` → committed `dist/` with **stable filenames** (`app.js`, `app.css`). Users never run npm.
 - `Synapse::css()/js()` read those files off disk and inline them as `<style>` / `<script type="module">` (returns an HTML comment when unbuilt — never fatal). No manifest, no hashing, no publishing.
 - One blade shell + a catch-all route (`/{view?}` where `(.*)`); the JSON API lives under a `/api` prefix; config is injected via `window.Synapse = @json(Synapse::scriptVariables())`.
-- Stack: React + TypeScript, Tailwind v4 (CSS-first `@theme`, no config file), shadcn/ui (vendored), path alias `@/ → resources/js`.
+- Stack: React + TypeScript, Tailwind v4 (CSS-first `@theme`, no config file), local UI primitives, and path alias `@/ → resources/js`. Synapse owns its SSE reader; it does not depend on the Vercel AI client.
 
 ## SDK dependency note
 
@@ -121,7 +121,7 @@ uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser'
 
 For SDK 1.3, persist `Responses\Data\Step::toArray()` in Synapse's private history and project display data separately. SDK execution IDs and model tool-call IDs are distinct. Register event listeners once, activate recording only during the playground invocation, and restore scope in `finally`; never remove a host application's listeners. Forward agent middleware, skills, and cache settings through the decorator. Discovery must merge skill tools with `LoadSkill::mergeInto()` and recognize SDK-wrapped sub-agent/MCP tools.
 
-Breaking storage changes use self-contained follow-up migrations. Require an explicit clear with the old installation before upgrading, reject nonempty storage without deleting it, and verify the configured connection plus package-absent migration loading. See [the upgrade guide](../../../UPGRADE.md).
+Storage changes use self-contained follow-up migrations. Prefer additive migrations that preserve history. The legacy 0.1.x → 0.2.0 migration required an explicit clear using the old installation; do not apply that reset to ordinary upgrades. Verify the configured connection and package-absent migration loading. See [the upgrade guide](../../../UPGRADE.md).
 
 Qualify Laravel 12 and 13 on real PHP 8.3 and 8.4 runtimes, including the exact SDK floor and latest stable allowed resolution. Keep dependency experiments in isolated copies; do not overwrite the developer's lockfile or preview app. Run feature and browser suites sequentially within each copy: installation tests temporarily publish/remove Testbench migrations. GD is required by upload test fixtures. Verify HTTP flushing separately with a slow deterministic tool and output buffering enabled; CLI tests cannot prove streaming.
 
@@ -129,4 +129,5 @@ Qualify Laravel 12 and 13 on real PHP 8.3 and 8.4 runtimes, including the exact 
 
 - **AGENTS.md** — Synapse architecture map + coding standards.
 - **DEV.md** — exact dev-cycle commands (test / lint / analyse / build).
-- **PRD.md / GOAL.md** — product spec and user-facing behavior (source of truth for features).
+- [README.md](../../../README.md) and [UPGRADE.md](../../../UPGRADE.md) — supported behavior and version-specific migration instructions.
+- The active GitHub issue and user request — goal, scope, and acceptance criteria; merged PRs retain completed implementation history.

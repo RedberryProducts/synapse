@@ -20,8 +20,7 @@ use Redberry\Synapse\Http\Controllers\HomeController;
 /*
 | JSON API — the React app talks only to these endpoints.
 |
-| Stubbed for the skeleton so the SPA boots. Each is replaced by a dedicated
-| controller as its feature lands (see PRD → HTTP API surface).
+| Controllers handle discovery, chat, approvals, attachments, and history.
 */
 Route::prefix('api')->group(function (): void {
     // Feature 1 — Agent discovery

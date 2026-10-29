@@ -4,8 +4,7 @@ import { JsonView } from '@/elements/JsonView';
 /**
  * A structured-output agent's parsed response.
  *
- * No Figma component — the PRD lists this under "implement without dedicated
- * designs", so it reuses the tool card's JSON block.
+ * Reuses the tool card's JSON block for consistent output inspection.
  */
 export function StructuredOutputCard({ data }: { data: Record<string, unknown> }) {
     return (

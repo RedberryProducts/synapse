@@ -10,8 +10,8 @@ use Redberry\Synapse\Models\SynapseToolInvocation;
 
 /**
  * Owns cascade deletion for Synapse conversations. Cascade happens here (not
- * via DB foreign keys) so it works on sqlite, whose FK pragma is off by
- * default — see PRD → Database Schema.
+ * via DB foreign keys) so it also removes stored attachments and works
+ * regardless of the database connection's foreign-key configuration.
  */
 class ConversationRepository
 {

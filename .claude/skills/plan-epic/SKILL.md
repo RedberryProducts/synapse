@@ -1,122 +1,43 @@
 ---
 name: plan-epic
-description: Write or enrich a Synapse epic plan in plans/epic-NN-name/PLAN.md — the required sections (design, frontend components, config, technical approach, API, ACs, code map, tests, risks, DoD) and how to source each from PRD.md, GOAL.md, Figma, and the laravel/ai reference. Use when starting a new epic, enriching an existing epic plan, or breaking a feature into a plan.
+description: Plan unfinished Synapse features from the user's request, GitHub issue acceptance criteria, the current implementation, and verified SDK APIs. Use when starting an epic, enriching a future plan, or breaking a feature into implementation steps.
 ---
 
-# Planning a Synapse epic
+# Planning a Synapse feature
 
-Epic plans live in `plans/epic-NN-name/PLAN.md` with a `screenshots/` folder alongside. [plans/PLAN.md](../../../plans/PLAN.md) is the roadmap; [epic-01-discovery](../../../plans/epic-01-discovery/PLAN.md) is the reference implementation of this format.
+Start with the user's request and the active GitHub issue. Read [AGENTS.md](../../../AGENTS.md) and [DEV.md](../../../DEV.md) for conventions and checks. Use [README.md](../../../README.md) and [UPGRADE.md](../../../UPGRADE.md) for supported behavior and migration constraints.
 
-A good epic plan is **executable without re-deriving research**: every SDK fact verified, every Figma component identified by node id, every config key listed, every AC testable.
+## Gather evidence
 
-## Sourcing rules
+- Read the issue's goal, scope, acceptance criteria, and relevant discussion. User instructions take precedence; identify unresolved contradictions rather than silently expanding scope.
+- Inspect current source and tests before proposing new helpers or abstractions. Consult closed issues and merged PRs for earlier decisions when relevant.
+- Verify SDK facts against the installed/tagged source. `references/` is read-only research material and may be stale; record the version inspected. Use released APIs, not assumptions from an unreleased branch.
+- For UI work, reuse the component layers and tokens documented in AGENTS. Consult Figma only when the feature has a relevant design; record the exact design reference and distinguish it from an implementation choice.
+- Read `config/synapse.php` for current keys. Propose new configuration only when the feature needs it.
 
-| Section | Source | Rule |
-|---------|--------|------|
-| Goal / scope | [GOAL.md](../../../GOAL.md) + [PRD.md](../../../PRD.md) | GOAL for user-visible behavior, PRD for the feature's mechanism. Link both. |
-| Design | Figma via MCP | Cite **node ids**, not just screen names. Export a screenshot into `screenshots/`. |
-| Frontend components | Figma components sheet + [plans/FRONTEND.md](../../../plans/FRONTEND.md) + the current repo | List **every** component the epic uses, in its layer (elements / components / composed / pages), each marked Done / Create / Adjust. During the MVP we name ours after the Figma component when there is one. |
-| Config | PRD "Configuration" + GOAL "Configuration" | List only keys this epic **reads**. Flag any new key as a PRD change first. |
-| Technical approach | PRD feature section, **verified** against `references/laravel/ai` | Never restate the PRD from memory — open the SDK source and confirm. |
-| Tests | PRD + ACs | Every AC maps to at least one test. |
+## Write a focused plan
 
-**Verify, don't assume.** The PRD is already SDK-verified, but APIs move. Before writing a technical section, read the actual classes in `references/laravel/ai/src`. If reality differs from the PRD, **stop and reconcile the PRD** — don't silently plan against the new finding.
+Scale detail to the task. A small change needs a short plan; a substantial feature should cover:
 
-## Required sections
+1. **Goal and scope:** user-visible outcome, issue link, acceptance criteria, and explicit exclusions.
+2. **Evidence and decisions:** SDK version/APIs, current implementation, and material tradeoffs or uncertainties.
+3. **Implementation sequence:** concrete steps, affected classes/components/routes/storage, and verification for each step. Reuse existing primitives before adding new ones.
+4. **Contracts and migration:** request/response shapes, persistence, replay, and upgrade behavior only where changed. Synapse never modifies SDK conversation tables.
+5. **Tests:** map acceptance criteria to feature tests and, for UI/chat changes, browser tests. Automated browser tests use faked agents. Verify real HTTP flushing separately if streaming mechanics change.
+6. **Risks and completion:** unresolved decisions, relevant regression coverage, documentation updates, and the applicable gates from DEV.
 
-```markdown
-# Epic N — Name
+For frontend work, follow the four layers in AGENTS: elements, components, composed, and pages. Identify only components actually affected, with whether each is reused, changed, or introduced. Include both themes, narrow layouts, reload, and failure/approval behavior where relevant.
 
-**Goal:** one sentence, user-visible.
-Delivers PRD [Feature X](...) · GOAL [section](...) · Success Criterion #N.
-**Depends on:** ... · **Blocks:** ...
+## Keep plans temporary
 
-## Design
-Screen links (node ids) + local screenshot + a component table:
-| Figma component | Node | Variants |
+Use the issue/PR for the main discussion. Create `plans/<feature>/PLAN.md` only when a substantial unfinished task needs a local plan; no master roadmap or completed-plan archive is required. Keep speculative SDK ideas in [SDK-OPPORTUNITIES.md](../../../plans/SDK-OPPORTUNITIES.md) until selected.
 
-## Frontend components to use
-Follow the four layers in plans/FRONTEND.md — one table per layer used.
-EVERY row carries a Status: Done | Create | Adjust (see below).
-### 1. Elements (resources/js/elements/)
-| Element | Status | Figma | Used by | Notes |
-### 2. Components (resources/js/components/)
-| Component | Status | Figma | Responsibility |
-### 3. Composed (resources/js/composed/)
-| Component | Status | Figma | Responsibility |
-### 4. Pages (resources/js/pages/)
-| Page | Status | Responsibility |
-### Data layer
-| File | Status | Responsibility |     ← types, hooks, api client additions
-### Styling
-Which token/style files change.
-
-## Configuration
-| Key | Default | Use here |            ← synapse.* keys this epic reads
-| Key | Use here |                       ← host-app keys (ai.*) read but never written
-State explicitly whether the epic introduces new config (it should usually not).
-
-## Technical approach
-Numbered subsections, each with verified SDK detail and a code sketch where it
-removes ambiguity. Call out traps (e.g. "ProviderTool has no name()").
-
-## API
-Exact request + response JSON with comments on enum-ish fields.
-
-## Acceptance criteria
-Numbered, testable, user-observable. Include auth/gate and both themes.
-
-## Code map
-| Area | Path |
-
-## Tests
-Feature bullets + Browser bullets + workbench fixtures to add.
-
-## Risks
-| Risk | Mitigation |
+Before removing a completed plan, preserve unique unfinished work in an open issue or the future backlog, record implementation/validation in the PR, and update maintained documentation. Remove unreferenced plan assets with the plan. Git history and merged PRs retain completed work.
 
 ## Definition of done
-ACs verified · `composer check` green · tests added · both themes · dist rebuilt ·
-PRD/GOAL updated if a decision changed.
-```
 
-## Frontend component status
-
-The frontend section is a **complete list of every component the epic touches** — not just new ones. Each row states what has to happen to it:
-
-| Status | Meaning |
-|--------|---------|
-| **Done** | Exists and is used as-is. Listed so the plan shows the full picture and nobody rebuilds it. |
-| **Create** | Doesn't exist yet; this epic builds it. |
-| **Adjust** | Exists but needs changes for this epic — say *what* changes in the Responsibility/Notes cell (e.g. "add agent count to footer"). |
-
-Check the repo before writing the table (`find resources/js -type f`) so the statuses are accurate. Getting this right is what prevents duplicate components and silent rewrites of working code.
-
-## Conventions
-
-- **Acceptance criteria are observable.** "Discovery caches per request" is an implementation note; "a newly created agent appears after a refresh" is an AC.
-- **Scope out loud.** An explicit "Out" list prevents the epic from absorbing the next one.
-- **Name the traps.** If the SDK has a sharp edge (a method that fatals, an event that only fires on success, a serializer that drops data), it belongs in the technical approach with the reason — that's what makes the plan worth more than the PRD.
-- **Every epic ships tests in both tiers** where it has UI: Pest feature tests for the backend, a browser test for the user-visible flow. Browser tests target with `data-testid` and assert content as scoped text — add a testid to a component only when a test needs it (AGENTS.md → Writing browser tests).
-- **Both themes, always.** Light and dark component sets exist in Figma; theme-aware from the start, never retrofitted.
-- **Screenshots go in the folder.** Figma asset URLs expire — export a PNG so the plan reads offline.
-
-## Figma workflow
-
-```
-get_metadata(nodeId)   → component/layer names + node ids (use for the component table)
-get_screenshot(nodeId) → visual + a URL to curl into screenshots/ (expires fast — download immediately)
-get_design_context     → only when implementing, for tokens/measurements
-```
-
-Prefer `get_metadata` when building the component table: it gives exact component names and variant lists, which is what the plan needs.
-
-## Writing cadence
-
-Detailed epic plans are written **just-in-time**, as an epic is about to start — not all up front, where they'd drift. Keep [plans/PLAN.md](../../../plans/PLAN.md) current with the epic summaries and sequence; expand one folder at a time.
-
-## See also
-
-- [AGENTS.md](../../../AGENTS.md) — coding standards the plan must respect
-- [DEV.md](../../../DEV.md) — the commands the DoD refers to
-- **`laravel-package`** skill — package mechanics (providers, publishing, Testbench)
+- The implementation meets the agreed acceptance criteria.
+- `composer check` passes; `composer test:e2e` passes when frontend/chat behavior changes.
+- Rebuild committed `dist/` when frontend source changes.
+- Update README/UPGRADE for behavior or migration changes, DEV for commands, and AGENTS for lasting contributor rules.
+- Describe validation and remaining limitations in the PR without exposing credentials or local application data.

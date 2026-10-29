@@ -1,6 +1,6 @@
 # Working on Synapse
 
-Guidance for any agent or contributor writing code in this repository. Read this first, then [DEV.md](DEV.md) for exact commands. For *how Laravel packages work*, invoke the **`laravel-package`** skill. For *what we're building*, [GOAL.md](GOAL.md) (user-facing) and [PRD.md](PRD.md) (technical) are the source of truth.
+Guidance for any agent or contributor writing code in this repository. Read this first, then [DEV.md](DEV.md) for exact commands. For *how Laravel packages work*, invoke the **`laravel-package`** skill. Use the current user's request and the active GitHub issue's goal and acceptance criteria for scope. [README.md](README.md) and [UPGRADE.md](UPGRADE.md) describe supported behavior; inspect implementation and tests for technical details.
 
 ## Important notes
 
@@ -10,18 +10,20 @@ Guidance for any agent or contributor writing code in this repository. Read this
 - **Sequence feature and browser runs within a checkout.** Installation tests publish/remove Testbench's temporary migrations; simultaneous suites can race. Use separate copies for concurrent compatibility checks.
 - **Rebuild `dist/`** (`npm run build`) whenever `resources/js` changes — it's committed, and the hook checks it.
 - **Never `git commit` without being asked.**
-- **PRD.md / GOAL.md are the spec.** If code and spec disagree, stop and reconcile — don't invent behavior.
+- **Resolve scope conflicts explicitly.** If the requested acceptance criteria, maintained docs, and implementation disagree, identify the discrepancy before changing behavior.
 
 ## What this is
 
-**Synapse** (`redberry/synapse`, namespace `Redberry\Synapse\`) is a Laravel package: a development dashboard for AI agents built with the Laravel AI SDK (`laravel/ai`). A React SPA served by a Laravel service provider — think Telescope/Horizon, but for AI agents. The scaffold is complete and green (Pest, Pint, PHPStan); feature work builds on top of it.
+**Synapse** (`redberry/synapse`, namespace `Redberry\Synapse\`) is a Laravel package: a development dashboard for AI agents built with the Laravel AI SDK (`laravel/ai`). A React SPA served by a Laravel service provider — think Telescope/Horizon, but for AI agents. The package ships discovery, chat, recording, approvals, sources, completion explanations, and model-step inspection, with Pest, Pint, and PHPStan gates.
 
 ## Repository map
 
 ```
 src/                          # PHP — the package
 ├── SynapseServiceProvider.php        # register/boot: routes, views, publish, commands, schedule
-├── SynapseApplicationServiceProvider.php  # base for the published gate provider
+├── SynapseApplicationServiceProvider.php  # compatibility base; published provider is self-contained
+├── Chat/                             # invocation, approvals, recording, replay, SSE projection
+├── Discovery/                        # agent metadata, tools, models, diagnostics
 ├── Synapse.php                       # static helpers: asset tags, script vars, auth callback
 ├── Http/{Controllers,Middleware}/    # HomeController (SPA shell), Authorize (viewSynapse gate)
 ├── Console/                          # Install / Prune / Clear commands
@@ -30,33 +32,33 @@ src/                          # PHP — the package
 └── Repositories/                     # ConversationRepository (cascade delete lives here)
 config/synapse.php            # publishable config (enabled, ui, discovery, playground, storage, retention)
 database/migrations/          # three self-contained synapse_* tables (publish-only)
-routes/web.php                # /api group (stubbed) + SPA catch-all
+routes/web.php                # discovery/chat/approval/history/attachment APIs + SPA catch-all
 resources/js/                 # React + TS SPA — elements/ → components/ → composed/ → pages/
                               #   (+ hooks, lib, types, styles)
 resources/views/layout.blade.php   # SPA shell + window.Synapse bootstrap
 stubs/                        # SynapseServiceProvider.stub (published viewSynapse gate)
-dist/                         # compiled assets — COMMITTED, published on install
-workbench/                    # Testbench dev app + 4 sample agents
+dist/                         # compiled assets — COMMITTED, inlined at request time
+workbench/                    # Testbench dev app + sample/diagnostic agents
 tests/                        # Pest + Testbench (Unit/, Feature/, Browser/ e2e)
 .githooks/                    # pre-commit hook (enable with `composer hooks`)
 testing-laravel-project/      # gitignored real app for manual install testing (bin/setup-testing-app.sh)
 references/                   # gitignored: laravel/ai, telescope, horizon (read-only reference)
 ```
 
-Docs: [PRD.md](PRD.md), [GOAL.md](GOAL.md), [SCAFFOLDING.md](SCAFFOLDING.md), [DESIGN_FEEDBACK.md](DESIGN_FEEDBACK.md).
+Docs: [README.md](README.md), [UPGRADE.md](UPGRADE.md), [DEV.md](DEV.md), [release checklist](docs/RELEASE.md). Completed implementation history lives in closed GitHub issues, merged PRs, and Git history. Keep only unfinished work in `plans/`.
 
 ## Development principles
 
 ### Hierarchy of priorities
 
-1. **Correctness** — does it match the PRD/GOAL for this feature?
+1. **Correctness** — does it meet the agreed goal and acceptance criteria?
 2. **Simplicity** — is this the simplest solution that works?
 3. **Readability** — can human understand it in 30 seconds?
 
 ### KISS · DRY · SOLID — applied pragmatically
 
 - **KISS** — don't over-engineer. Three similar lines beat a premature abstraction. No config options, flexibility, or helper indirection nobody asked for.
-- **DRY** — extract shared logic only once it appears in 2+ places with the same shape. Premature deduplication couples worse than duplication. (The `ConversationRepository` cascade earned extraction because prune, clear, and the future delete-endpoint all need it.)
+- **DRY** — extract shared logic only once it appears in 2+ places with the same shape. Premature deduplication couples worse than duplication. (The `ConversationRepository` cascade earned extraction because prune, clear, and the conversation delete endpoint all need it.)
 - **SOLID** — at package scale, the parts that matter: **single responsibility** (a controller doesn't build SQL; a command delegates to a repository/service), and **dependency inversion** (services/repositories receive collaborators via constructor injection so they're testable). Prefer composition over inheritance; `SynapseModel` is the deliberate exception for shared framework wiring.
 
 ## What NOT to do
@@ -64,7 +66,7 @@ Docs: [PRD.md](PRD.md), [GOAL.md](GOAL.md), [SCAFFOLDING.md](SCAFFOLDING.md), [D
 - **Don't write comments that restate the code.** Use intention-revealing names. Add docblocks only where they carry type information PHPStan needs (array shapes, generics, model `@property`) or explain a non-obvious *why*.
 - **Don't silence PHPStan** with `@phpstan-ignore` without explicit permission from developer, baseline entries, `assert()`, inline `@var`, casts, or widened types. An "always true/false" error means an annotation is wrong.
 - **Don't leave `// TODO`/`// FIXME`** without a concrete action.
-- **Don't handle impossible errors** (e.g. re-validating data a FormRequest/route-model-binding already guaranteed). One catch-all owns agent-invocation failures (PRD Feature 6).
+- **Don't handle impossible errors** (e.g. re-validating data a FormRequest/route-model-binding already guaranteed). One catch-all owns agent-invocation failures.
 - **Don't add a dependency** before checking whether the framework or an existing dependency already solves it. Justify new frontend deps by a feature that needs them.
 - **Don't use `mixed`** where a concrete type is known; narrow it. Don't reach for facades in services/repositories where constructor injection reads clearer and tests better — facades are fine at framework edges (providers, commands, controllers).
 - **Don't concatenate SQL.** Eloquent/query-builder bindings only.
@@ -81,12 +83,12 @@ Docs: [PRD.md](PRD.md), [GOAL.md](GOAL.md), [SCAFFOLDING.md](SCAFFOLDING.md), [D
 
 **TypeScript / React**
 - **Four layers**, each importing only from the ones above it:
-  - `elements/` — generic UI primitives (button, input, dropdown, tooltip, badge…). Domain-agnostic: they know nothing about agents or conversations. The **only** place Radix is imported.
+  - `elements/` — generic UI primitives (button, input, dropdown, tooltip, badge…). Domain-agnostic: they know nothing about agents or conversations. If a primitive library is introduced, import it only at this layer.
   - `components/` — single-purpose domain components (an agent card, a tool chip, a status badge). Presentational: data in via props, events out via callbacks. No fetching.
   - `composed/` — larger units assembled from several components (app shell, grids, panels, threads). Still props-in/events-out; no route-level data loading.
   - `pages/` — one per route. Owns data fetching, hooks, page state, and wiring; composes the layers above.
-  - Details and the element inventory: [plans/FRONTEND.md](plans/FRONTEND.md).
-- React + TypeScript (strict), Tailwind v4 utilities, shadcn/ui vendored into `resources/js/elements` (`components.json` `ui` alias) and restyled to our design tokens. Import via the `@/` alias.
+  - Reuse the current element inventory in `resources/js/elements`. Do not create a composed component for a single-use grouping unless it improves clarity.
+- React + TypeScript (strict), Tailwind v4 utilities, and local primitives in `resources/js/elements` (`components.json` points its `ui` alias there). Native browser controls and existing primitives are preferred; no Radix or Vercel AI client dependency is currently installed. Import via the `@/` alias.
 - Logic belongs in pages and hooks, not components. A component that needs data takes it as props.
 - Theme via `--color-*` CSS tokens in `resources/js/styles/app.css` (dark-first). Never hard-code colors. 
 - use Icons from `lucide-react` — no inline SVG.
@@ -213,10 +215,10 @@ holds the amber card open long enough to watch in the playground.
 ## Synapse golden rules
 
 1. **Never touch the SDK's tables.** Synapse is a dev tool, not a production logger.
-2. **Mirror the agent, don't fake it.** Conversational agents get full history; stateless agents get one message per turn (PRD Feature 2).
-3. **One catch-all owns errors.** Any `\Throwable` during invocation (including a throwing tool `handle()`) becomes an inline error card (PRD Feature 6).
+2. **Mirror the agent, don't fake it.** Conversational agents get full history; stateless agents get one message per turn.
+3. **One catch-all owns errors.** Any `\Throwable` during invocation (including a throwing tool `handle()`) becomes an inline error card.
 4. **`config()` at runtime, `env()` only in config files.** Keeps `config:cache` safe.
-5. **Store replay data in the SDK's own serialization shapes** (`Step::toArray()`, `TextUsage::toArray()`, SDK file serialization). Private `steps` and ordered display `parts` have distinct roles; tool observations live in `synapse_tool_invocations`. See PRD Database Schema for the 1.3 contract.
+5. **Store replay data in the SDK's own serialization shapes** (`Step::toArray()`, `TextUsage::toArray()`, SDK file serialization). Private `steps` and ordered display `parts` have distinct roles; tool observations live in `synapse_tool_invocations`. See `MessageHistory`, `ConversationPresenter`, and the recording tests for the replay/display contract. All agents are wrapped; the original capabilities determine whether history is supplied. Failover capture retains completed results before the next provider attempt replaces its context.
 6. **Cascade deletes in `ConversationRepository`**, never DB foreign keys.
 7. **`dist/` is committed; `references/` and `testing-laravel-project/` are gitignored.**
 
@@ -247,14 +249,14 @@ This repo deliberately keeps its docs synchronized. When your change affects one
 
 | Change | Update |
 |--------|--------|
-| A technical decision / mechanism | **PRD.md** |
-| User-visible behavior | **GOAL.md** (and PRD if the mechanism changed) |
+| A technical decision / mechanism | Explain it in the PR; update **AGENTS.md** only for lasting contributor guidance |
+| User-visible behavior | **README.md**, plus **UPGRADE.md** when migration steps change |
 | Coding conventions / patterns / standards | **AGENTS.md** (this file) |
 | Dev commands / workflow | **DEV.md** |
 | Laravel-package methodology | the `laravel-package` skill |
 | Quick-start / prerequisites | **README.md** |
 
-PRD and GOAL move together — a behavior change usually touches both.
+Avoid duplicating implementation details across documents. Feature plans belong to unfinished work; remove completed plans and their unused assets when their issue/PR records provide the history.
 
 ## Quick reference: task → location
 
@@ -273,13 +275,13 @@ PRD and GOAL move together — a behavior change usually touches both.
 | Add a sample agent | `workbench/app/Agents/` |
 | Add a test | `tests/Feature/` (or `tests/Unit/`) |
 | Add a browser e2e test | `tests/Browser/` — run with `composer test:e2e` |
-| Check product spec | `PRD.md` / `GOAL.md` |
+| Check feature scope | Current user request + active GitHub issue acceptance criteria |
 | Check dev commands | `DEV.md` |
 
 ## Definition of done
 
-- Matches the PRD/GOAL intent for the feature.
+- Meets the agreed goal and acceptance criteria.
 - Covered by Pest tests; `composer check` green (lint + analyse + test).
 - `composer test:e2e` green if the frontend or chat/stream surface changed.
 - `dist/` rebuilt if `resources/js` changed.
-- PRD/GOAL updated if behavior or a technical decision changed.
+- Maintained docs updated where behavior, upgrade steps, or contributor guidance changed.

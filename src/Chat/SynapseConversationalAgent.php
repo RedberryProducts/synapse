@@ -22,16 +22,15 @@ use ReflectionMethod;
 use Stringable;
 
 /**
- * Wraps a Conversational agent so the SDK receives Synapse's own thread history
- * instead of the agent's ConversationStore.
+ * Wraps playground agents so Synapse controls history without using the SDK
+ * ConversationStore. Stateless agents receive no prior turns.
  *
  * Only the `messages()` behaviour may differ from the wrapped agent — everything
  * else has to run exactly as it would unwrapped. That is harder than it looks:
  * the SDK resolves an agent's provider, model, timeout, model tier and every
  * generation option by reflecting on the *instance*, so each of those call sites
  * would otherwise see this class instead of the real agent and silently fall
- * back to framework defaults. Each is forwarded below; see
- * plans/epic-03-chat-mvp/PLAN.md for the full call-site table.
+ * back to framework defaults. Each is forwarded below.
  *
  * Two interfaces are deliberately NOT implemented:
  *

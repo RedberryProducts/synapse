@@ -29,13 +29,9 @@
 /package.json         export-ignore
 /package-lock.json    export-ignore
 
-# Working documents for building Synapse, not for using it. README.md, GOAL.md,
-# CHANGELOG.md and LICENSE.md stay — they are what a consumer reads.
+# Contributor documents are excluded; README, UPGRADE, CHANGELOG and LICENSE stay.
 /AGENTS.md            export-ignore
 /DEV.md               export-ignore
-/PRD.md               export-ignore
-/SCAFFOLDING.md       export-ignore
-/DESIGN_FEEDBACK.md   export-ignore
 
 # The TypeScript source that produces dist/. Not used at runtime.
 /resources/js         export-ignore
