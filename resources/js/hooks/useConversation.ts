@@ -460,6 +460,8 @@ function addSources(entries: ChatEntry[], turnId: string, incoming: CitationSour
 function emptyAssistant(turnId: string, id: string): AssistantEntry {
     return {
         kind: 'assistant',
+        finishReason: null,
+        status: null,
         sources: [],
         id,
         turnId,
@@ -569,7 +571,8 @@ function stopStreaming(entries: ChatEntry[], turnId: string): ChatEntry[] {
                 entry.reasoning !== '' ||
                 entry.structured !== null ||
                 entry.usage !== null ||
-                entry.sources.length > 0,
+                entry.sources.length > 0 ||
+                entry.finishReason !== null,
         );
 }
 
@@ -687,11 +690,12 @@ function replayMessage(message: ConversationMessage, tools: Map<string, Conversa
         }
     }
     // A tool-only turn can still have billable usage and needs one metadata row.
-    if (!entries.some((entry) => entry.kind === 'assistant') && (message.usage || message.meta?.structured || message.content || message.sources?.length)) {
+    if (!entries.some((entry) => entry.kind === 'assistant') && (message.usage || message.meta?.structured || message.content || message.sources?.length || message.finish_reason)) {
         entries.push({ ...emptyAssistant(message.id, message.id), text: message.meta?.structured ? '' : (message.content ?? ''), streaming: false });
     }
     return updateLastAssistant(entries, message.id, (entry) => ({
         ...entry, sources: mergeSources(message.sources ?? []), usage: message.usage, durationMs: message.duration_ms,
+        finishReason: message.finish_reason ?? null, status: message.status,
         meta: message.meta, structured: message.meta?.structured ?? null,
     }));
 }
@@ -743,6 +747,8 @@ function toEntry(message: ConversationMessage): ChatEntry {
 
     return {
         kind: 'assistant',
+        finishReason: message.finish_reason ?? null,
+        status: message.status,
         sources: mergeSources(message.sources ?? []),
         id: message.id,
         turnId: message.id,

@@ -401,3 +401,26 @@ it('merges cited sources across approval continuation', function (string $decisi
         ->and($this->tool->executions)->toBe($decision === 'approve' ? 1 : 0);
     $this->getJson('/synapse/api/conversations/'.$paused->conversation_id)->assertJsonPath('messages.1.sources', $message['sources']);
 })->with([['approve', false], ['deny', false], ['approve', true]]);
+
+it('replaces the terminal reason when an approval turn continues', function (string $class, string $decision, string $stop, ?string $reason) {
+    $slug = approvalAgent($class, $this->tool);
+    $streaming = $class === SupportAgent::class;
+    $sequence = Http::sequence()->push(approvalHttpStep([approvalCall()], $streaming, 'tool_use'));
+    if ($reason === null) {
+        $sequence->push(['error' => ['message' => 'Continuation failed']], 400);
+    } else {
+        $sequence->push(approvalHttpStep([['type' => 'text', 'text' => $streaming ? 'Continued.' : '{"name":"Ada"}']], $streaming, $stop));
+    }
+    Http::fake(['api.anthropic.com/*' => $sequence]);
+    $pausedResponse = sendMessage($slug, 'Run the tool');
+    $paused = SynapseMessage::where('role', 'assistant')->sole();
+    expect(chatPart($pausedResponse, 'data-synapse-end')['data']['turn']['message']['finish_reason'])->toBe('tool_calls')
+        ->and($paused->status)->toBe('paused');
+    $response = resolveApproval($slug, $paused, ['call_approval' => $decision]);
+    $message = chatPart($response, 'data-synapse-end')['data']['turn']['message'];
+    expect($message['id'])->toBe($paused->id)->and($message['finish_reason'])->toBe($reason)
+        ->and($message['status'])->toBe($reason === null ? 'failed' : 'completed');
+    $this->getJson('/synapse/api/conversations/'.$paused->conversation_id)->assertJsonPath('messages.1', $message);
+})->with([SupportAgent::class, ExtractorAgent::class])->with(['approve', 'deny'])->with([
+    ['end_turn', 'stop'], ['max_tokens', 'length'], ['refusal', 'content_filter'], ['failure', null],
+]);

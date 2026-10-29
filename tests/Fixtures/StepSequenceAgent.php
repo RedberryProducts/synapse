@@ -5,6 +5,7 @@ namespace Redberry\Synapse\Tests\Fixtures;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Gateway\StepResponse;
+use Laravel\Ai\Gateway\StepResult;
 use Laravel\Ai\PendingStep;
 use Workbench\App\Agents\SupportAgent;
 
@@ -12,11 +13,11 @@ use Workbench\App\Agents\SupportAgent;
 #[MaxSteps(6)]
 class StepSequenceAgent extends SupportAgent implements HasMiddleware
 {
-    /** @param list<StepResponse> $steps */
+    /** @param list<StepResponse|StepResult> $steps */
     public function __construct(public array $steps) {}
 
     public function middleware(): array
     {
-        return [fn (PendingStep $step): StepResponse => $this->steps[$step->number]];
+        return [fn (PendingStep $step): StepResponse|StepResult => $this->steps[$step->number]];
     }
 }

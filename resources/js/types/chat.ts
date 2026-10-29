@@ -10,6 +10,8 @@ export interface CitationSource {
     title: string | null;
 }
 
+export type FinishReason = 'stop' | 'tool_calls' | 'continue' | 'length' | 'content_filter' | 'error' | 'cancelled' | 'unknown';
+
 export interface Usage {
     input_tokens: number;
     output_tokens: number;
@@ -109,6 +111,8 @@ export interface UserEntry {
 }
 
 export interface AssistantEntry {
+    finishReason: FinishReason | null;
+    status: ConversationMessage['status'] | null;
     sources: CitationSource[];
     kind: 'assistant';
     id: string;
@@ -173,6 +177,7 @@ export type ChatEntry = UserEntry | AssistantEntry | ErrorEntry | NoticeEntry | 
 /* ── Replay payload (GET /api/conversations/{id}) ──────────────────────────── */
 
 export interface ConversationMessage {
+    finish_reason: FinishReason | null;
     sources: CitationSource[];
     id: string;
     role: 'user' | 'assistant' | 'error';

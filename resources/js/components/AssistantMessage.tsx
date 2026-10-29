@@ -1,4 +1,5 @@
 import { SourcesList } from '@/components/SourcesList';
+import { CompletionNotice } from '@/components/CompletionNotice';
 import { Markdown } from '@/elements/Markdown';
 import { MessageMeta } from './MessageMeta';
 import { ReasoningPane } from './ReasoningPane';
@@ -55,6 +56,8 @@ export function AssistantMessage({
             {entry.structured && <StructuredOutputCard data={entry.structured} />}
 
             <SourcesList sources={entry.sources} />
+
+            {!entry.streaming && <CompletionNotice reason={entry.finishReason} status={entry.status} />}
 
             {!entry.streaming && entry.usage && (
                 <MessageMeta

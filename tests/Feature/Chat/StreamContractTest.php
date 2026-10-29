@@ -136,3 +136,16 @@ it('retains partial output when a real provider stream terminates unsuccessfully
         ->and(substr_count($response->streamedContent(), 'data: [DONE]'))->toBe(1);
     Http::assertSentCount(1);
 })->with([false, true]);
+
+it('uses the persisted terminal reason for the final wire frame', function (?string $reason, ?string $wireReason) {
+    $emitter = new StreamEmitter(false);
+    $emitter->event(new StreamEnd('old', 'length', new TextUsage, time()));
+    $emitter->finish('saved', turn: ['message' => ['finish_reason' => $reason]]);
+    $finish = collect($emitter->written())->reject(fn (string $part): bool => $part === '[DONE]')
+        ->map(fn (string $part): array => json_decode($part, true))->firstWhere('type', 'finish');
+    expect($finish['finishReason'])->toBe($wireReason);
+})->with([
+    ['stop', 'stop'], ['length', 'length'], ['content_filter', 'content-filter'],
+    ['tool_calls', 'tool-calls'], ['continue', 'continue'], ['cancelled', 'cancelled'],
+    ['error', 'error'], ['unknown', 'unknown'], [null, null],
+]);
