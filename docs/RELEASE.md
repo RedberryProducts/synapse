@@ -45,7 +45,7 @@ composer update --dry-run
 ```
 
 **Check the SDK constraint against what `laravel/ai` has actually released**, not
-against what is in `references/` or your lock file. A `0.x` dependency moves, and
+against what is in `references/` or your lock file. SDK releases move, and
 a constraint that has fallen behind makes the package uninstallable in a fresh
 app while every local test stays green.
 
@@ -58,7 +58,7 @@ Update `CHANGELOG.md`. For anything user-visible, write release notes in
 `docs/releases/vX.Y.Z.md` — features and what they're for, not a commit log.
 Compare against the latest published tag so every unreleased feature is included.
 Keep version-specific upgrade paths in `UPGRADE.md`: additive migrations must
-not inherit the legacy 0.1.x storage-reset instructions. Review README and GOAL
+not inherit the legacy 0.1.x storage-reset instructions. Review README and UPGRADE
 for stale release-status notices and verify any migration counts.
 
 ## 6. Clean-app smoke test
@@ -91,15 +91,22 @@ Then, following only the README:
 
 Cover discovery, info panel, chat, tool inspection, attachments/structured/reasoning,
 history, approvals, cited sources, completion explanations, and the step inspector
-in both themes. Include reload and approval continuation. Epic 6's manual pass
-found three bugs in code that had been green for weeks.
+in both themes. Include reload and approval continuation. Record commands, resolved versions, results, and coverage limits in the release-preparation PR; do not create a permanent completed-plan directory.
 
 ## 8. Publish from GitHub
+
+Before merging the release-preparation PR, replace its planned/unreleased changelog heading with the intended release version and date, remove obsolete publication caveats, and finalize the release notes. If publication is delayed, correct the date before tagging.
 
 Merge the release-preparation PR, then open GitHub → Releases → Draft a new release.
 Create the planned `vX.Y.Z` tag against the merged `main` commit, use the title from
 `docs/releases/vX.Y.Z.md`, and paste that file's release notes into the description.
-Publish when ready. Do not tag the preparation branch before it is merged.
+Publish when authorized. Keep the description feature-focused; do not append generated PR/issue lists. Do not tag the preparation branch before it is merged or move an existing published tag.
 
 Then install the tag in a fresh app one more time and repeat step 6's first two
 checks. Packagist picks the tag up automatically via the GitHub hook.
+
+Record the published URL, date, tag commit, and post-publication install result in the release-preparation PR. Confirm the changelog and release notes on main agree with the published release.
+
+### Outstanding post-publication check
+
+- [ ] **v0.3.0:** install the exact published tag from Packagist in a fresh app, verify the dashboard and discovery, and record the outcome on [PR #27](https://github.com/RedberryProducts/synapse/pull/27). The pre-publication candidate archive passed; the published-tag installation has not yet been verified. Remove this item once its result is recorded.

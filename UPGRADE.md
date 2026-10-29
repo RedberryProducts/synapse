@@ -48,7 +48,7 @@ See the [v0.3.0 release notes](docs/releases/v0.3.0.md) for the feature overview
 
 The **0.2.0 Laravel AI 1.3 migration**, published on 2026-10-26, changed the storage format. Only this older upgrade requires clearing Synapse history and attachments before changing dependencies. Follow the legacy procedure below to reach 0.2.0, verify it, then follow the additive 0.3.0 procedure above. Do not apply the legacy reset to an existing 0.2.0 installation.
 
-Historical evidence: [0.2.0 release notes](docs/releases/v0.2.0.md), [qualification](plans/laravel-ai-1.3-migration/QUALIFICATION.md), and [2026-10-26 validation](plans/laravel-ai-1.3-migration/RELEASE-VALIDATION.md).
+Historical evidence: [0.2.0 release notes](docs/releases/v0.2.0.md) and the merged [migration PR](https://github.com/RedberryProducts/synapse/pull/17).
 
 ## Legacy migration requirements
 
@@ -109,7 +109,7 @@ Rollback also requires empty Synapse storage. Restore the matching dependency/sc
 
 A fresh 0.2.0 installation runs five migrations. A fresh 0.3.0 installation runs seven; see the current installation instructions in [README.md](README.md#installation). No npm build or asset publication is needed in the host app.
 
-The published provider and migrations remain loadable after `composer install --no-dev` removes Synapse. This path was exercised in real Laravel 12 and 13 applications; see the qualification report.
+The published provider and migrations remain loadable after `composer install --no-dev` removes Synapse. This path was exercised in real Laravel 12 and 13 applications; see the [release-preparation PR](https://github.com/RedberryProducts/synapse/pull/27).
 
 ## Contracts changed in 0.2.0
 

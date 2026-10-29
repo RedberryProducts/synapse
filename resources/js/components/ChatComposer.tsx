@@ -16,11 +16,9 @@ import type { ModelOption } from '@/types/agent';
 /**
  * The message composer — Figma `Chat Input`, all five states.
  *
- * The attach menu offers Image, Audio and Attach File, matching the three kinds
- * the SDK models. Figma's third item reads "Image & Video", but the SDK has no
- * video type and no provider accepts video on a text call — see
- * DESIGN_FEEDBACK #8. A video dropped through "Attach File" still uploads and
- * still reaches the provider; its rejection is the honest answer.
+ * The attach menu matches Synapse's image, audio, and document mapping.
+ * SDK video input is not integrated here; an arbitrary file upload still
+ * reaches the provider as a document and may be rejected.
  */
 const pickers = [
     { label: 'Attach File', icon: Paperclip, accept: '' },

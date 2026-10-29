@@ -125,7 +125,7 @@ class ConversationWriter
      * Store an error that occurred while running the agent.
      *
      * Every failure lands here — provider errors, tool exceptions, resolution
-     * failures — so the thread always explains itself (PRD Feature 6).
+     * failures — so the thread always explains itself.
      */
     public function storeError(SynapseConversation $conversation, Throwable $e): SynapseMessage
     {

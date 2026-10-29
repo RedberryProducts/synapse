@@ -111,7 +111,7 @@ Mostly automated by the hook (`composer hooks`):
 
 - [ ] `composer check` green (lint + analyse + test) — *enforced by the hook*
 - [ ] `npm run build` run if `resources/js` changed, and `dist/` staged — *enforced by the hook*
-- [ ] PRD.md / GOAL.md updated if behavior or a technical decision changed
+- [ ] README / UPGRADE updated for user-visible changes; lasting contributor guidance kept in AGENTS
 - [ ] `composer test:e2e` green if you touched the frontend or the chat/stream surface (always before a release)
 
 ## Release checklist
@@ -122,7 +122,7 @@ Mostly automated by the hook (`composer hooks`):
 4. Verify both supported Laravel majors on actual PHP 8.3 and 8.4, at the declared framework/SDK minimums and latest allowed stable resolutions
 5. Smoke-test fresh installation, repeated installation, configured storage, and production boot/migrations after removing dev dependencies
 6. Measure real HTTP streaming with output buffering enabled and a deterministic slow tool
-7. Review [UPGRADE.md](UPGRADE.md), [CHANGELOG.md](CHANGELOG.md), and the [current release validation report](plans/release-v0.3.0/VALIDATION.md); complete the real-provider checks in [docs/RELEASE.md](docs/RELEASE.md)
+7. Review [UPGRADE.md](UPGRADE.md) and [CHANGELOG.md](CHANGELOG.md); follow [docs/RELEASE.md](docs/RELEASE.md) and record validation in the release-preparation PR
 8. Commit/tag/publish only when explicitly requested
 
 ## CI
@@ -131,26 +131,8 @@ The repository currently has no automated test-matrix workflow. The Maestro task
 
 Compatibility should be checked on both supported Laravel majors (12 and 13), including a fresh install and production boot after `composer install --no-dev`. Browser e2e requires Playwright, Chromium, and current compiled assets.
 
-## Laravel AI 1.3 storage reset
+## Upgrade and release history
 
-This reset applies only to the legacy 0.1.x → 0.2.0 storage migration. Upgrades from 0.2.0 to 0.3.0 preserve history and need only the additive migrations; see [UPGRADE.md](UPGRADE.md). For the legacy reset, follow this order:
+Follow [UPGRADE.md](UPGRADE.md) for version-specific migration instructions. Only legacy 0.1.x storage requires a reset; 0.2.0 → 0.3.0 uses two additive migrations and preserves history. Fresh 0.3.0 installations run seven published Synapse migrations, separate from the SDK's own tables.
 
-1. Back up any Synapse history you need and stop requests/jobs that can write to Synapse. Keep traffic stopped until the upgrade is complete.
-2. On the existing installation, with its existing storage configuration, run `php artisan synapse:clear`. This explicitly deletes Synapse conversations, messages, tool observations, and uploaded attachments. It does not delete SDK conversation data.
-3. Upgrade Synapse and its Composer dependencies.
-4. Run `php artisan vendor:publish --tag=synapse-migrations` to publish the new follow-up migrations, then `php artisan migrate`.
-5. Verify the upgraded dashboard before resuming traffic.
-
-The migration refuses nonempty Synapse storage and leaves it untouched. It also refuses a rollback with data. There is no historical-data backfill or old-format reader. If a damaged installation contains orphan message/tool rows after `synapse:clear`, back up and explicitly remove those orphan Synapse rows on the configured connection before retrying. Never use `migrate:fresh` on the host application for this upgrade.
-
-The 0.2.0 release had five migrations; current fresh installations run all seven published migrations. The host application's own Laravel AI conversation migration is separate; follow the [SDK upgrade guide](https://github.com/laravel/ai/blob/v1.3.0/UPGRADE.md) for that data.
-
-For the steps 1–7 milestone, run the focused tests with:
-
-```bash
-./vendor/bin/pest tests/Feature/AiStorageMigrationTest.php tests/Feature/ModelTest.php tests/Feature/RetentionTest.php tests/Feature/Chat/SdkBoundaryTest.php tests/Feature/Chat/DecoratorTest.php tests/Feature/Chat/TurnRecordingTest.php tests/Feature/Chat/StepHistoryTest.php tests/Feature/Chat/StreamContractTest.php tests/Feature/Discovery/Sdk13DiscoveryTest.php
-```
-
-This does not replace `composer check` or `composer test:e2e`. Current results and the earlier intermediate failures are recorded in [PROGRESS.md](plans/laravel-ai-1.3-migration/PROGRESS.md) alongside the remaining release qualification work.
-
-The separate fresh-install preview is in `build/laravel-ai13-dx` (gitignored). Its [installation walkthrough](plans/laravel-ai-1.3-migration/INSTALLATION-WALKTHROUGH.md) records every setup step, sample agent, production `--no-dev` check, and restart command. The [closed-issue audit](plans/laravel-ai-1.3-migration/REGRESSION-AUDIT.md) maps production fixes to retained coverage.
+Use [closed issues](https://github.com/RedberryProducts/synapse/issues?q=is%3Aissue+is%3Aclosed) and [merged PRs](https://github.com/RedberryProducts/synapse/pulls?q=is%3Apr+is%3Amerged) for completed implementation and validation history. [SDK opportunities](plans/SDK-OPPORTUNITIES.md) contains future candidates, not committed scope.
