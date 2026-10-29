@@ -8,7 +8,7 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 
 ![The Synapse playground: a conversation with a tool call expanded to show its arguments and result](docs/screenshots/playground.png)
 
-> **Migration qualification:** steps 1–8 of the [Laravel AI 1.3 plan](plans/laravel-ai-1.3-migration/PLAN.md) are implemented and deterministic checks pass. Live OpenAI flows have also been exercised; this branch is not tagged or released. See the [qualification report](plans/laravel-ai-1.3-migration/QUALIFICATION.md) and follow [UPGRADE.md](UPGRADE.md) for the required history reset before upgrading.
+> **Upgrading:** v0.3.0 adds approvals, sources, completion explanations, and step inspection. Upgrades from 0.2.0 preserve history and require two additive migrations. The older 0.1.x → 0.2.0 storage migration requires a reset. Follow the version-specific [upgrade guide](UPGRADE.md).
 
 ## Requirements
 
@@ -96,25 +96,17 @@ Use the Laravel AI SDK's `Approvable` contract and `InteractsWithApprovals` trai
 
 The playground displays the arguments and reason before execution. Approve or deny each pending call; batches continue once every call has a decision. Denial lets the model continue with an explanation that the action was declined. Reloading preserves pending requests. Native provider-hosted tools and approvals inside child agents are not supported by this integration.
 
-When upgrading from Synapse 0.2, publish and run the additive migration before opening the dashboard:
+## Upgrading to 0.3.0
+
+From 0.2.0, update the Composer constraint and publish/run the two additive migrations for approvals and step observations before opening the dashboard:
 
 ```bash
+composer require --dev 'redberry/synapse:^0.3' --with-all-dependencies
 php artisan vendor:publish --tag=synapse-migrations
 php artisan migrate
 ```
 
-Existing history is retained. Older paused turns lack the resume checkpoint; start a new turn for those. No new approval request runs automatically, and no SDK conversation tables are used.
-
-## Step inspector upgrade
-
-Before opening the updated dashboard, publish and run the additive step-observation migration:
-
-```bash
-php artisan vendor:publish --tag=synapse-migrations
-php artisan migrate
-```
-
-Existing history is preserved. Older saved steps remain inspectable, with model-call timing unavailable and completion evidence marked unverified. New partial steps do not claim token usage. The inspector is read-only and appears after completion, failure, or an approval pause.
+Use these commands once v0.3.0 is published. Existing history and attachments are retained; no reset is needed. Older paused turns cannot be resumed, and historical steps have no model-call timing where it was never recorded. See [UPGRADE.md](UPGRADE.md) for verification and the separate legacy 0.1.x migration, and [release notes](docs/releases/v0.3.0.md) for all new features.
 
 ## Configuration
 

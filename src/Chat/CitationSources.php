@@ -48,7 +48,7 @@ class CitationSources
         }
         try {
             // Validate the ASCII URI while preserving the SDK's exact URL for display and deduplication.
-            if (filter_var(Uri::of($url)->toString(), FILTER_VALIDATE_URL) === false) {
+            if (filter_var(Uri::of($url)->value(), FILTER_VALIDATE_URL) === false) {
                 return null;
             }
         } catch (UriException) {
