@@ -48,6 +48,12 @@ class SynapseRecorder
     /** @var array<int, array<int, Step>> */
     protected array $attempts = [];
 
+    /** @var array<string, array<string, mixed>> */
+    protected array $stepObservations = [];
+
+    /** @var array<string, list<string>> */
+    protected array $stepTools = [];
+
     /** @var list<array<string, mixed>> */
     protected array $parts = [];
 
@@ -65,6 +71,9 @@ class SynapseRecorder
 
     /** @var array<string, string> */
     protected array $text = [];
+
+    /** @var array<string, string> */
+    protected array $reasoning = [];
 
     protected ?string $lastBlock = null;
 
@@ -110,6 +119,12 @@ class SynapseRecorder
     public function stepCompleted(StepCompleted $event): void
     {
         $response = $event->response;
+        $this->stepObservations[$this->attempt.':'.$event->stepNumber] = [
+            'completion' => 'completed', 'model_duration_ms' => $event->time,
+            'finish_reason' => $response->finishReason->value,
+            'provider' => $response->meta->provider ?? $event->provider->name(),
+            'model' => $response->meta->model ?? $event->model,
+        ];
         $this->sources = CitationSources::merge($this->sources, $response->meta->citations);
         $this->attempts[$this->attempt][$event->stepNumber] = new Step(
             $response->text, $response->toolCalls, [], $response->finishReason,
@@ -154,6 +169,7 @@ class SynapseRecorder
             $key = 'provider:'.$this->group().':'.$row->id;
             if (! isset($this->observations[$key])) {
                 $this->observations[$key] = $row->id;
+                $this->stepTools[$this->group()][] = $row->id;
                 $this->part(['type' => 'tool', 'tool_invocation_id' => $row->id]);
             }
         }
@@ -173,6 +189,9 @@ class SynapseRecorder
     {
         if ($type === 'text') {
             $this->text[$this->group()] = ($this->text[$this->group()] ?? '').$text;
+        }
+        if ($type === 'reasoning') {
+            $this->reasoning[$this->group()] = ($this->reasoning[$this->group()] ?? '').$text;
         }
         $key = $this->group().':'.$type.':'.$source;
         if ($this->lastBlock === $key) {
@@ -253,6 +272,11 @@ class SynapseRecorder
     public function capture(AgentResponse $response): void
     {
         foreach ($response->steps as $number => $step) {
+            $this->stepObservations[$this->attempt.':'.$number] ??= [
+                'completion' => 'response', 'model_duration_ms' => null,
+                'finish_reason' => $step->finishReason->value,
+                'provider' => $step->meta->provider, 'model' => $step->meta->model,
+            ];
             $this->sources = CitationSources::merge($this->sources, $step->meta->citations);
             if (! $this->streaming && ! isset($this->attempts[$this->attempt][$number])) {
                 $this->step = $number;
@@ -347,12 +371,14 @@ class SynapseRecorder
                 ]);
             }
             $this->observations[$key] = $row->id;
+            $this->stepTools[$entry['group']][] = $row->id;
         }
         foreach ($this->executions as $id => $row) {
             if ($row->status === 'pending') {
                 $row->forceFill(['status' => 'error', 'error' => $failure?->getMessage() ?? 'The invocation ended before the tool returned.', 'finished_at' => now()])->save();
             }
             if (! isset($used[$id])) {
+                $this->stepTools[$this->groups[$id]][] = $row->id;
                 $this->part(['type' => 'tool', 'tool_invocation_id' => $row->id]);
             }
         }
@@ -373,6 +399,30 @@ class SynapseRecorder
 
             return [...$part, 'tool_invocation_id' => $id];
         }, $this->parts);
+    }
+
+    /** Observations follow exactly the saved snapshot's step order. @return list<array<string, mixed>> */
+    public function stepObservations(): array
+    {
+        $observations = [];
+        foreach ($this->attempts as $attempt => $steps) {
+            foreach ($steps as $number => $step) {
+                $group = $attempt.':'.$number;
+                $observations[] = [
+                    ...($this->stepObservations[$group] ?? []),
+                    'tool_ids' => array_values(array_unique($this->stepTools[$group] ?? [])),
+                ];
+            }
+        }
+        if (! isset($this->attempts[$this->attempt][$this->step]) && isset($this->text[$this->group()])) {
+            $observations[] = [
+                'completion' => 'incomplete', 'model_duration_ms' => null,
+                'reasoning' => $this->reasoning[$this->group()] ?? null,
+                'tool_ids' => array_values(array_unique($this->stepTools[$this->group()] ?? [])),
+            ];
+        }
+
+        return $observations;
     }
 
     public function linkToMessage(string $messageId): void

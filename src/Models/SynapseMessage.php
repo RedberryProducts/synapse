@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $content
  * @property array<int, mixed> $attachments
  * @property array<int, mixed>|null $steps
+ * @property array<int, mixed>|null $step_observations
  * @property array<int, mixed>|null $parts
  * @property string|null $approval_state
  * @property array<string, mixed>|null $approval
@@ -39,6 +40,7 @@ class SynapseMessage extends SynapseModel
     protected $casts = [
         'attachments' => 'array',
         'steps' => 'array',
+        'step_observations' => 'array',
         'parts' => 'array',
         'approval' => 'array',
         'usage' => 'array',

@@ -83,6 +83,7 @@ In `local`, the dashboard is open and needs no authentication — that's the poi
 - **Chat playground** — streaming replies, attachments, a model selector for trying another model without touching your code, and full conversation persistence.
 - **Cited sources** — inspect SDK-reported source links as answers stream, with the same sources preserved in history, approval continuations, and partial failures.
 - **Completion explanations** — see when output was limited, content-filtered, or explicitly cancelled, with the same explanation preserved in history.
+- **Step inspector** — expand Steps beneath a response to inspect each model round, its output, usage, finish reason, tool results, and available model-call timing.
 - **Tool approvals** — approve or deny SDK approval requests inline, including after a refresh. Supports custom/SDK tools, SDK MCP wrappers, and approval before sub-agent delegation.
 - **Tool inspection** — each call inline as a card: arguments, results, duration, and failures marked as failures. Provider-native tools are distinguished from your own.
 - **Info panel** — the agent's resolved config, system prompt, tool schemas and middleware, exactly as the SDK would use them.
@@ -103,6 +104,17 @@ php artisan migrate
 ```
 
 Existing history is retained. Older paused turns lack the resume checkpoint; start a new turn for those. No new approval request runs automatically, and no SDK conversation tables are used.
+
+## Step inspector upgrade
+
+Before opening the updated dashboard, publish and run the additive step-observation migration:
+
+```bash
+php artisan vendor:publish --tag=synapse-migrations
+php artisan migrate
+```
+
+Existing history is preserved. Older saved steps remain inspectable, with model-call timing unavailable and completion evidence marked unverified. New partial steps do not claim token usage. The inspector is read-only and appears after completion, failure, or an approval pause.
 
 ## Configuration
 

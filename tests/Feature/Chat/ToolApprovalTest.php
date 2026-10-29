@@ -424,3 +424,26 @@ it('replaces the terminal reason when an approval turn continues', function (str
 })->with([SupportAgent::class, ExtractorAgent::class])->with(['approve', 'deny'])->with([
     ['end_turn', 'stop'], ['max_tokens', 'length'], ['refusal', 'content_filter'], ['failure', null],
 ]);
+
+it('appends inspector steps across repeated approvals without replacing earlier model timing', function (string $decision, string $class) {
+    $streaming = $class === SupportAgent::class;
+    $slug = approvalAgent($class, $this->tool);
+    Http::fake(['api.anthropic.com/*' => Http::sequence()
+        ->push(approvalHttpStep([approvalCall('first')], $streaming, 'tool_use'))
+        ->push(approvalHttpStep([approvalCall('second')], $streaming, 'tool_use'))
+        ->push(approvalHttpStep([['type' => 'text', 'text' => 'Finished.']], $streaming))]);
+    $first = chatPart(sendMessage($slug, 'Search'), 'data-synapse-end')['data']['turn'];
+    $message = SynapseMessage::findOrFail($first['message']['id']);
+    $second = chatPart(resolveApproval($slug, $message, ['first' => $decision]), 'data-synapse-end')['data']['turn'];
+    $third = chatPart(resolveApproval($slug, $message->fresh(), ['second' => $decision]), 'data-synapse-end')['data']['turn'];
+    $steps = $third['message']['step_details'];
+    expect(array_column($steps, 'number'))->toBe([1, 2, 3])
+        ->and($third['message']['id'])->toBe($first['message']['id'])
+        ->and($steps[0]['model_duration_ms'])->toBe($first['message']['step_details'][0]['model_duration_ms'])
+        ->and($steps[1]['model_duration_ms'])->toBe($second['message']['step_details'][1]['model_duration_ms'])
+        ->and($steps[0]['tools'][0]['status'])->toBe($decision === 'approve' ? 'success' : 'denied')
+        ->and($steps[1]['tools'][0]['status'])->toBe($decision === 'approve' ? 'success' : 'denied')
+        ->and($third['tool_invocations'])->toHaveCount(2)
+        ->and($third['message']['usage']['input_tokens'])->toBe(60);
+    $this->getJson('/synapse/api/conversations/'.$message->conversation_id)->assertJsonPath('messages.1', $third['message']);
+})->with(['approve', 'deny'])->with([SupportAgent::class, ExtractorAgent::class]);

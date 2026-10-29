@@ -693,11 +693,15 @@ function replayMessage(message: ConversationMessage, tools: Map<string, Conversa
     if (!entries.some((entry) => entry.kind === 'assistant') && (message.usage || message.meta?.structured || message.content || message.sources?.length || message.finish_reason)) {
         entries.push({ ...emptyAssistant(message.id, message.id), text: message.meta?.structured ? '' : (message.content ?? ''), streaming: false });
     }
-    return updateLastAssistant(entries, message.id, (entry) => ({
+    const result = updateLastAssistant(entries, message.id, (entry) => ({
         ...entry, sources: mergeSources(message.sources ?? []), usage: message.usage, durationMs: message.duration_ms,
         finishReason: message.finish_reason ?? null, status: message.status,
         meta: message.meta, structured: message.meta?.structured ?? null,
     }));
+    if (message.step_details?.length) {
+        result.push({ kind: 'steps', id: `${message.id}:steps`, turnId: message.id, steps: message.step_details, durationMs: message.duration_ms });
+    }
+    return result;
 }
 
 function completeTurn(entries: ChatEntry[], turnId: string, turn: CompletedTurn, resuming: boolean): ChatEntry[] {

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { StepInspector } from './StepInspector';
 import { Info } from 'lucide-react';
 import { AssistantMessage } from '@/components/AssistantMessage';
 import { ChatEmptyState } from '@/components/ChatEmptyState';
@@ -67,6 +68,9 @@ function Entry({ entry, agentModel, approval }: { entry: ChatEntry; agentModel?:
     switch (entry.kind) {
         case 'user':
             return <UserMessage content={entry.content} attachments={entry.attachments} />;
+
+        case 'steps':
+            return <StepInspector steps={entry.steps} durationMs={entry.durationMs} />;
 
         case 'assistant':
             return <AssistantMessage entry={entry} agentModel={agentModel} />;

@@ -8,23 +8,28 @@ use Redberry\Synapse\Models\SynapseToolInvocation;
 /** The client projection shared by thread reload and stream completion. */
 class ConversationPresenter
 {
+    public function __construct(protected StepPresenter $steps) {}
+
     /** @return array<string, mixed> */
     public function turn(SynapseMessage $message): array
     {
+        $tools = $message->toolInvocations()->orderBy('id')->get()->map($this->tool(...))->all();
+
         return [
-            'message' => $this->message($message),
-            'tool_invocations' => $message->toolInvocations()->orderBy('id')->get()->map($this->tool(...))->all(),
+            'message' => $this->message($message, $tools),
+            'tool_invocations' => $tools,
         ];
     }
 
     /** @return array<string, mixed> */
-    public function message(SynapseMessage $message): array
+    public function message(SynapseMessage $message, array $tools = []): array
     {
         $sources = CitationSources::forMessage($message);
 
         return [
             'id' => $message->id,
             'sources' => $sources,
+            'step_details' => $this->steps->forMessage($message, $tools),
             'role' => $message->role,
             'status' => $message->status,
             'finish_reason' => CompletionReason::forMessage($message)?->value,

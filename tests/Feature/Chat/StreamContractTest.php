@@ -94,7 +94,9 @@ it('keeps private replay blocks out of completion and reload payloads', function
     $response = sendMessage('workbench.app.agents.support-agent', 'Hello');
     $assistant = SynapseMessage::where('role', 'assistant')->sole();
     $completion = chatPart($response, 'data-synapse-end')['data']['turn']['message'];
-    $assistant->update(['steps' => [['replay_blocks' => ['signature' => 'private-secret']]]]);
+    $steps = $assistant->steps;
+    $steps[0]['replay_blocks'] = ['signature' => 'private-secret'];
+    $assistant->update(['steps' => $steps]);
     $detail = $this->getJson('/synapse/api/conversations/'.$assistant->conversation_id)->assertOk();
     expect($detail->json('messages.1'))->toBe($completion)
         ->and($completion)->not->toHaveKey('steps')
