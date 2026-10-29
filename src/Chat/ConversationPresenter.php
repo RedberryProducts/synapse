@@ -27,6 +27,7 @@ class ConversationPresenter
             'sources' => $sources,
             'role' => $message->role,
             'status' => $message->status,
+            'finish_reason' => CompletionReason::forMessage($message)?->value,
             'approval' => $message->approval === null ? null : [
                 'state' => $message->approval_state,
                 'revision' => $message->approval['revision'],

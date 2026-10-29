@@ -87,6 +87,8 @@ export async function streamChat(
             dispatch(part, handlers);
         }
     }
+    // Some transports trim the final separator; the complete sentinel still proves termination.
+    if (buffer.trim() === 'data: [DONE]') terminated = true;
     if (!completed || !terminated) throw new Error('The stream ended before the response was saved. Reload the conversation to check its status.');
 }
 

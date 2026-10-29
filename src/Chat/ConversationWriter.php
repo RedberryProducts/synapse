@@ -86,6 +86,7 @@ class ConversationWriter
         ?array $structured = null,
         ?array $approval = null,
         ?SynapseMessage $existing = null,
+        ?FinishReason $finishReason = null,
     ): SynapseMessage {
         $hasUsage = ! empty($existing->usage) || $status !== 'failed' || $response->steps->contains(
             fn (Step $step): bool => $step->finishReason !== FinishReason::Unknown,
@@ -107,12 +108,12 @@ class ConversationWriter
             inputTokens: $hasUsage ? $usage->inputTokens : null,
             outputTokens: $hasUsage ? $usage->outputTokens : null,
             durationMs: ($existing->duration_ms ?? 0) + $durationMs,
-            meta: array_filter([
+            meta: [...array_filter([
                 ...$response->meta->toArray(),
                 'citations' => CitationSources::merge($existing === null ? [] : CitationSources::forMessage($existing), $response->meta->citations),
                 'reasoning' => implode("\n\n", array_filter([$existing?->meta['reasoning'] ?? null, $response->reasoning])) ?: null,
                 'structured' => $structured,
-            ], fn (mixed $value): bool => $value !== null),
+            ], fn (mixed $value): bool => $value !== null), 'finish_reason' => $finishReason?->value],
             approval: $approval,
             existing: $existing,
         );

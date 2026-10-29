@@ -82,6 +82,7 @@ In `local`, the dashboard is open and needs no authentication — that's the poi
 - **Discovery** — every agent class in your app, with its provider, model and tools. Write a class, refresh, it's there.
 - **Chat playground** — streaming replies, attachments, a model selector for trying another model without touching your code, and full conversation persistence.
 - **Cited sources** — inspect SDK-reported source links as answers stream, with the same sources preserved in history, approval continuations, and partial failures.
+- **Completion explanations** — see when output was limited, content-filtered, or explicitly cancelled, with the same explanation preserved in history.
 - **Tool approvals** — approve or deny SDK approval requests inline, including after a refresh. Supports custom/SDK tools, SDK MCP wrappers, and approval before sub-agent delegation.
 - **Tool inspection** — each call inline as a card: arguments, results, duration, and failures marked as failures. Provider-native tools are distinguished from your own.
 - **Info panel** — the agent's resolved config, system prompt, tool schemas and middleware, exactly as the SDK would use them.

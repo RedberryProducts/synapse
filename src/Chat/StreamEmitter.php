@@ -268,9 +268,10 @@ class StreamEmitter
         if ($status !== 'failed') {
             $this->part([
                 'type' => 'finish',
-                'finishReason' => match ($this->streamEnd?->reason) {
+                'finishReason' => match ($turn !== null ? ($turn['message']['finish_reason'] ?? null) : $this->streamEnd?->reason) {
                     'tool_calls' => 'tool-calls', 'length' => 'length', 'content_filter' => 'content-filter',
-                    default => 'stop',
+                    'stop' => 'stop', 'continue' => 'continue', 'cancelled' => 'cancelled',
+                    'error' => 'error', 'unknown' => 'unknown', default => null,
                 },
                 'messageMetadata' => ['usage' => $usage],
             ]);

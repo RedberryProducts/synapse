@@ -708,6 +708,7 @@ it('reports an incomplete transport stream instead of silently completing', func
     $page->assertPresent('@error-card')
         ->assertSeeIn('@error-card', 'The stream ended before the response was saved.')
         ->assertSeeIn('@message-assistant', 'Partial transport answer.')
+        ->assertMissing('@completion-notice')
         ->assertMissing('@message-assistant-loading')
         ->assertNoJavaScriptErrors();
 });

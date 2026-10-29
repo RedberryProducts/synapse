@@ -43,6 +43,8 @@ class AgentInvoker
         $recorder = null;
         $assistant = null;
         $turn = null;
+        $finishReason = null;
+        $structuredOutput = null;
         $startedAt = hrtime(true);
 
         try {
@@ -105,16 +107,24 @@ class AgentInvoker
                 if ($completed === null) {
                     throw new RuntimeException('The provider ended the stream without completing the response.');
                 }
-                if ($completed->steps->last()?->finishReason === FinishReason::Unknown) {
-                    $recorder->capture($completed);
-                    throw new RuntimeException('The provider ended the stream without a completion reason.');
-                }
 
                 return $completed;
             });
 
             $recorder->capture($response);
+            $structuredOutput = $response instanceof StructuredAgentResponse ? $response->structured : null;
+            $finishReason = CompletionReason::forResponse($response);
             $status = $response->hasPendingApprovals() ? 'paused' : 'completed';
+            if ($status !== 'paused') {
+                if ($finishReason === FinishReason::Unknown) {
+                    throw new RuntimeException($structured
+                        ? 'The provider ended the response without a completion reason.'
+                        : 'The provider ended the stream without a completion reason.');
+                }
+                if ($finishReason === FinishReason::Error) {
+                    throw new RuntimeException('The SDK reported an error completion.');
+                }
+            }
             if ($status === 'paused') {
                 $recorder->notice(self::APPROVAL_NOTICE);
                 $emitter->notice(self::APPROVAL_NOTICE);
@@ -122,8 +132,8 @@ class AgentInvoker
             $parts = $recorder->finish($status);
             $assistant = $this->writer->storeAssistantMessage(
                 $conversation, $recorder->snapshot(), $this->elapsedMs($startedAt), $parts, $status,
-                $response instanceof StructuredAgentResponse ? $response->structured : null,
-                $this->approvals->checkpoint($response, $recorder), $resuming,
+                $structuredOutput,
+                $this->approvals->checkpoint($response, $recorder), $resuming, $finishReason,
             );
             $recorder->linkToMessage($assistant->id);
             $turn = $this->presenter->turn($assistant);
@@ -145,7 +155,7 @@ class AgentInvoker
                     $parts = $recorder->finish($status, $e);
                     $partial = $recorder->snapshot();
                     if ($resuming !== null || $partial->text !== '' || $partial->reasoning !== '' || $partial->steps->isNotEmpty() || $partial->meta->citations->isNotEmpty() || $parts !== []) {
-                        $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status, existing: $resuming);
+                        $assistant = $this->writer->storeAssistantMessage($conversation, $partial, $this->elapsedMs($startedAt), $parts, $status, structured: $structuredOutput, existing: $resuming, finishReason: $finishReason);
                         $recorder->linkToMessage($assistant->id);
                         $turn = $this->presenter->turn($assistant);
                     }
