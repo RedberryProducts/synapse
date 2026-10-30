@@ -20,7 +20,7 @@ class Synapse
      * footer all claimed 0.1.0 on a 0.1.1 install. For a tool whose whole
      * premise is showing you the truth, that is worse than it sounds.
      */
-    public const VERSION = '0.1.4';
+    public const VERSION = '0.3.1';
 
     /**
      * The installed Synapse version.
@@ -83,18 +83,14 @@ class Synapse
     /**
      * Whether this deployment can stream a response as it is produced.
      *
-     * A property of the runtime, not of any agent: PHP can only push bytes to a
-     * client as they are written when it is actually serving HTTP. Under the CLI
-     * SAPI — a test harness, or Octane, which runs its workers on CLI — the
-     * whole response is assembled first and arrives in one piece.
-     *
-     * The dashboard says so rather than letting a developer watch a blank thread
-     * and conclude it has hung. Delegated to the emitter so the answer shown to
-     * the user and the behaviour on the wire come from one rule.
+     * Swoole's Octane client forwards echoed chunks through its own buffer;
+     * native flush support alone cannot determine whether the response streams.
      */
     public static function streams(): bool
     {
-        return StreamEmitter::flushesUnder(PHP_SAPI);
+        $client = 'Laravel\\Octane\\Contracts\\Client';
+
+        return StreamEmitter::streamsUnder(PHP_SAPI, app()->bound($client) ? get_class(app($client)) : null);
     }
 
     /**

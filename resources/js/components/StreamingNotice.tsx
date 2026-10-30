@@ -14,7 +14,7 @@ export function StreamingNotice() {
         <Badge
             data-testid="streaming-notice"
             variant="pill"
-            title="PHP can only stream while serving HTTP. Under this runtime the whole response is assembled before it is sent."
+            title="This server adapter buffers Synapse's response until the turn finishes. Use a supported streaming runtime for live updates."
         >
             <TriangleAlert className="h-3 w-3" />
             This runtime buffers responses — replies appear all at once

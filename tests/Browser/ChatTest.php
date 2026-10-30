@@ -304,7 +304,7 @@ it('renders a tool card and its answer in the order they happened', function () 
 
 it('says so when the runtime cannot stream', function () {
     // The driver runs Laravel in-process on the CLI SAPI, so this harness is
-    // itself a non-streaming runtime — the same answer an Octane worker gives.
+    // itself a non-streaming runtime because the test harness buffers responses.
     // That makes the notice always visible here, which is exactly the state a
     // developer on such a runtime sees, and it is the truth: nothing on this
     // page will arrive incrementally.

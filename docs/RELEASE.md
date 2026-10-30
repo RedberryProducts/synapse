@@ -35,8 +35,13 @@ locally after building the assets in step 1.
 bin/check-streaming.sh
 ```
 
-Against a server on each runtime the docs claim. TTFB must be a few milliseconds;
-if it approaches the total, nothing is streaming. See AGENTS.md.
+Against a server on each runtime the docs claim. This is a quick TTFB check;
+headers alone do not prove that individual SSE events arrived incrementally.
+Run the deterministic [runtime qualification](../tests/Runtime/README.md) before
+changing runtime support claims. It checks actual event arrival, persistence,
+approval continuation, and repeated requests on a worker. Record exact server
+versions and results in the release PR. Keep the README's minimum Synapse
+version for each runtime aligned with the fixes being published.
 
 ## 4. Resolve dependencies the way a user does
 

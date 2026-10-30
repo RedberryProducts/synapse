@@ -121,7 +121,7 @@ Mostly automated by the hook (`composer hooks`):
 3. **`composer test:e2e`** — the manual browser gate (not run in CI); do not overlap it with feature tests in the same checkout
 4. Verify both supported Laravel majors on actual PHP 8.3 and 8.4, at the declared framework/SDK minimums and latest allowed stable resolutions
 5. Smoke-test fresh installation, repeated installation, configured storage, and production boot/migrations after removing dev dependencies
-6. Measure real HTTP streaming with output buffering enabled and a deterministic slow tool
+6. Measure real HTTP streaming with output buffering enabled and a deterministic slow tool; use the [runtime qualification fixtures](tests/Runtime/README.md) when changing runtime support claims
 7. Review [UPGRADE.md](UPGRADE.md) and [CHANGELOG.md](CHANGELOG.md); follow [docs/RELEASE.md](docs/RELEASE.md) and record validation in the release-preparation PR
 8. Commit/tag/publish only when explicitly requested
 

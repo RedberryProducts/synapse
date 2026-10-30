@@ -1,12 +1,34 @@
 # Upgrading Synapse
 
+## Upgrading from 0.3.0 to 0.3.1
+
+This patch fixes recording in Octane workers and recognizes Swoole's incremental streaming. Requirements, stored data, configuration, and agent behavior are unchanged. **No new migrations, history reset, asset publication, or host-app npm build are needed.** Existing conversations, attachments, and pending approval checkpoints are preserved.
+
+```bash
+composer require --dev 'redberry/synapse:^0.3.1'
+```
+
+On an existing Octane application, reload its workers after the update. Use the server you actually run:
+
+```bash
+php artisan octane:reload --server=frankenphp
+# Or: php artisan octane:reload --server=swoole
+# Or: php artisan octane:reload --server=roadrunner
+```
+
+No Synapse-specific Octane listeners, warm/flush configuration, or service-provider changes are required. Normal Synapse installation and access controls still apply. FrankenPHP and Swoole stream incrementally; RoadRunner completes and saves turns but delivers the response at once. See [Runtimes](README.md#runtimes) for setup and proxy requirements.
+
+After upgrading, open an existing conversation and verify a new tool turn and an approval continuation. A rollback to 0.3.0 does not require a schema rollback, but restores the Octane recording bug; use a non-Octane runtime if rolling back.
+
+See the [v0.3.1 release notes](docs/releases/v0.3.1.md).
+
 ## Upgrading from 0.2.0 to 0.3.0
 
 Version 0.3.0 adds tool approvals, cited sources, completion explanations, and a per-response step inspector. PHP, Laravel, Laravel AI, and optional MCP requirements are unchanged; see [README.md](README.md#requirements).
 
 **This upgrade preserves existing Synapse history and attachments. Do not run `synapse:clear`.** The two new migrations only add nullable columns to `synapse_messages`; SDK conversation tables are untouched.
 
-Once v0.3.0 is published:
+To upgrade:
 
 1. Back up the application's database and pause access to Synapse while updating and migrating.
 2. Update the Composer constraint explicitly: `^0.2` does not select `0.3.0`.

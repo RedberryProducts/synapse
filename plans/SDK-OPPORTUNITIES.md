@@ -85,4 +85,4 @@ References: [SDK prompt path](https://github.com/laravel/ai/blob/v1.3.0/src/Prov
 ## Other deferred ideas
 
 - **Conversation export:** JSON/Markdown export remains unimplemented. Recheck demand and define what happens to attachments and private replay data before proposing it.
-- **Additional runtime qualification:** Sail remains expected rather than directly verified; Apache/mod_php has not been qualified. Octane remains unsupported. Reassess runtime demand and verify real HTTP behavior before expanding support claims.
+- **Remaining runtime work:** RoadRunner needs a streaming adapter compatible with Octane's generator-based response path. Apache/mod_php and Open Swoole need their own qualification before support claims. See the maintained [runtime test guide](../tests/Runtime/README.md) for verified configurations.

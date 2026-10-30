@@ -8,7 +8,7 @@ Building an agent is a tight loop — change the prompt, run it, check the tool 
 
 ![The Synapse playground: a conversation with a tool call expanded to show its arguments and result](docs/screenshots/playground.png)
 
-> **Upgrading:** v0.3.0 adds approvals, sources, completion explanations, and step inspection. Upgrades from 0.2.0 preserve history and require two additive migrations. The older 0.1.x → 0.2.0 storage migration requires a reset. Follow the version-specific [upgrade guide](UPGRADE.md).
+> **Upgrading:** v0.3.1 fixes Octane recording and needs no new migrations when upgrading from 0.3.0. Upgrades from 0.2.0 preserve history and require two additive migrations. The older 0.1.x → 0.2.0 storage migration requires a reset. Follow the version-specific [upgrade guide](UPGRADE.md).
 
 ## Requirements
 
@@ -96,12 +96,14 @@ Use the Laravel AI SDK's `Approvable` contract and `InteractsWithApprovals` trai
 
 The playground displays the arguments and reason before execution. Approve or deny each pending call; batches continue once every call has a decision. Denial lets the model continue with an explanation that the action was declined. Reloading preserves pending requests. Native provider-hosted tools and approvals inside child agents are not supported by this integration.
 
-## Upgrading to 0.3.0
+## Upgrading to 0.3.1
+
+From 0.3.0, run `composer require --dev 'redberry/synapse:^0.3.1'` and reload any Octane workers as described under [Runtimes](#runtimes). No new migrations, configuration changes, or data reset are needed. See the [0.3.1 release notes](docs/releases/v0.3.1.md) for the fixes.
 
 From 0.2.0, update the Composer constraint and publish/run the two additive migrations for approvals and step observations before opening the dashboard:
 
 ```bash
-composer require --dev 'redberry/synapse:^0.3' --with-all-dependencies
+composer require --dev 'redberry/synapse:^0.3.1' --with-all-dependencies
 php artisan vendor:publish --tag=synapse-migrations
 php artisan migrate
 ```
@@ -137,18 +139,30 @@ Everything is optional; the defaults work.
 
 ## Runtimes
 
-The playground streams replies as the model produces them, which needs PHP to be serving HTTP directly.
+The following configurations were tested over real HTTP on 2026-10-30, including tool execution, saved history, partial failures, and approval/denial after reload.
 
-| Runtime | Streaming |
-|---|---|
-| `php artisan serve` | ✅ Verified for v0.3.0 |
-| nginx + PHP-FPM (Herd, Valet, Forge) | Previously exercised; not requalified for v0.3.0 |
-| Laravel Sail | ✅ Expected — same stack |
-| FrankenPHP | Previously exercised; not requalified for v0.3.0 |
-| **Laravel Octane** | ❌ Not supported |
+| Runtime | Streaming | Validated Synapse version |
+|---|---|---|
+| `php artisan serve` | Verified incremental delivery | 0.3.0, 0.3.1 |
+| nginx + PHP-FPM | Verified incremental delivery with FastCGI buffering enabled | 0.3.0, 0.3.1 |
+| Laravel Sail, default `artisan serve` server | Verified incremental delivery | 0.3.0, 0.3.1 |
+| FrankenPHP, classic mode | Verified incremental delivery | 0.3.0, 0.3.1 |
+| Octane + FrankenPHP | Verified incremental delivery | 0.3.1 |
+| Octane + Swoole | Verified incremental delivery | 0.3.1 |
+| Octane + RoadRunner | Buffered delivery only; live streaming is unsupported | 0.3.1 |
 
-Octane's workers run under PHP's CLI interface, where output cannot be pushed to a client mid-request, so replies arrive complete instead of streaming. Nothing breaks — Synapse detects it and says so in the playground rather than leaving you looking at a blank thread. It isn't tested per release yet, so it isn't claimed as supported.
+**Use Synapse 0.3.1 or later with Octane.** Version 0.3.0 can fail to save tool executions in Octane workers. RoadRunner still delivers the entire turn at completion; the playground shows a buffering notice.
 
+**No Synapse-specific Octane configuration is needed.** Once Octane and its chosen server are installed following [Laravel's Octane setup](https://laravel.com/docs/octane), install Synapse normally with `php artisan synapse:install`. There are no extra listeners, service-provider bindings, or `octane.warm` / `octane.flush` entries to add. Start the installed engine normally, for example:
+
+```bash
+php artisan octane:start --server=frankenphp
+# Or: php artisan octane:start --server=swoole
+```
+
+Reload workers after upgrading Synapse or changing agent code: `php artisan octane:reload --server=frankenphp` (substitute `swoole` or `roadrunner` for your running engine). Octane's normal worker reload/watch behavior applies. Existing Synapse environment and access controls remain in effect; Octane does not enable production access automatically.
+
+Qualification applies to the configurations and versions in the [runtime test guide](tests/Runtime/README.md). Herd, Valet, and Forge are not separate server engines; their individual proxy/compression configurations were not tested. Synapse sends `X-Accel-Buffering: no`; preserve this header and avoid additional response buffering when configuring a proxy.
 
 ## Conversation behavior and data
 
