@@ -45,18 +45,21 @@ it('defaults to the running SAPI', function () {
     expect((new StreamEmitter)->shouldFlush())->toBe(PHP_SAPI !== 'cli');
 });
 
-it('tells the dashboard the same thing it tells the emitter', function () {
-    // Two answers to one question is how a UI ends up claiming a run streams
-    // while the wire says otherwise. `Synapse::streams()` must be the emitter's
-    // own rule, not a second copy of the SAPI list.
-    expect(Synapse::streams())->toBe(StreamEmitter::flushesUnder(PHP_SAPI))
+it('exposes the runtime streaming capability to the dashboard', function () {
+    expect(Synapse::streams())->toBe(StreamEmitter::streamsUnder(PHP_SAPI))
         ->and(Synapse::scriptVariables()['streaming'])->toBe(Synapse::streams());
 });
 
+it('recognizes Swoole streaming without flushing its adapter buffer', function () {
+    expect(StreamEmitter::streamsUnder('cli', 'Laravel\\Octane\\Swoole\\SwooleClient'))->toBeTrue()
+        ->and((new StreamEmitter(sapi: 'cli'))->shouldFlush())->toBeFalse();
+});
+
+it('does not claim streaming for buffered or unknown CLI adapters', function (?string $client) {
+    expect(StreamEmitter::streamsUnder('cli', $client))->toBeFalse();
+})->with([null, 'Laravel\\Octane\\RoadRunner\\RoadRunnerClient', 'UnknownClient']);
+
 it('reports no streaming under the test runner', function () {
-    // The suite runs on the CLI SAPI, so this is also what an Octane worker
-    // reports — which is why the dashboard carries a notice rather than
-    // assuming every deployment streams.
     expect(Synapse::streams())->toBeFalse();
 })->skip(PHP_SAPI !== 'cli', 'Only meaningful under the CLI SAPI.');
 

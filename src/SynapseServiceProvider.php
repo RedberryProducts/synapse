@@ -51,7 +51,10 @@ class SynapseServiceProvider extends ServiceProvider
             AgentFailed::class,
             AgentFailedOver::class,
         ] as $event) {
-            $this->app['events']->listen($event, [RecordingScope::class, 'handle']);
+            // Octane retains the dispatcher from boot; resolve the scope in the active request.
+            $this->app['events']->listen($event, static function (PromptingAgent|StartingStep|StepCompleted|InvokingTool|ToolInvoked|ToolFailed|AgentFailed|AgentFailedOver $event): void {
+                app(RecordingScope::class)->handle($event);
+            });
         }
 
         $this->registerRoutes();

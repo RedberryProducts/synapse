@@ -1,8 +1,10 @@
 <?php
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Facade;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\StreamingAgent;
@@ -53,6 +55,31 @@ function recordTurn(string $message = 'Hello', ?string $id = null, string $slug 
 
     return $emitter;
 }
+
+it('records tool executions in the active worker request container', function () {
+    fakeAgent(SupportAgent::class, [
+        new ToolCall('worker-call', 'SearchProductsTool', ['query' => 'hoodie']),
+        'Found matches.',
+    ]);
+    $original = app();
+    $original->make('events');
+    $sandbox = clone $original;
+    $sandbox->forgetScopedInstances();
+    Container::setInstance($sandbox);
+    Facade::setFacadeApplication($sandbox);
+
+    try {
+        recordTurn();
+
+        $tool = SynapseToolInvocation::query()->sole();
+        expect($tool->invocation_id)->not->toBeNull()
+            ->and($tool->status)->toBe('success')
+            ->and($tool->message_id)->toBe(SynapseMessage::where('role', 'assistant')->sole()->id);
+    } finally {
+        Container::setInstance($original);
+        Facade::setFacadeApplication($original);
+    }
+});
 
 it('stores a completed turn with inclusive usage and ordered display parts', function () {
     fakeAgent(SupportAgent::class, [new TextResponse('Counted.', new TextUsage(inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 30, reasoningTokens: 5), new Meta('openai', 'chosen-model'))]);

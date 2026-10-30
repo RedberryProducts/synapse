@@ -68,13 +68,18 @@ class StreamEmitter
     /**
      * Whether a given SAPI can push bytes to a client as they are written.
      *
-     * Static because it is also the answer to "does this deployment stream at
-     * all", which the dashboard asks once per page load — and one list is the
-     * only way that answer and this emitter can never disagree.
+     * CLI adapters own their output buffers. They may stream through a buffer
+     * callback (Octane/Swoole), but must not receive PHP's native flush calls.
      */
     public static function flushesUnder(string $sapi): bool
     {
         return ! in_array($sapi, ['cli', 'phpdbg', 'embed'], true);
+    }
+
+    public static function streamsUnder(string $sapi, ?string $octaneClient = null): bool
+    {
+        return static::flushesUnder($sapi)
+            || ($sapi === 'cli' && $octaneClient === 'Laravel\\Octane\\Swoole\\SwooleClient');
     }
 
     /**

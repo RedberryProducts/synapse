@@ -5,6 +5,14 @@ All notable changes to `redberry/synapse` are documented here.
 This project follows [Semantic Versioning](https://semver.org/). While the
 version is below `1.0.0`, minor releases may contain breaking changes.
 
+## v0.3.1 — 2026-10-30
+
+### Fixed
+
+- Resolve SDK recording listeners in the active request container so Octane workers preserve tool executions, step details, and approval continuations.
+- Recognize incremental streaming through Octane/Swoole instead of showing an incorrect buffering notice. Octane/RoadRunner remains buffered.
+- Replace speculative runtime claims with measured HTTP qualification and a reusable deterministic runtime check.
+
 ## v0.3.0 — 2026-10-29
 
 ### Added
