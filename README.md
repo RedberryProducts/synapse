@@ -1,5 +1,8 @@
 # Synapse
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse)
+[![Total Downloads](https://img.shields.io/packagist/dt/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse)
+
 *See every connection your AI agents make.*
 
 Synapse is a development dashboard for AI agents built with the [Laravel AI SDK](https://github.com/laravel/ai) (`laravel/ai`) — Telescope and Horizon, but for agents. It finds the agents in your app, lets you chat with them in the browser, and shows exactly what happened underneath: every tool call with its arguments and results, every token, every reasoning step, every error with its stack trace.
