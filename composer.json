@@ -1,18 +1,26 @@
 {
     "name": "redberry/synapse",
-    "description": "A development dashboard for AI agents built with the Laravel AI SDK.",
+    "description": "Laravel AI agent dashboard, built and maintained by Redberry, an official Laravel Premier Partner. Inspect chats, tools, approvals, and tokens.",
+    "homepage": "https://redberry.international/open-source/synapse/",
     "keywords": [
         "laravel",
+        "laravel-ai",
+        "php",
         "ai",
         "agents",
         "dashboard",
-        "devtools"
+        "devtools",
+        "debugging",
+        "tool-calling",
+        "human-in-the-loop",
+        "redberry"
     ],
     "license": "MIT",
     "authors": [
         {
             "name": "Redberry",
-            "homepage": "https://redberry.international"
+            "homepage": "https://redberry.international",
+            "role": "Maintainer"
         }
     ],
     "require": {
@@ -72,5 +80,11 @@
             "pestphp/pest-plugin": true
         },
         "process-timeout": 0
+    },
+    "support": {
+        "issues": "https://github.com/RedberryProducts/synapse/issues",
+        "source": "https://github.com/RedberryProducts/synapse",
+        "docs": "https://github.com/RedberryProducts/synapse#readme",
+        "rss": "https://github.com/RedberryProducts/synapse/releases.atom"
     }
 }

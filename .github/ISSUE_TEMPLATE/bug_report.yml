@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible problem in Synapse.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: Search existing issues first. Remove API keys, credentials, private prompts, customer data, and sensitive security details before posting.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reproducible example and relevant agent/tool configuration with private data removed.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Synapse, PHP, Laravel, Laravel AI SDK, and Laravel MCP if installed.
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Server and runtime
+      description: For example artisan serve, nginx/PHP-FPM, Sail, or Octane with FrankenPHP, Swoole, or RoadRunner. Include versions when available.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted logs or screenshots
+      description: Remove credentials and private data.
