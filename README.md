@@ -1,8 +1,6 @@
 # Synapse
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse)
-[![Total Downloads](https://img.shields.io/packagist/dt/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse)
-[![MIT license](https://img.shields.io/packagist/l/redberry/synapse.svg?style=flat-square)](https://github.com/RedberryProducts/synapse/blob/main/LICENSE.md)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse) [![Total Downloads](https://img.shields.io/packagist/dt/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse) [![MIT license](https://img.shields.io/packagist/l/redberry/synapse.svg?style=flat-square)](https://github.com/RedberryProducts/synapse/blob/main/LICENSE.md)
 
 **See every connection your AI agents make.**
 
