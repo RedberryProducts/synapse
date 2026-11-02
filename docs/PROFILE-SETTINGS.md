@@ -21,10 +21,10 @@ https://redberry.international/open-source/synapse/
 **Topics**
 
 ```text
-laravel, laravel-ai-sdk, laravel-framework, laravel-package, php, ai-agents, agent-development, developer-tools, debugging, dashboard, tool-calling, human-in-the-loop, redberry
+laravel, laravel-ai, php, ai-agents, agent-development, developer-tools, debugging, dashboard, tool-calling, human-in-the-loop, redberry
 ```
 
-This preserves the existing Laravel topics and adds the proposed product and maintainer terms.
+Use this exact topic list from the agreed profile document.
 
 **Social preview:** upload [synapse-social-1280x640.png](branding/synapse-social-1280x640.png) in the repository’s Social preview setting. It preserves the complete supplied artwork with black side margins. The depicted interface and metrics are illustrative.
 

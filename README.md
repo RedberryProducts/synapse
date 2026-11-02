@@ -10,7 +10,7 @@ Synapse is an open-source development dashboard for agents built with the [Larav
 
 [Website](https://redberry.international/open-source/synapse/?utm_source=github&utm_medium=referral&utm_campaign=synapse&utm_content=readme_navigation) • [Documentation](https://github.com/RedberryProducts/synapse#readme) • [Packagist](https://packagist.org/packages/redberry/synapse) • [Release notes](https://github.com/RedberryProducts/synapse/releases) • [Report an issue](https://github.com/RedberryProducts/synapse/issues)
 
-**Contents:** [Features](https://github.com/RedberryProducts/synapse#what-you-can-do) • [Install](https://github.com/RedberryProducts/synapse#installation) • [Approvals](https://github.com/RedberryProducts/synapse#tool-approvals) • [Upgrade](https://github.com/RedberryProducts/synapse#upgrading-synapse) • [Configuration](https://github.com/RedberryProducts/synapse#configuration) • [Access](https://github.com/RedberryProducts/synapse#access-and-deployment) • [Support](https://github.com/RedberryProducts/synapse#documentation-and-support) • [Contribute](https://github.com/RedberryProducts/synapse#development)
+**Contents:** [Features](https://github.com/RedberryProducts/synapse#what-you-can-do) • [Install](https://github.com/RedberryProducts/synapse#installation) • [Approvals](https://github.com/RedberryProducts/synapse#tool-approvals) • [Upgrade](https://github.com/RedberryProducts/synapse#upgrading-synapse) • [Configuration](https://github.com/RedberryProducts/synapse#configuration) • [Access](https://github.com/RedberryProducts/synapse#access-and-deployment) • [Support](https://github.com/RedberryProducts/synapse#documentation-and-support) • [Contribute](https://github.com/RedberryProducts/synapse#contributing-and-development)
 
 <img src="https://raw.githubusercontent.com/RedberryProducts/synapse/main/docs/branding/synapse-readme-960.png" alt="Synapse promotional artwork featuring the Redberry logo and an illustrative agent dashboard" width="640">
 
@@ -107,7 +107,7 @@ Completion notices explain reported output limits, filtering, or cancellation wi
 composer require --dev 'redberry/synapse:^0.3.1'
 ```
 
-For Octane, use octane:reload with your running server as described in [Runtimes](#runtimes) below.
+For Octane, use octane:reload with your running server as described in Runtimes and streaming below.
 
 **From 0.2.0:** back up your database and pause access to Synapse while updating. This upgrade preserves history and attachments. Update the Composer constraint, publish the two additive migrations, and run them before reopening the dashboard:
 
@@ -151,7 +151,7 @@ For example, restrict the gate to approved users in your published provider:
 
 ```php
 Gate::define('viewSynapse', function ($user) {
-    return in_array($user?->email, [
+    return in_array($user->email, [
         'you@example.com',
     ]);
 });
@@ -178,7 +178,9 @@ php artisan vendor:publish --tag=synapse-migrations --force
 
 Update the published application provider to extend **Illuminate\Support\ServiceProvider** and guard its **Redberry\Synapse\Synapse::auth(...)** call with **class_exists**, preserving your viewSynapse gate and following the current provider stub. Alternatively, remove the old provider registration before deploying without development dependencies. Follow the version-specific upgrade guide before making these changes.
 
-## Conversation behavior and data
+<a id="conversation-behavior-and-data"></a>
+
+## Conversations and data
 
 Conversational agents receive earlier Synapse turns. Stateless agents receive only the current message, although the dashboard displays their messages together. Structured-output agents use a single-shot request without earlier turns and display the result as JSON. Approval continuation resumes the paused turn.
 
@@ -188,7 +190,9 @@ Uploaded images, documents, and audio use **storage.attachments_disk** and are s
 
 Deleting a conversation also removes its stored attachments. Automatic pruning is off by default. Enable it through SYNAPSE_AUTO_PRUNE and run Laravel’s scheduler, or use the commands below. History deletion is blocked while a tool approval is running.
 
-## Commands
+<a id="commands"></a>
+
+## Artisan commands
 
 | Command | What it does |
 |---|---|
@@ -197,7 +201,9 @@ Deleting a conversation also removes its stored attachments. Automatic pruning i
 | php artisan synapse:clear | Delete all Synapse conversations and their attachments. |
 | php artisan about | Show the installed version, enabled state, dashboard path, discovered-agent count, and retention setting. |
 
-## Runtimes
+<a id="runtimes"></a>
+
+## Runtimes and streaming
 
 Synapse v0.3.1 supports the runtime configurations below. The project’s [runtime test guide](https://github.com/RedberryProducts/synapse/blob/v0.3.1/tests/Runtime/README.md) records HTTP checks of streaming, saved history, tool execution, partial failures, and approval continuation.
 
@@ -241,7 +247,9 @@ This README covers the dashboard, configuration, data handling, access control, 
 
 For reporting guidance, see [Support](https://github.com/RedberryProducts/synapse/blob/main/.github/SUPPORT.md). Report bugs and suggest features in [GitHub Issues](https://github.com/RedberryProducts/synapse/issues). For a bug report, include your Synapse, PHP, Laravel, and Laravel AI SDK versions, the steps to reproduce it, and the relevant error. Remove API keys, credentials, private prompts, and customer data before posting.
 
-## Development
+<a id="development"></a>
+
+## Contributing and development
 
 Contributions to Synapse’s code and documentation are welcome. Read the [contribution guide](https://github.com/RedberryProducts/synapse/blob/main/.github/CONTRIBUTING.md) before opening a pull request. For a substantial change, open an issue first to discuss the problem and proposed approach. Submit a focused pull request with relevant checks and reproduction or verification steps.
 
