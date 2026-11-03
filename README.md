@@ -89,13 +89,13 @@ Synapse displays approval requests when the Laravel AI SDK requires permission b
 
 Configure approvals using the SDK’s **Approvable** contract and **InteractsWithApprovals** trait, or **requireApproval('Reason shown to the user')** on an SDK tool that supports it. Argument-dependent approval rules are evaluated for the actual call.
 
-Pending approvals survive a page reload, and continuation updates the same answer and tool cards. Denied tools do not execute. The integration supports custom and SDK approval tools, SDK MCP wrappers, and approval before delegating to a sub-agent. Provider-hosted tool approvals and approval requests originating inside a child agent are outside its scope.
+Pending approvals survive a page reload, and continuation updates the same answer and tool cards. Denied tools do not execute; the model can continue with a declined-tool result. The integration supports custom and SDK approval tools, SDK MCP wrappers, and approval before delegating to a sub-agent. Provider-hosted tool approvals and approval requests originating inside a child agent are outside its scope.
 
 If execution is interrupted, reload and inspect the saved state before taking further action. Synapse does not automatically rerun a claimed tool execution that may already have produced side effects.
 
 ## Sources and response details
 
-Sources appear when the provider supplies URL citation data through the SDK. Duplicate URLs are combined, and source links remain available after reload or approval continuation where the data was retained. Ordinary links in answer text or tool results are not converted into citations; source links do not establish that an answer is accurate.
+Sources appear when the provider supplies URL citation data through the SDK. Duplicate URLs are combined, and source links remain available after reload or approval continuation where the data was retained. Already-observed citations survive partial failures. Ordinary links in answer text or tool results are not converted into citations; source links do not establish that an answer is accurate.
 
 Completion notices explain reported output limits, filtering, or cancellation without treating those outcomes as invocation errors. The Steps inspector shows recorded model rounds without running the agent or executing tools. Missing historical timing or completion data stays unavailable.
 
@@ -197,7 +197,7 @@ Deleting a conversation also removes its stored attachments. Automatic pruning i
 | Command | What it does |
 |---|---|
 | php artisan synapse:install | Publish configuration, migrations, and the gate provider; register the provider locally and run migrations. Reruns preserve customized config and provider files. Use --no-migrate to skip migrations. |
-| php artisan synapse:prune --days=7 | Delete conversations older than seven days and their attachments. Without --days, use the configured retention window. |
+| php artisan synapse:prune --days=7 | Delete conversations last updated more than seven days ago and their attachments. Without --days, use the configured retention window. |
 | php artisan synapse:clear | Delete all Synapse conversations and their attachments. |
 | php artisan about | Show the installed version, enabled state, dashboard path, discovered-agent count, and retention setting. |
 
@@ -218,6 +218,13 @@ Synapse v0.3.1 supports the runtime configurations below. The project’s [runti
 | Octane with RoadRunner | Conversations are recorded; responses arrive complete. Live streaming is unsupported. |
 
 **Use Synapse 0.3.1 or later with Octane.** Version 0.3.0 can fail to save tool executions in Octane workers. No Synapse-specific listeners, service-provider bindings, or Octane warm/flush settings are required. Install Octane’s chosen server using [Laravel’s setup guidance](https://laravel.com/docs/octane), then install Synapse normally.
+
+Start your installed server normally:
+
+```bash
+php artisan octane:start --server=frankenphp
+# Or: php artisan octane:start --server=swoole
+```
 
 Reload workers after a package upgrade or agent-code change, choosing the engine you run:
 
