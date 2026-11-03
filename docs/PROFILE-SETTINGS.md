@@ -46,9 +46,7 @@ The commercial AI-development link belongs in the README and support guidance. F
 
 ## Future release footer
 
-An authorized release maintainer can append the following after the technical notes when preparing a future release. It is reusable copy, not an automatic release template; existing published tags and notes are unchanged.
-
-> Synapse is built and maintained by [Redberry](https://redberry.international/), an official [Laravel Premier Partner](https://laravel.com/partners/redberry). [Explore Synapse](https://redberry.international/open-source/synapse/) and its [documentation](https://github.com/RedberryProducts/synapse#readme).
+Follow the [release checklist](RELEASE.md#5-changelog) for the maintained footer and instructions for future release notes.
 
 ## Review, merge, and verify
 
