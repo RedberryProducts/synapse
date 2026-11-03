@@ -38,7 +38,9 @@ Composer’s `authors` entry is attribution. It does not change Packagist mainta
 
 ## Policies and channels
 
-Revaz and the responsible Redberry owners should confirm any private vulnerability-reporting route, security policy, code of conduct, support email, chat, forum, wiki, or funding programme before adding it. No new support SLA, disclosure route, community destination, or funding commitment is supplied by this PR.
+GitHub private vulnerability reporting is enabled, verified on 3 November 2026. Security reports go through [Report a vulnerability](https://github.com/RedberryProducts/synapse/security/advisories/new), following [SECURITY.md](../SECURITY.md). No separate security email or response-time commitment is published.
+
+Ordinary bugs and feature requests use GitHub Issues. No code of conduct, support email, chat, forum, wiki, IRC channel, or funding programme is added by this refresh. Leave corresponding fields absent unless the responsible Redberry owners confirm a maintained policy or destination.
 
 The commercial AI-development link belongs in the README and support guidance. Funding fields and GitHub’s sponsor button require a real financial-support programme.
 
