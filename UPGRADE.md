@@ -111,7 +111,7 @@ There is no history backfill or legacy-format reader. This upgrade requires expl
    php artisan migrate
    ```
 
-5. If the previous installer registered Synapse unconditionally in `bootstrap/providers.php`, re-run `php artisan synapse:install` locally to migrate that registration. Preserve your custom gate. For older migrations extending `SynapseMigration`, follow the additional package-removal instructions in [README.md](README.md#installation) to refresh those files while the package remains installed.
+5. If the previous installer registered Synapse unconditionally in `bootstrap/providers.php`, re-run `php artisan synapse:install` locally to migrate that registration. Preserve your custom gate. For older migrations extending `SynapseMigration`, follow the additional package-removal instructions in [README.md](README.md#access-and-deployment) to refresh those files while the package remains installed.
 6. Open `/synapse`, inspect discovery and agent settings, then verify chat, tools, and reload before resuming traffic. If you cache configuration, rebuild that cache using your normal deployment procedure.
 
 The format migration refuses nonempty Synapse tables without modifying their data. If it refuses, restore the old package version before using its clear command; do not run the new clear command against an incompatible schema. If an earlier damaged installation left orphan rows, back them up and explicitly remove only those Synapse rows on the configured connection before retrying. **Never use `migrate:fresh` on the host application.**

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/RedberryProducts/synapse#readme
+    about: Read the Synapse installation, configuration, and troubleshooting guidance.
+  - name: Commercial AI development
+    url: https://redberry.international/ai-agent-development/?utm_source=github&utm_medium=referral&utm_campaign=synapse&utm_content=issue_chooser
+    about: Discuss an AI development project with Redberry. Package bugs belong in the issue tracker.

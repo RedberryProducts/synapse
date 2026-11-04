@@ -1,0 +1,27 @@
+name: Feature request
+description: Explain a problem and a proposed improvement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What are you trying to do, and what makes it difficult?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected workflow, with an example.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Versions and provider constraints
+      description: Include relevant Synapse/SDK versions, provider limitations, and context. Remove private data.

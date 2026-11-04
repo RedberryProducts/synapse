@@ -66,6 +66,12 @@ Keep version-specific upgrade paths in `UPGRADE.md`: additive migrations must
 not inherit the legacy 0.1.x storage-reset instructions. Review README and UPGRADE
 for stale release-status notices and verify any migration counts.
 
+Append this footer after the technical notes in future `docs/releases/vX.Y.Z.md`
+files. The publishing step below copies those notes into GitHub. Leave existing
+published releases and tags unchanged.
+
+> Synapse is built and maintained by [Redberry](https://redberry.international/), an official [Laravel Premier Partner](https://laravel.com/partners/redberry). [Explore Synapse](https://redberry.international/open-source/synapse/) and its [documentation](https://github.com/RedberryProducts/synapse#readme).
+
 ## 6. Clean-app smoke test
 
 Not `testing-laravel-project`, and not a path repository. Both skip exactly what
