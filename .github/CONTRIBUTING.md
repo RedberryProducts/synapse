@@ -10,7 +10,7 @@ The development environment requires PHP 8.3 or later, Composer 2, and Node 20 o
 
 ```bash
 composer install
-npm install
+npm ci
 npm run build
 composer hooks
 ```

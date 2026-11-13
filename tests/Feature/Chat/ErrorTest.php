@@ -12,14 +12,6 @@ use Redberry\Synapse\Synapse;
 use Workbench\App\Agents\FlakyToolAgent;
 use Workbench\App\Agents\SupportAgent;
 
-/*
-| The SDK does not catch exceptions thrown inside a tool: InvokesTools::
-| executeTool() wraps the handler in try/finally with no catch, and the loop
-| hard-codes `successful: true` on every tool result event. A throwing tool
-| therefore exits stream() entirely — which is why Synapse's whole error story
-| rests on one catch-all around the invocation, not on inspecting tool results.
-*/
-
 beforeEach(function () {
     Synapse::auth(fn (): bool => true);
 
@@ -144,16 +136,22 @@ it('never lets a failure escape as an http error', function () {
     sendMessage('workbench.app.agents.support-agent', 'Anything')->assertOk();
 });
 
-it('surfaces an exception thrown inside a developer tool', function () {
+it('surfaces a developer tool exception using the SDK failure behavior', function () {
     fakeAgent(FlakyToolAgent::class, [
         new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
     ]);
 
     $response = sendMessage('workbench.app.agents.flaky-tool-agent', 'Look up entry 42');
 
-    expect(chatPart($response, 'error')['errorText'])->toBe('Ledger service unavailable')
-        ->and(SynapseMessage::query()->where('role', 'error')->sole()->metadata['exception_class'])
-        ->toBe(RuntimeException::class);
+    if (sdkRecoversToolFailures()) {
+        expect(chatPart($response, 'tool-output-error')['errorText'])->toBe('The tool call failed: Ledger service unavailable')
+            ->and(chatPart($response, 'error'))->toBeNull()
+            ->and(SynapseMessage::where('role', 'assistant')->sole()->status)->toBe('completed');
+    } else {
+        expect(chatPart($response, 'error')['errorText'])->toBe('Ledger service unavailable')
+            ->and(SynapseMessage::query()->where('role', 'error')->sole()->metadata['exception_class'])
+            ->toBe(RuntimeException::class);
+    }
 });
 
 it('closes out a tool invocation the exception left hanging', function () {

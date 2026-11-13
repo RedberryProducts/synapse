@@ -88,7 +88,7 @@ it('retains the model outcome when a subsequent tool fails', function () {
     app()->instance(SupportAgent::class, (new SupportAgent)->withTools([new BrokenLedgerTool]));
     fakeAgent(SupportAgent::class, [new ToolCall('broken', 'BrokenLedgerTool', ['entry' => '42'])]);
     $turn = chatPart(sendMessage('workbench.app.agents.support-agent', 'Write'), 'data-synapse-end')['data']['turn'];
-    expect($turn['message']['status'])->toBe('failed')
+    expect($turn['message']['status'])->toBe(sdkRecoversToolFailures() ? 'completed' : 'failed')
         ->and($turn['message']['step_details'][0]['finish_reason'])->toBe('tool_calls')
         ->and($turn['message']['step_details'][0]['completion'])->toBe('completed')
         ->and($turn['message']['step_details'][0]['tools'][0]['status'])->toBe('error');

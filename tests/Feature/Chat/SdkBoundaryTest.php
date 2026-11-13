@@ -81,17 +81,26 @@ it('runs application middleware once per step after forwarding cache options', f
     }
 });
 
-it('propagates real gateway tool failures through the wrapper', function () {
+it('preserves real gateway tool failure behavior through the wrapper', function () {
     Event::fake([ToolFailed::class]);
-    Http::fake(['api.anthropic.com/*' => Http::response(anthropicStep([
-        ['type' => 'tool_use', 'id' => 'call_broken', 'name' => 'BrokenLedgerTool', 'input' => ['entry' => '42']],
-    ], 'tool_use'))]);
+    Http::fake(['api.anthropic.com/*' => Http::sequence()
+        ->push(anthropicStep([
+            ['type' => 'tool_use', 'id' => 'call_broken', 'name' => 'BrokenLedgerTool', 'input' => ['entry' => '42']],
+        ], 'tool_use'))
+        ->push(anthropicStep([['type' => 'text', 'text' => 'The ledger is unavailable.']]))]);
 
-    expect(fn () => SynapseConversationalAgent::for(new FlakyToolAgent)
-        ->prompt('Look up entry 42', provider: 'anthropic', model: 'claude-test'))
-        ->toThrow(RuntimeException::class, 'Ledger service unavailable');
+    $run = fn () => SynapseConversationalAgent::for(new FlakyToolAgent)
+        ->prompt('Look up entry 42', provider: 'anthropic', model: 'claude-test');
+    if (sdkRecoversToolFailures()) {
+        $response = $run();
+        expect($response->text)->toBe('The ledger is unavailable.')
+            ->and($response->steps[0]->toolResults[0]->failed)->toBeTrue();
+        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'The tool call failed: Ledger service unavailable'));
+    } else {
+        expect($run)->toThrow(RuntimeException::class, 'Ledger service unavailable');
+    }
     Event::assertDispatchedTimes(ToolFailed::class, 1);
-    Http::assertSentCount(1);
+    Http::assertSentCount(sdkRecoversToolFailures() ? 2 : 1);
 });
 
 it('keeps preliminary child output separate from the settled parent tool result', function () {

@@ -349,9 +349,14 @@ class SynapseRecorder
             $call = $entry['call'];
             $result = $results[$key] ?? null;
             $candidates = array_filter($this->executions, function (SynapseToolInvocation $row, string $id) use ($entry, $call, $result, $used): bool {
-                return ! isset($used[$id]) && $this->groups[$id] === $entry['group']
-                    && $row->name === $call->name && $row->arguments === $call->arguments
-                    && ($result !== null ? $result->successful() && $row->status === 'success' && $row->result === $result->result : $row->status === 'error');
+                if (isset($used[$id]) || $this->groups[$id] !== $entry['group']
+                    || $row->name !== $call->name || $row->arguments !== $call->arguments) {
+                    return false;
+                }
+
+                return $result?->successful()
+                    ? $row->status === 'success' && $row->result === $result->result
+                    : ($result === null || $result->failed) && $row->status === 'error';
             }, ARRAY_FILTER_USE_BOTH);
             $unanswered = array_filter($this->calls, fn (array $other, string $otherKey): bool => $other['group'] === $entry['group'] && $other['call']->name === $call->name
                 && $other['call']->arguments === $call->arguments && ! isset($results[$otherKey]), ARRAY_FILTER_USE_BOTH);

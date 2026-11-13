@@ -81,16 +81,15 @@ it('leaves a throwing tool as a failed row rather than a pending one', function 
         ->and($invocation->result)->toBeNull();
 });
 
-it('pairs a failed tool card with an error message in the thread', function () {
+it('distinguishes a failed tool from an aborted conversation', function () {
     fakeAgent(FlakyToolAgent::class, [
         new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
     ]);
 
     sendMessage('workbench.app.agents.flaky-tool-agent', 'Look up entry 42');
 
-    // The card says which tool; the error card says what went wrong. Both.
     expect(SynapseToolInvocation::query()->sole()->status)->toBe('error')
-        ->and(SynapseMessage::query()->where('role', 'error')->count())->toBe(1);
+        ->and(SynapseMessage::query()->where('role', 'error')->count())->toBe(sdkRecoversToolFailures() ? 0 : 1);
 });
 
 it('emits the tool parts on the stream', function () {
@@ -112,7 +111,7 @@ it('emits the tool parts on the stream', function () {
         ->toBeLessThan(array_search('tool-output-available', $types, true));
 });
 
-it('orders a failed tool call before the error that ended the run', function () {
+it('keeps the original failed execution in the saved assistant parts', function () {
     fakeAgent(FlakyToolAgent::class, [
         new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
     ]);
@@ -121,14 +120,13 @@ it('orders a failed tool call before the error that ended the run', function () 
 
     $conversation = test()->getJson("/synapse/api/conversations/{$id}")->json();
 
-    // The failed assistant turn retains the tool reference before its error row.
     expect($conversation['tool_invocations'][0]['id'])
         ->toBeGreaterThan($conversation['messages'][0]['id'])
         ->toBeLessThan($conversation['messages'][1]['id']);
 
     expect($conversation['messages'][1]['role'])->toBe('assistant')
         ->and($conversation['messages'][1]['parts'][0]['tool_invocation_id'])->toBe($conversation['tool_invocations'][0]['id'])
-        ->and($conversation['messages'][2]['role'])->toBe('error');
+        ->and($conversation['tool_invocations'])->toHaveCount(1);
 });
 
 it('replays a real tool turn from the message row, not the tool table', function () {
