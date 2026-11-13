@@ -11,9 +11,7 @@ use Stringable;
 /**
  * A tool whose handler throws.
  *
- * The SDK does not catch exceptions from `handle()` — `InvokesTools::executeTool()`
- * uses `try/finally` with no `catch` — so this exits `stream()` entirely. It is
- * the fixture behind Synapse's invocation-level catch-all.
+ * SDK 1.3 aborts the invocation; SDK 1.4 returns a failed result to the model.
  */
 class BrokenLedgerTool implements Tool
 {
