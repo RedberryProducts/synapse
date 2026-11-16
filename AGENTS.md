@@ -216,7 +216,7 @@ holds the amber card open long enough to watch in the playground.
 
 1. **Never touch the SDK's tables.** Synapse is a dev tool, not a production logger.
 2. **Mirror the agent, don't fake it.** Conversational agents get full history; stateless agents get one message per turn.
-3. **One catch-all owns errors.** Any `\Throwable` during invocation (including a throwing tool `handle()`) becomes an inline error card.
+3. **One catch-all owns unhandled errors.** Any `\Throwable` escaping the SDK invocation becomes an inline error card. Mirror SDK tool-error behavior: 1.3 aborts on a throwing handler; 1.4 returns a failed tool result and lets the agent continue. Retain the failed execution and SDK result without duplicating the tool observation.
 4. **`config()` at runtime, `env()` only in config files.** Keeps `config:cache` safe.
 5. **Store replay data in the SDK's own serialization shapes** (`Step::toArray()`, `TextUsage::toArray()`, SDK file serialization). Private `steps` and ordered display `parts` have distinct roles; tool observations live in `synapse_tool_invocations`. See `MessageHistory`, `ConversationPresenter`, and the recording tests for the replay/display contract. All agents are wrapped; the original capabilities determine whether history is supplied. Failover capture retains completed results before the next provider attempt replaces its context.
 6. **Cascade deletes in `ConversationRepository`**, never DB foreign keys.

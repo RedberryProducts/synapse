@@ -16,7 +16,7 @@ How to build, test, and verify Synapse locally. For architecture and standards s
 
 ```bash
 composer install     # PHP deps (+ testbench, pest, larastan, pint); auto-discovers the package
-npm install          # frontend deps
+npm ci               # frontend deps from the committed lockfile
 npm run build        # compile resources/js → dist/app.js + dist/app.css
 composer hooks       # enable the pre-commit hook (once per clone)
 ```
@@ -67,11 +67,14 @@ When writing browser tests for agent behavior, drive them with the SDK's `Agent:
 ## Frontend workflow
 
 ```bash
+npm ci               # install the exact locked dependency versions
 npm run build        # one-off production build → dist/
 npm run watch        # rebuild dist/ on change while iterating
 ```
 
 `react-router-dom` is pinned to the QA-tested 7.18.2 patch; a 7.18.4 trial failed fresh-thread navigation. Re-test that flow before upgrading the pin.
+
+`package-lock.json` is committed so local and CI builds use the same dependency versions. When intentionally updating npm dependencies, include the updated lockfile and rebuilt `dist/` in the same PR. `composer.lock` remains ignored so CI resolves the package's allowed PHP dependencies afresh.
 
 `dist/` is **committed** — rebuild and commit it whenever `resources/js` changes. `Synapse::css()/js()` read `dist/app.css` and `dist/app.js` directly and inline them into the layout, so there is nothing to publish: a running app picks up a rebuild on the next page load. If `dist/` is missing they emit a harmless comment (never fatal).
 
@@ -127,7 +130,18 @@ Mostly automated by the hook (`composer hooks`):
 
 ## CI
 
-The repository currently has no automated test-matrix workflow. The Maestro task-trigger workflow is temporarily disabled in GitHub Actions and its job is disabled in source. [Issue #22](https://github.com/RedberryProducts/synapse/issues/22) tracks restoring the merged-PR condition and enabling the workflow when the integration is needed again. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`.
+Every pull request and push to `main` runs:
+
+- [Tests](https://github.com/RedberryProducts/synapse/actions/workflows/ci.yml): `composer check` on PHP 8.3 and 8.4, plus a separate Node 24 job that runs `npm ci`, rebuilds the assets, and fails if `git diff --exit-code -- dist/` finds stale committed assets. Both PHP jobs run to completion even if one fails.
+- [Code style](https://github.com/RedberryProducts/synapse/actions/workflows/code-style.yml): Pint's check-only command, `composer lint:test`, on PHP 8.4. A separate workflow gives the code-style badge its own result.
+
+The README's live badges select `main` push runs. The tests badge covers the entire Tests workflow, including both PHP jobs and the asset check; a single passing matrix job cannot hide a failure. The code-style badge covers only the Pint workflow. Missing workflow results are not replaced with a static passing badge.
+
+After these workflows first run on `main`, verify both README badge images render the corresponding workflow result and both links open the filtered `main` push runs. Record that post-merge verification on the implementation PR; local checks cannot establish a default-branch workflow result.
+
+Browser tests remain outside CI. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`. The lowest/latest dependency matrix and newest-SDK early warning remain tracked in [issue #3](https://github.com/RedberryProducts/synapse/issues/3); Dependabot remains tracked in [issue #4](https://github.com/RedberryProducts/synapse/issues/4).
+
+The Maestro task-trigger workflow remains temporarily disabled in GitHub Actions and its job is disabled in source. [Issue #22](https://github.com/RedberryProducts/synapse/issues/22) tracks reactivation when the integration is needed again.
 
 Compatibility should be checked on both supported Laravel majors (12 and 13), including a fresh install and production boot after `composer install --no-dev`. Browser e2e requires Playwright, Chromium, and current compiled assets.
 

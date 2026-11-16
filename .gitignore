@@ -3,7 +3,6 @@ references/*
 /node_modules
 /testing-laravel-project
 composer.lock
-package-lock.json
 .phpunit.result.cache
 .phpunit.cache
 /build

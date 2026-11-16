@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Facade;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Events\InvokingTool;
 use Laravel\Ai\Events\StreamingAgent;
+use Laravel\Ai\Events\ToolFailed;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Gateway\StepResponse;
 use Laravel\Ai\Messages\AssistantMessage;
@@ -137,16 +138,17 @@ it('retains successful work before a later tool fails', function () {
     fakeAgent(SupportAgent::class, [
         new ToolCall('search', 'SearchProductsTool', ['query' => 'hoodie']),
         new ToolCall('broken', 'BrokenLedgerTool', ['entry' => '42']),
+        'The ledger is unavailable.',
     ]);
     recordTurn();
     $assistant = SynapseMessage::where('role', 'assistant')->sole();
     $history = app(MessageHistory::class)->for($assistant->conversation_id);
-    expect($assistant->status)->toBe('failed')
-        ->and($assistant->steps)->toHaveCount(2)
+    expect($assistant->status)->toBe(sdkRecoversToolFailures() ? 'completed' : 'failed')
+        ->and($assistant->steps)->toHaveCount(sdkRecoversToolFailures() ? 3 : 2)
         ->and($assistant->steps[0]['tool_results'][0]['id'])->toBe('search')
-        ->and(SynapseMessage::where('role', 'error')->count())->toBe(1)
+        ->and(SynapseMessage::where('role', 'error')->count())->toBe(sdkRecoversToolFailures() ? 0 : 1)
         ->and(SynapseToolInvocation::orderBy('id')->pluck('status')->all())->toBe(['success', 'error'])
-        ->and($history[4]->toolResults->sole()->result)->toContain('may or may not have run');
+        ->and($history[4]->toolResults->sole()->result)->toContain(sdkRecoversToolFailures() ? 'The tool call failed: Ledger service unavailable' : 'may or may not have run');
 });
 
 it('correlates repeated identical calls without confusing execution and model IDs', function () {
@@ -289,6 +291,9 @@ it('replays unfinished answer text after a completed tool step', function (strin
 })->with(['The hoodie stock is', 'Searching.']);
 
 it('does not guess which identical unanswered model call matches a failed execution', function () {
+    Event::listen(ToolFailed::class, function (ToolFailed $event): void {
+        throw $event->exception;
+    });
     fakeAgent(SupportAgent::class);
     $agent = (new StepSequenceAgent([
         new StepResponse('', [new ToolCall('one', 'BrokenLedgerTool', ['entry' => '42']), new ToolCall('two', 'BrokenLedgerTool', ['entry' => '42'])], FinishReason::ToolCalls, new TextUsage, new Meta('openai', 'test')),
@@ -300,6 +305,26 @@ it('does not guess which identical unanswered model call matches a failed execut
         ->and($execution->tool_call_id)->toBeNull()
         ->and(SynapseToolInvocation::whereNotNull('tool_call_id')->pluck('tool_call_id')->all())->toBe(['one', 'two'])
         ->and(SynapseToolInvocation::where('status', 'success')->count())->toBe(0);
+});
+
+it('keeps repeated failed executions distinct when the SDK returns their results', function () {
+    fakeAgent(SupportAgent::class);
+    app()->instance(SupportAgent::class, (new StepSequenceAgent([
+        new StepResponse('', [new ToolCall('one', 'BrokenLedgerTool', ['entry' => '42']), new ToolCall('two', 'BrokenLedgerTool', ['entry' => '42'])], FinishReason::ToolCalls, new TextUsage, new Meta('openai', 'test')),
+        new StepResponse('The ledger is unavailable.', [], FinishReason::Stop, new TextUsage, new Meta('openai', 'test')),
+    ]))->withTools([new BrokenLedgerTool]));
+    recordTurn();
+
+    $executions = SynapseToolInvocation::whereNotNull('tool_invocation_id')->orderBy('id')->get();
+    expect($executions->pluck('tool_call_id')->all())->toBe(sdkRecoversToolFailures() ? ['one', 'two'] : [null])
+        ->and($executions->pluck('error')->unique()->all())->toBe(['Ledger service unavailable']);
+    if (sdkRecoversToolFailures()) {
+        $assistant = SynapseMessage::where('role', 'assistant')->sole();
+        expect(SynapseToolInvocation::count())->toBe(2)
+            ->and(array_column($assistant->parts, 'tool_invocation_id'))->toBe($executions->pluck('id')->all())
+            ->and(array_column($assistant->steps[0]['tool_results'], 'failed'))->toBe([true, true])
+            ->and($assistant->content)->toBe('The ledger is unavailable.');
+    }
 });
 
 it('retains a successful tool result when another tool in the same step throws', function () {
@@ -406,12 +431,12 @@ it('keeps stateless turns independent in the same stored conversation', function
 it('keeps a handled child failure from marking the parent run failed', function () {
     app()->instance(SupportAgent::class, (new SupportAgent)->withTools([new AgentTool(new FlakyToolAgent)]));
     fakeAgent(SupportAgent::class, [new ToolCall('child', 'FlakyToolAgent', ['task' => 'Read ledger']), 'Child unavailable.']);
-    FlakyToolAgent::fake([new ToolCall('ledger', 'BrokenLedgerTool', ['entry' => '42'])]);
+    FlakyToolAgent::fake([new ToolCall('ledger', 'BrokenLedgerTool', ['entry' => '42']), 'Child ledger unavailable.']);
     recordTurn();
     expect(SynapseToolInvocation::count())->toBe(1)
         ->and(SynapseToolInvocation::sole()->name)->toBe('FlakyToolAgent')
         ->and(SynapseToolInvocation::sole()->status)->toBe('success')
-        ->and(SynapseToolInvocation::sole()->result)->toContain('Agent failed: Ledger service unavailable')
+        ->and(SynapseToolInvocation::sole()->result)->toContain(sdkRecoversToolFailures() ? 'Child ledger unavailable.' : 'Agent failed: Ledger service unavailable')
         ->and(SynapseMessage::where('role', 'error')->count())->toBe(0);
 });
 

@@ -1,6 +1,6 @@
 # Synapse
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse) [![Total Downloads](https://img.shields.io/packagist/dt/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse) [![MIT license](https://img.shields.io/packagist/l/redberry/synapse.svg?style=flat-square)](https://github.com/RedberryProducts/synapse/blob/main/LICENSE.md)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse) [![Total Downloads](https://img.shields.io/packagist/dt/redberry/synapse.svg?style=flat-square)](https://packagist.org/packages/redberry/synapse) [![Tests](https://img.shields.io/github/actions/workflow/status/RedberryProducts/synapse/ci.yml?branch=main&event=push&style=flat-square&label=tests)](https://github.com/RedberryProducts/synapse/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush) [![Code style](https://img.shields.io/github/actions/workflow/status/RedberryProducts/synapse/code-style.yml?branch=main&event=push&style=flat-square&label=code%20style)](https://github.com/RedberryProducts/synapse/actions/workflows/code-style.yml?query=branch%3Amain+event%3Apush) [![MIT license](https://img.shields.io/packagist/l/redberry/synapse.svg?style=flat-square)](https://github.com/RedberryProducts/synapse/blob/main/LICENSE.md)
 
 **See every connection your AI agents make.**
 
@@ -45,6 +45,8 @@ Created by [Revaz Ghambarashvili](https://github.com/MaestroError).
 - **Track token usage.** See reported input and output usage per response and across the conversation, with available cache and reasoning breakdowns.
 - **Return to earlier tests.** Search, filter, reopen, rename, and delete saved conversations. Switch between light, dark, and system themes.
 - **Diagnose failures.** Inspect inline exception details and stack traces, alongside partial output and completed tool work retained before the failure.
+
+With Laravel AI 1.4 or later, a throwing developer tool appears as a failed tool card while the agent can continue with the failure result. Saved history retains that result for later turns. Laravel AI 1.3 ends the invocation on these exceptions; Synapse retains the failed tool and an inline invocation error. Provider and other unhandled invocation failures still appear as inline error cards.
 
 ## Requirements
 

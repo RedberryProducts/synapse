@@ -26,8 +26,9 @@ composer test:e2e
 
 Both must pass, with no skipped browser tests. The browser harness skips tests
 when assets are missing; a skipped suite does not satisfy the release gate.
-There is currently no automated test-matrix workflow, so run these release gates
-locally after building the assets in step 1.
+The PR workflows run `composer check` on PHP 8.3 and 8.4 and verify committed
+assets. Browser tests remain a manual gate; run both commands locally after
+building the assets in step 1.
 
 ## 3. Streaming
 

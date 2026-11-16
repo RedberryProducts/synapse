@@ -239,7 +239,7 @@ it('keeps answering a stateless agent across turns', function () {
 
 it('explains a failure inline and keeps the playground usable', function () {
     fakeAgent(FlakyToolAgent::class, [
-        new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
+        fn () => throw new RuntimeException('Ledger service unavailable'),
     ]);
 
     $page = visit('/synapse/playground/workbench.app.agents.flaky-tool-agent');
@@ -256,7 +256,7 @@ it('explains a failure inline and keeps the playground usable', function () {
     $page->click('Stack trace');
 
     $page->assertPresent('@stack-trace')
-        ->assertSeeIn('@stack-trace', 'BrokenLedgerTool')
+        ->assertSeeIn('@stack-trace', 'ChatTest.php')
         ->assertNoJavaScriptErrors();
 });
 
@@ -344,19 +344,29 @@ it('resolves a slow tool without leaving the card behind', function () {
         ->assertNoJavaScriptErrors();
 });
 
-it('marks a failed tool on the card and explains it below', function () {
+it('keeps a developer tool failure visible after reopening the conversation', function () {
     fakeAgent(FlakyToolAgent::class, [
         new ToolCall(id: 'call_1', name: 'BrokenLedgerTool', arguments: ['entry' => '42']),
+        'The ledger is unavailable.',
     ]);
 
     $page = visit('/synapse/playground/workbench.app.agents.flaky-tool-agent');
 
     $page->type('@composer-input', 'Look up entry 42')->click('Send');
 
-    // The card says which tool; the error card says what went wrong.
-    $page->assertSeeIn('@tool-status', 'error')
-        ->assertSeeIn('@error-card', 'Ledger service unavailable')
+    $page->assertPresent('[data-tool-status=error]')
+        ->click('[aria-label="BrokenLedgerTool tool call"]')
+        ->assertSeeIn('@tool-card', 'Ledger service unavailable')
         ->assertNoJavaScriptErrors();
+    if (sdkRecoversToolFailures()) {
+        $page->assertSeeIn('@message-assistant', 'The ledger is unavailable.')
+            ->assertMissing('@error-card');
+    } else {
+        $page->assertSeeIn('@error-card', 'Ledger service unavailable');
+    }
+    $page->refresh()->assertPresent('[data-tool-status=error]')
+        ->click('[aria-label="BrokenLedgerTool tool call"]')
+        ->assertSeeIn('@tool-card', 'Ledger service unavailable');
 });
 
 it('renders one timed card for a stringable tool result', function () {

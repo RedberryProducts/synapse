@@ -1,5 +1,6 @@
 <?php
 
+use Composer\InstalledVersions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Ai\Ai;
@@ -15,6 +16,11 @@ uses(TestCase::class, RefreshDatabase::class)->in('Feature', 'Unit');
 
 // Browser end-to-end tests: `composer test:e2e` (excluded from `composer test` and CI).
 uses(BrowserTestCase::class, RefreshDatabase::class)->group('e2e')->in('Browser');
+
+function sdkRecoversToolFailures(): bool
+{
+    return version_compare(InstalledVersions::getVersion('laravel/ai') ?? '0', '1.4.0.0', '>=');
+}
 
 /**
  * Fake an agent's responses for the whole chat pipeline.
