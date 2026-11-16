@@ -13,8 +13,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  cadence:
+    name: Check fortnightly cadence
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.cadence.outputs.run }}
+    steps:
+      - name: Select alternate Mondays or a manual run
+        id: cadence
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # Anchor to a Monday so the 14-day cadence continues across year boundaries.
+          anchor=$(date -u -d '2026-11-16' +%s)
+          week=$(( ($(date -u +%s) - anchor) / 604800 ))
+          if [[ "$EVENT_NAME" == workflow_dispatch || $((week % 2)) == 0 ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          fi
+
   latest-sdk:
     name: Newest published SDK / PHP 8.4
+    needs: cadence
+    if: needs.cadence.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

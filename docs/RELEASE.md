@@ -56,7 +56,7 @@ supported SDK and latest allowed stable SDK. These jobs test only the SDK
 minimum; they do not replace framework-minimum or clean-install qualification.
 
 Review the separate [SDK early-warning workflow](https://github.com/RedberryProducts/synapse/actions/workflows/sdk-latest.yml),
-which runs weekly against the newest published stable SDK regardless of the
+which runs every other Monday against the newest published stable SDK regardless of the
 declared constraint. If its result predates a new SDK release, run it manually
 on the candidate branch. Resolve or explain failures in the release PR and
 read the SDK changelog before changing support claims. A green early-warning
