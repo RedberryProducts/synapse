@@ -50,10 +50,22 @@ version for each runtime aligned with the fixes being published.
 composer update --dry-run
 ```
 
-**Check the SDK constraint against what `laravel/ai` has actually released**, not
-against what is in `references/` or your lock file. SDK releases move, and
-a constraint that has fallen behind makes the package uninstallable in a fresh
-app while every local test stays green.
+Review the required [Tests workflow](https://github.com/RedberryProducts/synapse/actions/workflows/ci.yml)
+for the candidate commit: PHP 8.3 and 8.4 must pass against both the minimum
+supported SDK and latest allowed stable SDK. These jobs test only the SDK
+minimum; they do not replace framework-minimum or clean-install qualification.
+
+Review the separate [SDK early-warning workflow](https://github.com/RedberryProducts/synapse/actions/workflows/sdk-latest.yml),
+which runs weekly against the newest published stable SDK regardless of the
+declared constraint. If its result predates a new SDK release, run it manually
+on the candidate branch. Resolve or explain failures in the release PR and
+read the SDK changelog before changing support claims. A green early-warning
+run does not automatically add support for that SDK, and it does not determine
+the README's required-tests badge. See [DEV.md](../DEV.md#ci) for the workflow
+schedule and resolution rules.
+
+Compare against published SDK releases, not `references/` or your local lock
+file: those can stay pinned while new SDK releases become available.
 
 Never add a path repository for a real dependency to `composer.json`. It is
 canonical, outranks Packagist, and silently pins whatever is on disk.

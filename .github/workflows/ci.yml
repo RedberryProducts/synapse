@@ -15,13 +15,14 @@ concurrency:
 
 jobs:
   check:
-    name: PHP ${{ matrix.php }}
+    name: PHP ${{ matrix.php }} / SDK ${{ matrix.sdk }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         php: ['8.3', '8.4']
+        sdk: ['minimum', 'latest']
     steps:
       - uses: actions/checkout@v7
       - name: Set up PHP
@@ -31,8 +32,17 @@ jobs:
           extensions: gd, mbstring, pdo_sqlite
           coverage: none
           tools: composer:v2
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Use stable dependencies
+        run: composer config minimum-stability stable
+      - name: Install SDK minimum
+        if: matrix.sdk == 'minimum'
+        # Keep the SDK minimum aligned with composer.json's laravel/ai lower bound.
+        run: composer update --with laravel/ai:1.3.0 --prefer-dist --no-interaction --no-progress
+      - name: Install latest supported SDK
+        if: matrix.sdk == 'latest'
+        run: composer update --prefer-dist --no-interaction --no-progress
+      - name: Report installed SDK
+        run: composer show laravel/ai
       - name: Check code style, static analysis, and tests
         run: composer check
 

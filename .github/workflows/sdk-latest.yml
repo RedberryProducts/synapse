@@ -1,0 +1,48 @@
+name: SDK early warning
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  latest-sdk:
+    name: Newest published SDK / PHP 8.4
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: gd, mbstring, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+      - name: Use stable dependencies
+        run: composer config minimum-stability stable
+      - name: Select newest published stable SDK
+        id: sdk
+        shell: bash
+        run: |
+          version="$(composer show laravel/ai --all --format=json | jq -er '
+            [.versions[] | select(test("^v?[0-9]+\\.[0-9]+\\.[0-9]+$")) | ltrimstr("v")]
+            | sort_by(split(".") | map(tonumber)) | last
+          ')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Testing newest published stable laravel/ai: $version" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install selected SDK independently of the supported constraint
+        env:
+          SDK_VERSION: ${{ steps.sdk.outputs.version }}
+        run: composer require "laravel/ai:${SDK_VERSION}" --with-all-dependencies --prefer-dist --no-interaction --no-progress
+      - name: Report installed SDK
+        run: composer show laravel/ai
+      - name: Check code style, static analysis, and tests
+        run: composer check

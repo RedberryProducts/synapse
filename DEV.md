@@ -132,14 +132,18 @@ Mostly automated by the hook (`composer hooks`):
 
 Every pull request and push to `main` runs:
 
-- [Tests](https://github.com/RedberryProducts/synapse/actions/workflows/ci.yml): `composer check` on PHP 8.3 and 8.4, plus a separate Node 24 job that runs `npm ci`, rebuilds the assets, and fails if `git diff --exit-code -- dist/` finds stale committed assets. Both PHP jobs run to completion even if one fails.
+- [Tests](https://github.com/RedberryProducts/synapse/actions/workflows/ci.yml): `composer check` on PHP 8.3 and 8.4 with both the minimum supported SDK (1.3.0) and the latest stable SDK allowed by `composer.json` — four required PHP jobs. All other dependencies resolve to current allowed stable versions; this tests the SDK minimum rather than globally lowering Laravel and development tools with `--prefer-lowest`. Keep the minimum SDK pin aligned with the declared lower bound. A separate Node 24 job runs `npm ci`, rebuilds the assets, and fails if `git diff --exit-code -- dist/` finds stale committed assets. All PHP jobs run to completion even if one fails.
 - [Code style](https://github.com/RedberryProducts/synapse/actions/workflows/code-style.yml): Pint's check-only command, `composer lint:test`, on PHP 8.4. A separate workflow gives the code-style badge its own result.
 
-The README's live badges select `main` push runs. The tests badge covers the entire Tests workflow, including both PHP jobs and the asset check; a single passing matrix job cannot hide a failure. The code-style badge covers only the Pint workflow. Missing workflow results are not replaced with a static passing badge.
+The README's live badges select `main` push runs. The tests badge covers the entire Tests workflow, including all four PHP/SDK jobs and the asset check; a single passing matrix job cannot hide a failure. The code-style badge covers only the Pint workflow. Missing workflow results are not replaced with a static passing badge.
 
 After these workflows first run on `main`, verify both README badge images render the corresponding workflow result and both links open the filtered `main` push runs. Record that post-merge verification on the implementation PR; local checks cannot establish a default-branch workflow result.
 
-Browser tests remain outside CI. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`. The lowest/latest dependency matrix and newest-SDK early warning remain tracked in [issue #3](https://github.com/RedberryProducts/synapse/issues/3); Dependabot remains tracked in [issue #4](https://github.com/RedberryProducts/synapse/issues/4).
+[SDK early warning](https://github.com/RedberryProducts/synapse/actions/workflows/sdk-latest.yml) runs every Monday at 06:17 UTC (10:17 in Tbilisi) and can be started with **Run workflow**. It selects the newest published stable SDK from Composer's available-version metadata and pins that exact version in the disposable checkout, replacing the supported SDK constraint for that run. This prevents Composer from silently selecting an older release when the newest SDK requires an unsupported PHP or Laravel version; such conflicts fail visibly. Both workflows restrict resolution to stable dependencies in their CI checkout without changing the committed package requirements.
+
+The early-warning workflow fails normally when dependency resolution or `composer check` fails. It has no PR trigger and is separate from the required Tests workflow and README badges, so its failure remains visible without blocking PRs. A passing run outside the declared SDK constraint is a compatibility signal, not a support claim; review the SDK changelog and complete release qualification before expanding support. Scheduled and manual runs become available after the workflow reaches `main`.
+
+Browser tests remain outside CI. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`. Dependabot remains tracked in [issue #4](https://github.com/RedberryProducts/synapse/issues/4).
 
 The Maestro task-trigger workflow remains temporarily disabled in GitHub Actions and its job is disabled in source. [Issue #22](https://github.com/RedberryProducts/synapse/issues/22) tracks reactivation when the integration is needed again.
 
