@@ -72,7 +72,7 @@ npm run build        # one-off production build → dist/
 npm run watch        # rebuild dist/ on change while iterating
 ```
 
-`react-router-dom` is pinned to the QA-tested 7.18.2 patch; a 7.18.4 trial failed fresh-thread navigation. Re-test that flow before upgrading the pin.
+`react-router-dom` is pinned to 7.18.6. Re-test fresh-thread navigation before upgrading the pin.
 
 `package-lock.json` is committed so local and CI builds use the same dependency versions. When intentionally updating npm dependencies, include the updated lockfile and rebuilt `dist/` in the same PR. `composer.lock` remains ignored so CI resolves the package's allowed PHP dependencies afresh.
 
@@ -143,11 +143,20 @@ After these workflows first run on `main`, verify both README badge images rende
 
 The early-warning workflow fails normally when dependency resolution or `composer check` fails. It has no PR trigger and is separate from the required Tests workflow and README badges, so its failure remains visible without blocking PRs. A passing run outside the declared SDK constraint is a compatibility signal, not a support claim; review the SDK changelog and complete release qualification before expanding support. Scheduled and manual runs become available after the workflow reaches `main`.
 
-Browser tests remain outside CI. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`. Dependabot remains tracked in [issue #4](https://github.com/RedberryProducts/synapse/issues/4).
+Browser tests remain outside CI. Run the release gates locally before tagging, including `composer check`, `npm run build`, and `composer test:e2e`.
 
 The Maestro task-trigger workflow remains temporarily disabled in GitHub Actions and its job is disabled in source. [Issue #22](https://github.com/RedberryProducts/synapse/issues/22) tracks reactivation when the integration is needed again.
 
 Compatibility should be checked on both supported Laravel majors (12 and 13), including a fresh install and production boot after `composer install --no-dev`. Browser e2e requires Playwright, Chromium, and current compiled assets.
+
+## Dependency updates
+
+Dependabot alerts and security updates are enabled in the repository settings. GitHub monitors detected npm and Composer dependencies and attempts to open security-fix PRs when a compatible patch is available. If it cannot generate a fix, inspect the alert for the reason. These [security updates](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-security-updates) run independently of the monthly Composer version-update schedule in [.github/dependabot.yml](.github/dependabot.yml).
+
+- **npm:** Dependabot uses `package.json` and the committed `package-lock.json`. For a security PR, review the manifest and lockfile changes, run `npm ci`, `npx tsc --noEmit`, and `npm run build`, and include any changed `dist/` assets in the PR. Run `composer check`, then `composer test:e2e`. Users receive the compiled frontend, so a lockfile change alone does not update their bundle; the existing CI asset check catches stale build output.
+- **Composer:** Dependabot checks for minor and patch version updates monthly, using `increase-if-necessary` to leave requirements unchanged when they already allow a release; routine major-version updates are excluded. Since `composer.lock` remains ignored, an already-allowed release may produce no PR. Existing CI resolves allowed dependencies afresh on each PR and push to `main`. Review any proposed constraint changes against supported Laravel and SDK versions, and require the PHP/SDK CI matrix to pass. Changes affecting chat, streaming, or the PHP-to-React boundary also need `composer test:e2e`. This manifest coverage does not audit a consuming application's exact PHP dependency tree; each application owns its lockfile and should run `composer audit` against its resolved dependencies.
+
+Keep Composer dependency constraints in three-part form (for example, `^1.3.0`), with the highest supported major first in unions. Without a lockfile, Dependabot extracts its base version from the first three-part version to apply the routine major-update filter.
 
 ## Upgrade and release history
 
