@@ -1,6 +1,6 @@
 import { basePath } from './config';
 import type { Agent, AgentDetail } from '@/types/agent';
-import type { Conversation } from '@/types/chat';
+import type { Conversation, MessageAttachment } from '@/types/chat';
 import type {
     ConversationFilters,
     ConversationPage,
@@ -50,6 +50,19 @@ export function getAgent(slug: string, signal?: AbortSignal): Promise<AgentDetai
  */
 export function getConversation(id: string, signal?: AbortSignal): Promise<Conversation> {
     return api<Conversation>(`/conversations/${encodeURIComponent(id)}`, { signal });
+}
+
+/** Load a message attachment back into a file, e.g. to send it again. */
+export async function getAttachmentFile(attachment: MessageAttachment): Promise<File> {
+    const response = await fetch(attachment.url);
+
+    if (!response.ok) {
+        throw new Error(`Could not load the attachment "${attachment.name}" to retry (${response.status}).`);
+    }
+
+    const blob = await response.blob();
+
+    return new File([blob], attachment.name, { type: blob.type });
 }
 
 /** Feature 2 — clear conversation: deletes the thread and its tool rows. */

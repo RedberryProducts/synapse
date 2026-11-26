@@ -237,6 +237,21 @@ it('keeps answering a stateless agent across turns', function () {
     $page->assertSeeIn('@chat-thread', 'Sunny again tomorrow.');
 });
 
+it('sends the failed message again from the error card', function () {
+    $calls = 0;
+    fakeAgent(FlakyToolAgent::class, function () use (&$calls) {
+        return $calls++ === 0 ? throw new RuntimeException('Ledger service unavailable') : 'Entry 42 is settled.';
+    });
+
+    $page = visit('/synapse/playground/workbench.app.agents.flaky-tool-agent');
+    $page->type('@composer-input', 'Look up entry 42')->click('Send');
+    $page->assertPresent('@error-card')->click('[aria-label="Retry"]');
+
+    $page->assertSeeIn('@message-assistant', 'Entry 42 is settled.')
+        ->assertCount('@message-user', 2)
+        ->assertNoJavaScriptErrors();
+});
+
 it('explains a failure inline and keeps the playground usable', function () {
     fakeAgent(FlakyToolAgent::class, [
         fn () => throw new RuntimeException('Ledger service unavailable'),

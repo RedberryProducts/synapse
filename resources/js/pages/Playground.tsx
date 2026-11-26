@@ -52,7 +52,7 @@ export default function Playground() {
         }
     }, [slug, conversationId]);
 
-    const { entries, approval, approvalError, loading: conversationLoading, sending, send, reset, clear, totals } = useConversation(slug, conversationId);
+    const { entries, approval, approvalError, loading: conversationLoading, sending, send, retry, reset, clear, totals } = useConversation(slug, conversationId);
 
     const [decisions, setDecisions] = useState<Record<string, ApprovalDecision>>({});
     useEffect(() => setDecisions({}), [approval?.revision, conversationId]);
@@ -118,6 +118,7 @@ export default function Playground() {
             model={model}
             onModelChange={setModel}
             onSend={(message, files) => void send(message, setConversation, { files, model })}
+            onRetry={(entry) => void retry(entry.id, setConversation, model)}
             onNewConversation={() => {
                 reset();
                 setConversation(null);

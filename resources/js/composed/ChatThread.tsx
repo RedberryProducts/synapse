@@ -6,7 +6,7 @@ import { ChatEmptyState } from '@/components/ChatEmptyState';
 import { ErrorCard } from '@/components/ErrorCard';
 import { ToolCard, type ToolApprovalControls } from '@/components/ToolCard';
 import { UserMessage } from '@/components/UserMessage';
-import type { ChatEntry } from '@/types/chat';
+import type { ChatEntry, ErrorEntry } from '@/types/chat';
 
 /**
  * The message thread.
@@ -19,11 +19,13 @@ export function ChatThread({
     entries,
     agentModel,
     approvalFor,
+    onRetry,
 }: {
     entries: ChatEntry[];
     /** Passed to assistant turns so an overridden model can be named. */
     agentModel?: string | null;
     approvalFor?: (entry: ChatEntry) => ToolApprovalControls | undefined;
+    onRetry?: (entry: ErrorEntry) => void;
 }) {
     const container = useRef<HTMLDivElement>(null);
     const pinned = useRef(true);
@@ -57,14 +59,24 @@ export function ChatThread({
         >
             <div className="mx-auto flex max-w-3xl flex-col gap-6">
                 {entries.map((entry) => (
-                    <Entry key={entry.id} entry={entry} agentModel={agentModel} approval={approvalFor?.(entry)} />
+                    <Entry key={entry.id} entry={entry} agentModel={agentModel} approval={approvalFor?.(entry)} onRetry={onRetry} />
                 ))}
             </div>
         </div>
     );
 }
 
-function Entry({ entry, agentModel, approval }: { entry: ChatEntry; agentModel?: string | null; approval?: ToolApprovalControls }) {
+function Entry({
+    entry,
+    agentModel,
+    approval,
+    onRetry,
+}: {
+    entry: ChatEntry;
+    agentModel?: string | null;
+    approval?: ToolApprovalControls;
+    onRetry?: (entry: ErrorEntry) => void;
+}) {
     switch (entry.kind) {
         case 'user':
             return <UserMessage content={entry.content} attachments={entry.attachments} />;
@@ -79,7 +91,7 @@ function Entry({ entry, agentModel, approval }: { entry: ChatEntry; agentModel?:
             return <ToolCard entry={entry} approval={approval} />;
 
         case 'error':
-            return <ErrorCard entry={entry} />;
+            return <ErrorCard entry={entry} onRetry={onRetry && (() => onRetry(entry))} />;
 
         case 'notice':
             // A failover is information, not a failure: the run carried on
