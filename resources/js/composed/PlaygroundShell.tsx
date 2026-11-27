@@ -11,7 +11,7 @@ import { config } from '@/lib/config';
 import { ChatThread } from './ChatThread';
 import { InfoPanel, type InfoTab } from './InfoPanel';
 import type { AgentDetail } from '@/types/agent';
-import type { ApprovalDecision, ChatEntry, PendingTurnApproval } from '@/types/chat';
+import type { ApprovalDecision, ChatEntry, ErrorEntry, PendingTurnApproval } from '@/types/chat';
 
 /**
  * The playground page frame: agent header, chat thread, composer, Info panel.
@@ -32,6 +32,7 @@ export function PlaygroundShell({
     model,
     onModelChange,
     onSend,
+    onRetry,
     onNewConversation,
     onClearConversation,
     panelOpen,
@@ -56,6 +57,7 @@ export function PlaygroundShell({
     model: string | null;
     onModelChange: (model: string | null) => void;
     onSend: (message: string, files: File[]) => void;
+    onRetry: (entry: ErrorEntry) => void;
     onNewConversation: () => void;
     onClearConversation: () => void;
     panelOpen: boolean;
@@ -154,7 +156,7 @@ export function PlaygroundShell({
                 )}
 
                 {agent?.available !== false || started ? (
-                    <ChatThread entries={entries} agentModel={agent?.model} approvalFor={(entry) => {
+                    <ChatThread entries={entries} agentModel={agent?.model} onRetry={agent?.available ? onRetry : undefined} approvalFor={(entry) => {
                         if (!approval || entry.kind !== 'tool' || entry.turnId !== approval.messageId) return undefined;
                         const request = approval.requests.find((request) => request.id === entry.toolCallId);
                         return request ? {

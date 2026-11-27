@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { deleteConversation, getConversation } from '@/lib/api';
+import { deleteConversation, getAttachmentFile, getConversation } from '@/lib/api';
 import { mergeSources } from '@/lib/sources';
 import { streamChat } from '@/lib/stream';
 import type {
@@ -16,6 +16,7 @@ import type {
     ToolEntry,
     ToolStatus,
     Usage,
+    UserEntry,
 } from '@/types/chat';
 
 /**
@@ -337,6 +338,47 @@ export function useConversation(slug: string | undefined, conversationId: string
         [slug, loading, sending, conversationId, approval],
     );
 
+    /**
+     * Resend the message this error card belongs to, with its attachments, as a new message.
+     */
+    const retry = useCallback(
+        async (errorId: string, onConversation: (id: string) => void, model: string | null) => {
+            const index = entries.findIndex((entry) => entry.id === errorId);
+            const user = entries.slice(0, Math.max(index, 0)).reverse()
+                .find((entry): entry is UserEntry => entry.kind === 'user');
+
+            if (!user || abort.current) {
+                return;
+            }
+
+            // Starting over or switching agents cancels the download instead of sending it to the new conv/agent.
+            const controller = new AbortController();
+            abort.current = controller;
+
+            let files: File[];
+            try {
+                files = await Promise.all(user.attachments.map((attachment) => getAttachmentFile(attachment, controller.signal)));
+            } catch (error) {
+                if (controller.signal.aborted) {
+                    return;
+                }
+
+                setEntries((current) => [...current, {
+                    kind: 'error', id: `${errorId}-retry-${current.length}`,
+                    message: error instanceof Error ? error.message : 'Could not load the attachments to retry.',
+                    exceptionClass: null, stackTrace: null, responseStatus: null, responseBody: null, recoverable: false,
+                }]);
+
+                return;
+            } finally {
+                abort.current = null;
+            }
+
+            await send(user.content, onConversation, { files, model });
+        },
+        [entries, send],
+    );
+
     const reset = useCallback(() => {
         abort.current?.abort();
         setEntries([]);
@@ -358,7 +400,7 @@ export function useConversation(slug: string | undefined, conversationId: string
         setApprovalError(null);
     }, [conversationId]);
 
-    return { entries, approval, approvalError, sending, loading, send, reset, clear, totals: totalsOf(entries) };
+    return { entries, approval, approvalError, sending, loading, send, retry, reset, clear, totals: totalsOf(entries) };
 }
 
 /* ── Assistant text ───────────────────────────────────────────────────────── */

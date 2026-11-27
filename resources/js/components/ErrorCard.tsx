@@ -1,4 +1,5 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { Button } from '@/elements/Button';
 import { Collapsible } from '@/elements/Collapsible';
 import { Copy } from '@/elements/Copy';
 import { JsonView } from '@/elements/JsonView';
@@ -15,7 +16,14 @@ import type { ErrorEntry } from '@/types/chat';
  *
  * Follows the tool card's failed-result treatment.
  */
-export function ErrorCard({ entry }: { entry: ErrorEntry }) {
+export function ErrorCard({
+    entry,
+    onRetry,
+}: {
+    entry: ErrorEntry;
+    /** Send the message that failed again, as a new message. */
+    onRetry?: () => void;
+}) {
     return (
         <div
             data-testid="error-card"
@@ -70,6 +78,19 @@ export function ErrorCard({ entry }: { entry: ErrorEntry }) {
                         </Collapsible>
                     )}
                 </div>
+
+                {onRetry && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onRetry}
+                        title="Retry"
+                        aria-label="Retry"
+                        className="h-7 w-7 rounded-md text-subtle-foreground"
+                    >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                    </Button>
+                )}
 
                 <Copy value={[entry.exceptionClass, entry.message, entry.stackTrace].filter(Boolean).join('\n\n')} />
             </div>

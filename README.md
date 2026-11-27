@@ -44,7 +44,7 @@ Created by [Revaz Ghambarashvili](https://github.com/MaestroError).
 - **Check agent configuration.** Inspect resolved settings, system instructions, tool schemas, and middleware without leaving the dashboard.
 - **Track token usage.** See reported input and output usage per response and across the conversation, with available cache and reasoning breakdowns.
 - **Return to earlier tests.** Search, filter, reopen, rename, and delete saved conversations. Switch between light, dark, and system themes.
-- **Diagnose failures.** Inspect inline exception details and stack traces, alongside partial output and completed tool work retained before the failure.
+- **Diagnose failures.** Inspect inline exception details and stack traces, alongside partial output and completed tool work retained before the failure. Press **Retry** on an error card to send the same message again as a new message.
 
 With Laravel AI 1.4 or later, a throwing developer tool appears as a failed tool card while the agent can continue with the failure result. Saved history retains that result for later turns. Laravel AI 1.3 ends the invocation on these exceptions; Synapse retains the failed tool and an inline invocation error. Provider and other unhandled invocation failures still appear as inline error cards.
 
