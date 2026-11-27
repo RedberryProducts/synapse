@@ -8,6 +8,8 @@
 | flakiness, and the assertions are about Synapse rather than about a model.
 */
 
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Gateway\StepResponse;
 use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
@@ -16,6 +18,7 @@ use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\TextResponse;
 use Redberry\Synapse\Models\SynapseConversation;
+use Redberry\Synapse\Models\SynapseMessage;
 use Redberry\Synapse\Tests\Fixtures\ApprovalResumeAgent;
 use Redberry\Synapse\Tests\Fixtures\ApprovalSearchTool;
 use Redberry\Synapse\Tests\Fixtures\InterruptedAnswerAgent;
@@ -250,6 +253,37 @@ it('sends the failed message again from the error card', function () {
     $page->assertSeeIn('@message-assistant', 'Entry 42 is settled.')
         ->assertCount('@message-user', 2)
         ->assertNoJavaScriptErrors();
+});
+
+it('cancels a retry still loading its attachment when a new conversation starts', function () {
+    Storage::fake('local');
+    fakeAgent(SupportAgent::class, fn () => throw new RuntimeException('Provider unavailable.'));
+    test()->post('/synapse/api/chat/workbench.app.agents.support-agent/send', [
+        'message' => 'What is in this picture?',
+        'attachments' => [UploadedFile::fake()->image('sky.png')],
+    ])->streamedContent();
+
+    $page = visit('/synapse/playground/workbench.app.agents.support-agent?c='.SynapseConversation::sole()->id);
+    $page->assertPresent('@error-card');
+    // Hold the attachment download long enough to leave mid-retry.
+    $page->script(<<<'JS'
+        (() => {
+            const originalFetch = window.fetch;
+            window.fetch = (url, options) => {
+                if (!String(url).includes('/api/attachments/')) return originalFetch(url, options);
+                return new Promise((resolve) => setTimeout(resolve, 1000)).then(() => originalFetch(url, options));
+            };
+        })()
+    JS);
+
+    $page->click('[aria-label="Retry"]');
+    $page->click('[aria-label="Conversation actions"]');
+    $page->click('New conversation');
+    $page->wait(2);
+
+    $page->assertPresent('@chat-empty')->assertNoJavaScriptErrors();
+    expect($page->script('location.search'))->toBe('')
+        ->and(SynapseMessage::query()->where('role', 'user')->count())->toBe(1);
 });
 
 it('explains a failure inline and keeps the playground usable', function () {

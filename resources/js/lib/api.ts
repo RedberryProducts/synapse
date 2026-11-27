@@ -53,8 +53,8 @@ export function getConversation(id: string, signal?: AbortSignal): Promise<Conve
 }
 
 /** Load a message attachment back into a file, e.g. to send it again. */
-export async function getAttachmentFile(attachment: MessageAttachment): Promise<File> {
-    const response = await fetch(attachment.url);
+export async function getAttachmentFile(attachment: MessageAttachment, signal?: AbortSignal): Promise<File> {
+    const response = await fetch(attachment.url, { signal });
 
     if (!response.ok) {
         throw new Error(`Could not load the attachment "${attachment.name}" to retry (${response.status}).`);

@@ -347,14 +347,22 @@ export function useConversation(slug: string | undefined, conversationId: string
             const user = entries.slice(0, Math.max(index, 0)).reverse()
                 .find((entry): entry is UserEntry => entry.kind === 'user');
 
-            if (!user) {
+            if (!user || abort.current) {
                 return;
             }
 
+            // Starting over or switching agents cancels the download instead of sending it to the new conv/agent.
+            const controller = new AbortController();
+            abort.current = controller;
+
             let files: File[];
             try {
-                files = await Promise.all(user.attachments.map(getAttachmentFile));
+                files = await Promise.all(user.attachments.map((attachment) => getAttachmentFile(attachment, controller.signal)));
             } catch (error) {
+                if (controller.signal.aborted) {
+                    return;
+                }
+
                 setEntries((current) => [...current, {
                     kind: 'error', id: `${errorId}-retry-${current.length}`,
                     message: error instanceof Error ? error.message : 'Could not load the attachments to retry.',
@@ -362,6 +370,8 @@ export function useConversation(slug: string | undefined, conversationId: string
                 }]);
 
                 return;
+            } finally {
+                abort.current = null;
             }
 
             await send(user.content, onConversation, { files, model });
